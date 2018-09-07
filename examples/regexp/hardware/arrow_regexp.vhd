@@ -125,9 +125,10 @@ architecture rtl of arrow_regexp is
   -----------------------------------
   -- Fletcher registers
   ----------------------------------- Default registers
-  --   1 status (uint64)        =  2
-  --   1 control (uint64)       =  2
+  --   1 status                 =  1
+  --   1 control                =  1
   --   1 return (uint64)        =  2
+  --   2 row idx                =  2
   ----------------------------------- Buffer addresses
   --   1 index buf address      =  2
   --   1 data  buf address      =  2
@@ -145,31 +146,29 @@ architecture rtl of arrow_regexp is
   constant SLV_ADDR_MSB         : natural := SLV_ADDR_LSB + log2floor(NUM_FLETCHER_REGS);
 
   -- Fletcher register offsets
-  constant REG_STATUS_HI        : natural := 0;
-  constant REG_STATUS_LO        : natural := 1;
+  constant REG_STATUS           : natural := 1;
 
     -- The offsets of the bits to signal busy and done for each of the units
     constant STATUS_BUSY_OFFSET   : natural := 0;
     constant STATUS_DONE_OFFSET   : natural := CORES;
 
-  constant REG_CONTROL_HI       : natural := 2;
-  constant REG_CONTROL_LO       : natural := 3;
+  constant REG_CONTROL          : natural := 0;
 
     -- The offsets of the bits to signal start and reset to each of the units
     constant CONTROL_START_OFFSET : natural := 0;
     constant CONTROL_RESET_OFFSET : natural := CORES;
 
   -- Return register
-  constant REG_RETURN_HI        : natural := 4;
-  constant REG_RETURN_LO        : natural := 5;
+  constant REG_RETURN_HI        : natural := 3;
+  constant REG_RETURN_LO        : natural := 2;
 
   -- Offset buffer address
-  constant REG_OFF_ADDR_HI      : natural := 6;
-  constant REG_OFF_ADDR_LO      : natural := 7;
+  constant REG_OFF_ADDR_HI      : natural := 7;
+  constant REG_OFF_ADDR_LO      : natural := 6;
 
   -- Data buffer address
-  constant REG_UTF8_ADDR_HI     : natural := 8;
-  constant REG_UTF8_ADDR_LO     : natural := 9;
+  constant REG_UTF8_ADDR_HI     : natural := 9;
+  constant REG_UTF8_ADDR_LO     : natural := 8;
 
   -- Register offsets to indices for each RegExp unit to work on
   constant REG_FIRST_IDX  		  : natural := 10;
@@ -299,8 +298,7 @@ begin
 
         case address is
           -- Read only addresses do nothing
-          when REG_STATUS_HI  =>
-          when REG_STATUS_LO  =>
+          when REG_STATUS  =>
           when REG_RETURN_HI  =>
           when REG_RETURN_LO  =>
           when REG_RESULT to REG_RESULT + NUM_REGEX - 1 =>
@@ -312,7 +310,7 @@ begin
         -- Control register is also resettable by individual units
         for I in 0 to CORES-1 loop
           if bit_array_reset_start(I) = '1' then
-            mm_regs(REG_CONTROL_LO)(CONTROL_START_OFFSET + I) <= '0';
+            mm_regs(REG_CONTROL)(CONTROL_START_OFFSET + I) <= '0';
           end if;
         end loop;
       end if;
@@ -320,14 +318,13 @@ begin
       -- Read only register values:
 
       -- Status registers
-      mm_regs(REG_STATUS_HI) <= (others => '0');
 
       if CORES /= 16 then
-        mm_regs(REG_STATUS_LO)(SLV_BUS_DATA_WIDTH-1 downto STATUS_DONE_OFFSET + CORES) <= (others => '0');
+        mm_regs(REG_STATUS)(SLV_BUS_DATA_WIDTH-1 downto STATUS_DONE_OFFSET + CORES) <= (others => '0');
       end if;
 
-      mm_regs(REG_STATUS_LO)(STATUS_BUSY_OFFSET + CORES - 1 downto STATUS_BUSY_OFFSET) <= bit_array_busy;
-      mm_regs(REG_STATUS_LO)(STATUS_DONE_OFFSET + CORES - 1 downto STATUS_DONE_OFFSET) <= bit_array_done;
+      mm_regs(REG_STATUS)(STATUS_BUSY_OFFSET + CORES - 1 downto STATUS_BUSY_OFFSET) <= bit_array_busy;
+      mm_regs(REG_STATUS)(STATUS_DONE_OFFSET + CORES - 1 downto STATUS_DONE_OFFSET) <= bit_array_done;
 
       -- Return registers
       mm_regs(REG_RETURN_HI) <= (others => '0');
@@ -339,8 +336,7 @@ begin
       end loop;
 
       if reset_n = '0' then
-        mm_regs(REG_CONTROL_LO)    <= (others => '0');
-        mm_regs(REG_CONTROL_HI)    <= (others => '0');
+        mm_regs(REG_CONTROL)    <= (others => '0');
       end if;
     end if;
   end process;
@@ -366,8 +362,8 @@ begin
   begin
     if rising_edge(clk) then
       -- Control bits
-      bit_array_control_start <= mm_regs(REG_CONTROL_LO)(CONTROL_START_OFFSET + CORES -1 downto CONTROL_START_OFFSET);
-      bit_array_control_reset <= mm_regs(REG_CONTROL_LO)(CONTROL_RESET_OFFSET + CORES -1 downto CONTROL_RESET_OFFSET);
+      bit_array_control_start <= mm_regs(REG_CONTROL)(CONTROL_START_OFFSET + CORES -1 downto CONTROL_START_OFFSET);
+      bit_array_control_reset <= mm_regs(REG_CONTROL)(CONTROL_RESET_OFFSET + CORES -1 downto CONTROL_RESET_OFFSET);
 
       -- Registers
       reg_gen: for I in 0 to CORES-1 loop

@@ -23,18 +23,16 @@ RegExUserCore::RegExUserCore(std::shared_ptr<fletcher::FPGAPlatform> platform)
 {
   // Some settings that are different from standard implementation
   // concerning start, reset and status register.
-  // TODO: generate this properly
-  if (REUC_ACTIVE_UNITS == 16) {
-    ctrl_start = 0x000000000000FFFF;
-    ctrl_reset = 0x00000000FFFF0000;
-    done_status = 0x00000000FFFF0000;
-    done_status_mask = 0x00000000FFFFFFFF;
-  } else if (REUC_ACTIVE_UNITS == 8) {
-    ctrl_start = 0x00000000000000FF;
-    ctrl_reset = 0x000000000000FF00;
-    done_status = 0x000000000000FF00;
-    done_status_mask = 0x000000000000FFFF;
-  }
+  // Generate a bit for every unit
+  fletcher::fr_t unit_bits = pow(2, REUC_ACTIVE_UNITS)-1;
+  // `start' bits are the LSBs on the control register
+  ctrl_start = unit_bits;
+  // `reset' bits follow `start' bits
+  ctrl_reset = unit_bits << REUC_ACTIVE_UNITS;
+  // `done' bits follow the `busy' bits
+  done_status = unit_bits << REUC_ACTIVE_UNITS;
+  // Take `done' bits and `busy' bits into consideration
+  done_status_mask = (unit_bits << REUC_ACTIVE_UNITS) | unit_bits;
 }
 
 std::vector<fr_t> RegExUserCore::generate_unit_arguments(uint32_t first_index,
@@ -42,9 +40,7 @@ std::vector<fr_t> RegExUserCore::generate_unit_arguments(uint32_t first_index,
 {
   /*
    * Generate arguments for the regular expression matching units.
-   * Because the arguments for each REM unit are two 32-bit integers,
-   * but the register model for UserCores is 64-bit, we need to
-   * determine each 64-bit register value.
+   * First concatenate all `first' indices, followed by all `last' indices.
    */
 
   if (first_index >= last_index) {
@@ -52,33 +48,19 @@ std::vector<fr_t> RegExUserCore::generate_unit_arguments(uint32_t first_index,
                              "or equal to last index.");
   }
 
+  // Every unit needs two 32 bit arguments
+  std::vector<fr_t> arguments(REUC_TOTAL_UNITS * 2);
+
   // Obtain first and last indices
-  std::vector<uint32_t> first_vec;
-  std::vector<uint32_t> last_vec;
   uint32_t match_rows = last_index - first_index;
   for (int i = 0; i < REUC_ACTIVE_UNITS; i++) {
     // First and last index for unit i
     uint32_t first = first_index + i * match_rows / REUC_ACTIVE_UNITS;
     uint32_t last = first + match_rows / REUC_ACTIVE_UNITS;
-    first_vec.push_back(first);
-    last_vec.push_back(last);
+    arguments[i] = first;
+    arguments[i + REUC_TOTAL_UNITS] = last;
   }
-  // Generate one argument vector
-  // Every unit needs two 32 bit argument, which is one 64-bit argument
-  std::vector<fr_t> arguments(REUC_TOTAL_UNITS);
-  // Every unit needs one 64-bit argument, but we set two arguments per 
-  // iteration
-  for (int i = 0; i < REUC_TOTAL_UNITS / 2; i++) {
-    reg_conv_t conv;
-    // First indices
-    conv.half.hi = first_vec[2 * i];
-    conv.half.lo = first_vec[2 * i + 1];
-    arguments[i] = conv.full;
-    // Last indices
-    conv.half.hi = last_vec[2 * i];
-    conv.half.lo = last_vec[2 * i + 1];
-    arguments[REUC_TOTAL_UNITS / 2 + i] = conv.full;
-  }
+
   return arguments;
 }
 
@@ -92,10 +74,7 @@ void RegExUserCore::get_matches(std::vector<uint32_t>& matches)
 {
   int np = matches.size();
 
-  for (int p = 0; p < np / 2; p++) {
-    reg_conv_t conv;
-    this->platform()->read_mmio(REUC_RESULT_OFFSET + p, &conv.full);
-    matches[2 * p] += conv.half.hi;
-    matches[2 * p + 1] += conv.half.lo;
+  for (int p = 0; p < np; p++) {
+    this->platform()->read_mmio(REUC_RESULT_OFFSET + p, &matches[p]);
   }
 }
