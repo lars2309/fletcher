@@ -116,6 +116,8 @@ proc add_interconnect_tb {{source_dir ""}} {
   add_source $source_dir/interconnect/BusWriteSlaveMock.vhd
   add_source $source_dir/interconnect/BusWriteMasterMock.vhd
   
+  add_source $source_dir/interconnect/BusReadWriteSlaveMock.vhd
+
   add_source $source_dir/interconnect/BusReadArbiter_tb.vhd
   
 }

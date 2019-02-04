@@ -684,6 +684,40 @@ package Interconnect is
     );
   end component;
   
+  component BusReadWriteSlaveMock is
+    generic (
+      BUS_ADDR_WIDTH              : natural := 32;
+      BUS_LEN_WIDTH               : natural := 8;
+      BUS_DATA_WIDTH              : natural := 32;
+      BUS_STROBE_WIDTH            : natural := 32/8;
+      SEED                        : positive := 1;
+      RANDOM_REQUEST_TIMING       : boolean := true;
+      RANDOM_RESPONSE_TIMING      : boolean := true;
+      SREC_FILE                   : string := ""
+    );
+    port (
+      clk                         : in  std_logic;
+      reset                       : in  std_logic;
+      wreq_valid                  : in  std_logic;
+      wreq_ready                  : out std_logic;
+      wreq_addr                   : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+      wreq_len                    : in  std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
+      wdat_valid                  : in  std_logic;
+      wdat_ready                  : out std_logic;
+      wdat_data                   : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
+      wdat_strobe                 : in  std_logic_vector(BUS_STROBE_WIDTH-1 downto 0);
+      wdat_last                   : in  std_logic;
+      rreq_valid                  : in  std_logic;
+      rreq_ready                  : out std_logic := '0';
+      rreq_addr                   : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+      rreq_len                    : in  std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
+      rdat_valid                  : out std_logic := '0';
+      rdat_ready                  : in  std_logic;
+      rdat_data                   : out std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
+      rdat_last                   : out std_logic
+    );
+  end component;
+  
   -- pragma translate_on
   
 end Interconnect;
