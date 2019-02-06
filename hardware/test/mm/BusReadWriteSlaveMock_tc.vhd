@@ -18,36 +18,14 @@ use ieee.numeric_std.all;
 
 library work;
 use work.Utils.all;
-use work.Streams.all;
-use work.Buffers.all;
 use work.Interconnect.all;
-use work.Wrapper.all;
+use work.MM_tc_params.all;
 
 
-entity mem_tc is
-  generic (
-    ---------------------------------------------------------------------------
-    -- TEST BENCH
-    ---------------------------------------------------------------------------
-    TbPeriod                    : time    := 4 ns;
+entity BusReadWriteSlaveMock_tc is
+end BusReadWriteSlaveMock_tc;
 
-    ---------------------------------------------------------------------------
-    -- BUS SLAVE MOCK
-    ---------------------------------------------------------------------------
-    BUS_ADDR_WIDTH              : natural := 64;
-    BUS_DATA_WIDTH              : natural := 512;
-    BUS_STROBE_WIDTH            : natural := 512/8;
-    BUS_LEN_WIDTH               : natural := 9;
-    BUS_BURST_STEP_LEN          : natural := 16;
-    BUS_BURST_MAX_LEN           : natural := 128;
-
-    -- Random timing for bus slave mock
-    BUS_SLAVE_RND_REQ           : boolean := true;
-    BUS_SLAVE_RND_RESP          : boolean := true
-  );
-end mem_tc;
-
-architecture tb of mem_tc is
+architecture tb of BusReadWriteSlaveMock_tc is
   signal bus_clk                : std_logic                                               := '0';
   signal bus_reset              : std_logic                                               := '0';
   signal acc_clk                : std_logic                                               := '0';
@@ -69,17 +47,10 @@ architecture tb of mem_tc is
   signal bus_wdat_data          : std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
   signal bus_wdat_strobe        : std_logic_vector(BUS_STROBE_WIDTH-1 downto 0);
   signal bus_wdat_last          : std_logic;
-  signal user_start             : std_logic                                               := '0';
-  signal user_done              : std_logic                                               := '0';
-  signal user_req_resp_error    : std_logic                                               := '0';
-  signal user_incorrect         : std_logic                                               := '0';
-  signal user_timeout           : std_logic                                               := '0';
 
   signal TbClock                : std_logic                                               := '0';
   signal TbReset                : std_logic                                               := '0';
   signal TbSimEnded             : std_logic                                               := '0';
-
-  signal end_condition          : std_logic;
 
   procedure handshake (signal clk : in std_logic; signal rdy : in std_logic) is
   begin
@@ -136,8 +107,6 @@ begin
   bus_reset <= TbReset;
   acc_reset <= TbReset;
 
-  end_condition <= user_done or user_timeout;
-
   stimuli : process
   begin
     ---------------------------------------------------------------------------
@@ -192,21 +161,7 @@ begin
     handshake(TbClock, bus_rdat_valid);
     bus_rdat_ready              <= '0';
 
-    handshake(TbClock, end_condition);
-
     TbSimEnded                  <= '1';
-
-    if user_timeout = '1' then
-      report "USER CORE TIMEOUT" severity failure;
-    end if;
-
-    if user_req_resp_error = '1' then
-      report "NO. REQUESTS AND RESPONSES NOT EQUAL" severity failure;
-    end if;
-
-    if user_incorrect = '1' then
-      report "RESULT INCORRECT" severity failure;
-    end if;
 
     report "END OF TEST"  severity note;
 
