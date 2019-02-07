@@ -21,12 +21,14 @@ package MM_tc_params is
   constant BUS_SLAVE_RND_RESP          : boolean := true;
 
   constant PAGE_SIZE_LOG2              : natural := 22;
-  constant VM_BASE                     : unsigned(63 downto 0) := X"4000_0000_0000_0000";
+  constant VM_BASE                     : unsigned(BUS_ADDR_WIDTH-1 downto 0) := X"4000_0000_0000_0000";
   constant MEM_REGIONS                 : natural := 2;
   constant MEM_SIZES                   : mem_sizes_t := (10, 15);
-  constant MEM_MAP_BASE                : unsigned(63 downto 0) := X"4000_0000_0000_0000";
+  constant MEM_MAP_BASE                : unsigned(BUS_ADDR_WIDTH-1 downto 0) := VM_BASE;
   constant MEM_MAP_SIZE_LOG2           : natural := 37;
-  constant PT_ADDR                     : std_logic_vector(63 downto 0) := X"4000_0000_0000_0000";
-
+  constant PT_ENTRIES_LOG2             : natural := 13;
+  constant PTE_BITS                    : natural := BUS_ADDR_WIDTH;
+  constant PT_ADDR_INTERM              : unsigned(BUS_ADDR_WIDTH-1 downto 0) := MEM_MAP_BASE;
+  constant PT_ADDR                     : unsigned(BUS_ADDR_WIDTH-1 downto 0) := PT_ADDR_INTERM + 2**PT_ENTRIES_LOG2 * ( (PTE_BITS+BYTE_SIZE-1) / BYTE_SIZE);
 end package;
 

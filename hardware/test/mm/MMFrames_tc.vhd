@@ -101,14 +101,14 @@ begin
 
     -- Reserve frame for page table
     frames_cmd_alloc            <= '1';
-    frames_cmd_addr             <= PT_ADDR;
+    frames_cmd_addr             <= std_logic_vector(PT_ADDR);
     handshake_out(TbClock, frames_cmd_ready, frames_cmd_valid);
     frames_cmd_alloc            <= '0';
     handshake_in(TbClock, frames_resp_ready, frames_resp_valid);
 
     -- Reserve other frame by address
     frames_cmd_alloc            <= '1';
-    frames_cmd_addr             <= std_logic_vector(unsigned(PT_ADDR) + 7);
+    frames_cmd_addr             <= std_logic_vector(unsigned(PT_ADDR) + 7 * LOG2_TO_UNSIGNED(PAGE_SIZE_LOG2));
     handshake_out(TbClock, frames_cmd_ready, frames_cmd_valid);
     handshake_in(TbClock, frames_resp_ready, frames_resp_valid);
 

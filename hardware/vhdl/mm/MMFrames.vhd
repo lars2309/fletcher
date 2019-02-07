@@ -19,7 +19,6 @@ use ieee.numeric_std.all;
 library work;
 use work.Utils.all;
 use work.MM.all;
-use work.SimUtils.all;
 
 entity MMFrames is
   generic (
@@ -59,7 +58,16 @@ architecture Behavioral of MMFrames is
     variable frame  : unsigned(TOTAL_FRAMES_LOG2-1 downto 0);
     variable region : natural;
   begin
+    if xor_reduct(addr_in) /= '0' and xor_reduct(addr_in) /= '1' then
+      frame := (others => 'X');
+      return frame;
+    end if;
     addr := unsigned(addr_in);
+    addr(PAGE_SIZE_LOG2-1 downto 0) := (others => '0');
+    if addr < MEM_MAP_BASE then
+      frame := (others => 'X');
+      return frame;
+    end if;
     addr := addr - MEM_MAP_BASE;
     region := 0;
     frame := to_unsigned(0, frame'length);
@@ -68,7 +76,7 @@ architecture Behavioral of MMFrames is
       frame := frame + MEM_SIZES(region);
       region := region + 1;
     end loop;
-    frame := frame + addr(TOTAL_FRAMES_LOG2-1 downto 0);
+    frame := frame + addr(TOTAL_FRAMES_LOG2 + PAGE_SIZE_LOG2 - 1 downto PAGE_SIZE_LOG2);
     return unsigned(frame);
   end PAGE_TO_FRAME;
 
@@ -81,12 +89,12 @@ architecture Behavioral of MMFrames is
     frame := unsigned(frame_in);
     region := 0;
     addr := MEM_MAP_BASE;
-    while frame > MEM_SIZES(region) loop
+    while frame >= MEM_SIZES(region) loop
       addr := addr + LOG2_TO_UNSIGNED(MEM_MAP_SIZE_LOG2);
       frame := frame - MEM_SIZES(region);
       region := region + 1;
     end loop;
-    addr := addr + frame;
+    addr := addr + (frame & unsigned(ZEROS(PAGE_SIZE_LOG2)));
     return std_logic_vector(addr);
   end FRAME_TO_PAGE;
 
@@ -96,6 +104,9 @@ architecture Behavioral of MMFrames is
     variable region : natural;
   begin
     addr := unsigned(addr_in);
+    if addr < MEM_MAP_BASE then
+      return 0;
+    end if;
     addr := addr - MEM_MAP_BASE;
     region := 0;
     while addr > LOG2_TO_UNSIGNED(MEM_MAP_SIZE_LOG2) loop
@@ -246,7 +257,7 @@ begin
         state_next <= IDLE;
       end if;
 
-    when OTHERS =>
+    when others =>
       resp_valid   <= '1';
       resp_success <= '0';
     end case;
