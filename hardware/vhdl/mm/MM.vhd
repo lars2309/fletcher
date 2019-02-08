@@ -6,12 +6,8 @@ library work;
 use work.Utils.all;
 
 package MM is
-  type mem_sizes_t is array(natural range <>) of natural;
   constant ADDR_WIDTH_LIMIT : natural := 64;
   constant BYTE_SIZE        : natural := 8;
-
-  function MEM_SUM (v : mem_sizes_t)
-                    return natural;
 
   function LOG2_TO_UNSIGNED (v : natural)
                              return unsigned;
@@ -26,7 +22,7 @@ package MM is
     generic (
       PAGE_SIZE_LOG2              : natural;
       MEM_REGIONS                 : natural;
-      MEM_SIZES                   : mem_sizes_t;
+      MEM_SIZES                   : nat_array;
       MEM_MAP_BASE                : unsigned(ADDR_WIDTH_LIMIT-1 downto 0);
       MEM_MAP_SIZE_LOG2           : natural;
       BUS_ADDR_WIDTH              : natural
@@ -54,7 +50,7 @@ package MM is
     generic (
       PAGE_SIZE_LOG2              : natural;
       MEM_REGIONS                 : natural;
-      MEM_SIZES                   : mem_sizes_t;
+      MEM_SIZES                   : nat_array;
       MEM_MAP_BASE                : unsigned(ADDR_WIDTH_LIMIT-1 downto 0);
       MEM_MAP_SIZE_LOG2           : natural;
       PT_ADDR                     : unsigned(ADDR_WIDTH_LIMIT-1 downto 0);
@@ -131,16 +127,6 @@ package MM is
 end package;
 
 package body MM is
-  function MEM_SUM (v : mem_sizes_t)
-                    return natural is
-    variable sum : natural := 0;
-  begin
-    for i in v'range loop
-      sum := sum + v(i);
-    end loop;
-    return sum;
-  end MEM_SUM;
-
   function LOG2_TO_UNSIGNED (v : natural)
                              return unsigned is
     variable r : unsigned(v downto 0) := (others => '0');

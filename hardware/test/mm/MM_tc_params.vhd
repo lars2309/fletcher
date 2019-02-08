@@ -23,7 +23,7 @@ package MM_tc_params is
   constant PAGE_SIZE_LOG2              : natural := 22;
   constant VM_BASE                     : unsigned(BUS_ADDR_WIDTH-1 downto 0) := X"4000_0000_0000_0000";
   constant MEM_REGIONS                 : natural := 2;
-  constant MEM_SIZES                   : mem_sizes_t := (10, 15);
+  constant MEM_SIZES                   : nat_array := (10, 15);
   constant MEM_MAP_BASE                : unsigned(BUS_ADDR_WIDTH-1 downto 0) := VM_BASE;
   constant MEM_MAP_SIZE_LOG2           : natural := 37;
   constant PT_ENTRIES_LOG2             : natural := 13;

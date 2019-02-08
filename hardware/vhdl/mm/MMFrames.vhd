@@ -24,7 +24,7 @@ entity MMFrames is
   generic (
     PAGE_SIZE_LOG2              : natural;
     MEM_REGIONS                 : natural;
-    MEM_SIZES                   : mem_sizes_t;
+    MEM_SIZES                   : nat_array;
     MEM_MAP_BASE                : unsigned(ADDR_WIDTH_LIMIT-1 downto 0);
     MEM_MAP_SIZE_LOG2           : natural;
     BUS_ADDR_WIDTH              : natural
@@ -50,7 +50,7 @@ end MMFrames;
 
 
 architecture Behavioral of MMFrames is
-  constant TOTAL_FRAMES_LOG2    : natural := log2ceil(MEM_SUM(MEM_SIZES));
+  constant TOTAL_FRAMES_LOG2    : natural := log2ceil(sum(MEM_SIZES));
 
   function PAGE_TO_FRAME (addr_in : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0))
                     return unsigned is
@@ -200,7 +200,7 @@ begin
       frame_next <= frame + 1;
       w_data     <= "0";
       w_en       <= '1';
-      if frame = MEM_SUM(MEM_SIZES)-1 then
+      if frame = sum(MEM_SIZES)-1 then
         state_next <= SUCCESS;
         frame_next <= frame;
       end if;
