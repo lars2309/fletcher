@@ -107,9 +107,6 @@ begin
     TbReset                     <= '1';
     wait until rising_edge(TbClock);
     TbReset                     <= '0';
-    bus_wreq_valid              <= '0';
-    bus_wdat_valid              <= '0';
-    bus_rreq_valid              <= '0';
     wait until rising_edge(TbClock);
 
 

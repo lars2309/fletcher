@@ -24,7 +24,7 @@ entity MMDirector is
   generic (
     PAGE_SIZE_LOG2              : natural;
     MEM_REGIONS                 : natural;
-    MEM_SIZES                   : mem_sizes_t;
+    MEM_SIZES                   : nat_array;
     MEM_MAP_BASE                : unsigned(ADDR_WIDTH_LIMIT-1 downto 0);
     MEM_MAP_SIZE_LOG2           : natural;
     PT_ADDR                     : unsigned(ADDR_WIDTH_LIMIT-1 downto 0);
@@ -100,9 +100,10 @@ end MMDirector;
 
 
 architecture Behavioral of MMDirector is
+  constant PT_SIZE              : natural := 2**(PT_ENTRIES_LOG2 + log2ceil( (PTE_BITS+BYTE_SIZE-1) / BYTE_SIZE))
   constant PT_PER_FRAME         : natural := 2**(PAGE_SIZE_LOG2 - PT_ENTRIES_LOG2 - log2ceil( (PTE_BITS+BYTE_SIZE-1) / BYTE_SIZE));
 
-  function PAGE_OFFSET (addr : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0))
+  function PAGE_OFFSET (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
                     return natural is
   begin
     return to_integer(unsigned(addr(PAGE_SIZE_LOG2-1 downto 0)));
@@ -122,6 +123,12 @@ architecture Behavioral of MMDirector is
     return PAGE_BASE(std_logic_vector(addr));
   end PAGE_BASE;
 
+  function PAGE_BASE (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
+                    return unsigned is
+  begin
+    return unsigned(PAGE_BASE(std_logic_vector(addr)));
+  end PAGE_BASE;
+
   signal frames_cmd_region      : std_logic_vector(log2ceil(MEM_REGIONS)-1 downto 0);
   signal frames_cmd_addr        : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
   signal frames_cmd_free        : std_logic;
@@ -135,16 +142,40 @@ architecture Behavioral of MMDirector is
   signal frames_resp_success    : std_logic;
   signal frames_resp_valid      : std_logic;
   signal frames_resp_ready      : std_logic;
-  signal addr, addr_next        : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+
+  signal addr, addr_next        : unsigned(BUS_ADDR_WIDTH-1 downto 0);
   signal region, region_next    : unsigned(log2ceil(MEM_REGIONS)-1 downto 0);
+  signal arg, arg_next          : std_logic_vector(BYTE_SIZE-1 downto 0);
 
   type state_type is (RESET_ST, IDLE, FAIL, CLEAR_FRAMES, CLEAR_FRAMES_CHECK,
                       RESERVE_PT, RESERVE_PT_CHECK, PT0_INIT,
                       PT_FRAME_INIT_ADDR, PT_FRAME_INIT_DATA,
-                      PT_NEW, PT_NEW_CHECK_BM);
-  signal state, state_next      : state_type;
+                      PT_NEW, PT_NEW_CHECK_BM, PT_NEW_MARK_BM_ADDR, PT_NEW_MARK_BM_DATA,
+                      PT_NEW_CLEAR_ADDR, PT_NEW_CLEAR_DATA);
+  signal state, state_next         : state_type;
   signal state_ret, state_ret_next : state_type;
+
 begin
+
+  assert PAGE_SIZE_LOG2 >= PT_ENTRIES_LOG2 + log2ceil( (PTE_BITS+BYTE_SIZE-1) / BYTE_SIZE)
+    report "page table does not fit in a single page"
+    severity failure;
+
+  assert PT_PER_FRAME > 1;
+    report "page table size equal to page size is not implemented (requires omission of bitmap)"
+    severity failure;
+
+  assert PT_PER_FRAME <= PT_SIZE * BYTE_SIZE;
+    report "page table bitmap extends into frame's first page table"
+    severity failure;
+
+  assert div_floor(PT_SIZE * BYTE_SIZE, log2ceil(BUS_DATA_WIDTH)) = div_ceil(PT_SIZE * BYTE_SIZE, log2ceil(BUS_DATA_WIDTH))
+    report "page table size is not a multiple of the bus width"
+    severity failure;
+
+  assert PT_PER_FRAME <= BUS_DATA_WIDTH
+    report "pages will not be completely utilized for page tables (requires extension of implementation)"
+    severity warning;
 
   process (clk) begin
     if rising_edge(clk) then
@@ -152,28 +183,34 @@ begin
         state     <= RESET_ST;
         state_ret <= IDLE;
         addr      <= (others => '0');
+        arg       <= (others => '0');
       else
         state     <= state_next;
         state_ret <= state_ret_next;
         addr      <= addr_next;
+        arg       <= arg_next;
       end if;
     end if;
   end process;
 
-  process (state, state_ret, cmd_region, cmd_addr, cmd_free, cmd_alloc, cmd_realloc, cmd_valid,
-           resp_ready, frames_cmd_ready, frames_resp_addr, frames_resp_success,
-           frames_resp_valid) begin
+  process (state, state_ret, arg,
+           cmd_region, cmd_addr, cmd_free, cmd_alloc, cmd_realloc, cmd_valid,
+           resp_ready,
+           frames_cmd_ready, frames_resp_addr, frames_resp_success, frames_resp_valid,
+           bus_wreq_ready, bus_wdat_ready,
+           bus_rreq_ready, bus_rdat_data, bus_rdat_last, bus_rdat_valid) begin
     state_next     <= state;
     state_ret_next <= state_ret;
     addr_next      <= addr;
+    arg_next       <= arg;
 
     resp_success <= '0';
     resp_valid   <= '0';
     cmd_ready    <= '0';
 
     frames_cmd_valid  <= '0';
-    frames_cmd_region <= (others => '0');
-    frames_cmd_addr   <= (others => '0');
+    frames_cmd_region <= (others => 'U');
+    frames_cmd_addr   <= (others => 'U');
     frames_cmd_free   <= '0';
     frames_cmd_alloc  <= '0';
     frames_cmd_find   <= '0';
@@ -181,17 +218,17 @@ begin
     frames_resp_ready <= '0';
 
     bus_wreq_valid  <= '0';
-    bus_wreq_addr   <= addr;
-    bus_wreq_len    <= (others => '0');
+    bus_wreq_addr   <= (others => 'U'); --slv(addr);
+    bus_wreq_len    <= (others => 'U'); --slv(to_unsigned(1, bus_wreq_len'length));
 
     bus_wdat_valid  <= '0';
-    bus_wdat_data   <= (others => '0');
-    bus_wdat_strobe <= (others => '1');
-    bus_wdat_last   <= '0';
+    bus_wdat_data   <= (others => 'U'); --(others => '0');
+    bus_wdat_strobe <= (others => 'U'); --(others => '1');
+    bus_wdat_last   <= 'U'; --'0';
 
     bus_rreq_valid  <= '0';
-    bus_rreq_addr   <= addr;
-    bus_rreq_len    <= (others => '0');
+    bus_rreq_addr   <= (others => 'U'); --slv(addr);
+    bus_rreq_len    <= (others => 'U'); --slv(to_unsigned(1, bus_wreq_len'length));
 
     bus_rdat_ready  <= '0';
 
@@ -242,26 +279,27 @@ begin
     when PT0_INIT =>
       state_next     <= PT_NEW;
       state_ret_next <= IDLE;
-      addr_next      <= std_logic_vector(PT_ADDR);
+      addr_next      <= PT_ADDR;
 
     when PT_FRAME_INIT_ADDR =>
       -- Clear the usage bitmap of the frame at `addr'
       -- Can write further than the bitmap, because the entire frame should be unused at this point
       bus_wreq_valid <= '1';
       bus_wreq_addr  <= addr;
-      bus_wreq_len   <= std_logic_vector(to_unsigned(1, bus_wreq_len'length));
+      bus_wreq_len   <= slv(to_unsigned(1, bus_wreq_len'length));
       if bus_wreq_ready = '1' then
         state_next <= PT_FRAME_INIT_DATA;
         if (PT_PER_FRAME > BUS_DATA_WIDTH) then
           -- Need another write on a higher address
-          addr_next  <= std_logic_vector(unsigned(addr) + BUS_DATA_WIDTH / BYTE_SIZE);
+          addr_next  <= unsigned(addr) + BUS_DATA_WIDTH / BYTE_SIZE;
         end if;
       end if;
 
     when PT_FRAME_INIT_DATA =>
-      bus_wdat_valid <= '1';
-      bus_wdat_data  <= (others => '0');
-      bus_wdat_last  <= '1';
+      bus_wdat_valid  <= '1';
+      bus_wdat_data   <= (others => '0');
+      bus_wdat_strobe <= (others => '1');
+      bus_wdat_last   <= '1';
       if bus_wdat_ready = '1' then
         if (PT_PER_FRAME < BUS_DATA_WIDTH) or (PAGE_OFFSET(addr) > PT_PER_FRAME / BYTE_SIZE) then
           -- Entire bitmap has been initialized
@@ -275,15 +313,69 @@ begin
     when PT_NEW =>
       -- Find a free spot for a PT
       bus_rreq_valid <= '1';
-      bus_rreq_addr  <= addr;
-      bus_rreq_len   <= std_logic_vector(to_unsigned(1, bus_wreq_len'length));
+      bus_rreq_addr  <= PAGE_BASE(addr);
+      bus_rreq_len   <= slv(to_unsigned(1, bus_rreq_len'length));
       -- TODO LOW implement finding empty spots past BUS_DATA_WIDTH entries
       if bus_rreq_ready = '1' then
         state_next <= PT_NEW_CHECK_BM;
       end if;
 
     when PT_NEW_CHECK_BM =>
-      
+      bus_rdat_ready <= '1';
+      if bus_rdat_valid = '1' then
+        for i in 0 to work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH) loop
+          if i = work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH) then
+            addr_next  <= PAGE_BASE(addr);
+            state_next <= FAIL; -- TODO: try more bits or other frame
+            exit;
+          end if;
+          if bus_rdat_data(i) = '0' then
+            -- Bit 0 refers to the first possible page table in this frame,
+            -- which exists on the first aligned location after the bitmap.
+            addr_next   <= PAGE_BASE(addr) + (i+1) * 2**PT_ENTRIES_LOG2;
+            state_next  <= PT_NEW_MARK_BM_ADDR;
+            -- Save the byte that needs to be written
+            arg_next    <= slv(resize(unsigned(bus_rdat_data((i/BYTE_SIZE)*BYTE_SIZE+BYTE_SIZE-1 downto (i/BYTE_SIZE)*BYTE_SIZE)), arg_next'length));
+            arg_next(i mod BYTE_SIZE) <= '1';
+            exit;
+          end if;
+        end loop;
+      end if;
+
+    when PT_NEW_MARK_BM_ADDR =>
+      bus_wreq_valid <= '1';
+      bus_wreq_addr  <= PAGE_BASE(addr);
+      bus_wreq_len   <= slv(to_unsigned(1, bus_wreq_len'length));
+      -- TODO: enable bitmap location > BUS_DATA_WIDTH
+      if bus_wreq_ready = '1' then
+        state_next <= PT_NEW_MARK_BM_DATA;
+      end if;
+
+    when PT_NEW_MARK_BM_DATA =>
+      bus_wdat_valid  <= '1';
+      bus_wdat_data   <= ;
+      bus_wdat_strobe <= ;
+      bus_wdat_last <= '1';
+      if bus_wdat_ready = '1' then
+        state_next <= PT_NEW_CLEAR_ADDR;
+      end if;
+
+    when PT_NEW_CLEAR_ADDR =>
+      bus_wreq_valid <= '1';
+      bus_wreq_addr  <= addr;
+      bus_wreq_len   <= slv(to_unsigned(1, bus_wreq_len'length));
+      if bus_wreq_ready = '1' then
+        state_next <= PT_NEW_MARK_BM_DATA;
+      end if;
+
+    when PT_NEW_CLEAR_DATA =>
+      bus_wdat_valid  <= '1';
+      bus_wdat_data   <= (others => '0');
+      bus_wdat_strobe <= (others => '1');
+      bus_wdat_last <= '1';
+      if bus_wdat_ready = '1' then
+        state_next <= state_ret;
+      end if;
 
     when IDLE =>
 
