@@ -122,6 +122,24 @@ proc add_interconnect_tb {{source_dir ""}} {
   
 }
 
+proc add_mm {{source_dir ""}} {
+  echo "- Memory Management infrastructure."
+  set source_dir [source_dir_or_default $source_dir]
+  add_source $source_dir/mm/MM.vhd
+  add_source $source_dir/mm/MMFrames.vhd
+  add_source $source_dir/mm/MMDirector.vhd
+}
+
+proc add_mm_tb {{source_dir ""}} {
+  echo "- Memory Management infrastructure simulations."
+  set source_dir [source_dir_or_default $source_dir]
+  add_source $source_dir/../test/mm/MM_tc_params.vhd
+  add_source $source_dir/../test/mm/BusReadWriteSlaveMock_tc.vhd
+  add_source $source_dir/../test/mm/MMFrames_tc.vhd
+  add_source $source_dir/../test/mm/MMDirector_tc.vhd
+  add_source $source_dir/../test/mm/MMSystem_tc.vhd
+}
+
 proc add_buffers {{source_dir ""}} {
   echo "- Buffer Readers/Writers."
   set source_dir [source_dir_or_default $source_dir]
@@ -187,6 +205,7 @@ proc add_fletcher {{source_dir ""}} {
   add_arrow $source_dir
   add_streams $source_dir
   add_interconnect $source_dir
+  add_mm $source_dir
   add_buffers $source_dir
   add_columns $source_dir
   add_wrapper $source_dir
@@ -198,5 +217,6 @@ proc add_fletcher_tb {{source_dir ""}} {
   set source_dir [source_dir_or_default $source_dir]
   add_streams_tb $source_dir
   add_interconnect_tb $source_dir
+  add_mm_tb $source_dir
   add_wrapper_tb $source_dir
 }
