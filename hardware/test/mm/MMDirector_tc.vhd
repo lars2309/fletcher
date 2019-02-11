@@ -33,6 +33,7 @@ architecture tb of MMDirector_tc is
 
   signal cmd_region             : std_logic_vector(log2ceil(MEM_REGIONS)-1 downto 0);
   signal cmd_addr               : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+  signal cmd_size               : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
   signal cmd_free               : std_logic                                               := '0';
   signal cmd_alloc              : std_logic                                               := '0';
   signal cmd_realloc            : std_logic                                               := '0';
@@ -101,6 +102,7 @@ begin
   acc_reset <= TbReset;
 
   stimuli : process
+    variable addr : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
   begin
     ---------------------------------------------------------------------------
     wait until rising_edge(TbClock);
@@ -109,6 +111,24 @@ begin
     TbReset                     <= '0';
     wait until rising_edge(TbClock);
 
+    cmd_alloc  <= '1';
+    cmd_size   <= slv(shift_left(to_unsigned(3, cmd_size'length), 30));
+    cmd_region <= slv(to_unsigned(1, cmd_region'length));
+    handshake_out(TbClock, cmd_ready, cmd_valid);
+    cmd_alloc  <= '0';
+
+    resp_ready <= '1';
+    loop
+      wait until rising_edge(TbClock);
+      exit when resp_valid = '1';
+    end loop;
+    addr := resp_addr;
+    wait for 0 ns;
+    resp_ready <= '0';
+
+    cmd_free <= '1';
+    cmd_addr <= addr;
+    handshake_out(TbClock, cmd_ready, cmd_valid);
 
 
     TbSimEnded                  <= '0';
@@ -126,6 +146,7 @@ begin
       MEM_SIZES                 => MEM_SIZES,
       MEM_MAP_BASE              => MEM_MAP_BASE,
       MEM_MAP_SIZE_LOG2         => MEM_MAP_SIZE_LOG2,
+      VM_BASE                   => VM_BASE,
       PT_ADDR                   => PT_ADDR,
       PT_ENTRIES_LOG2           => PT_ENTRIES_LOG2,
       PTE_BITS                  => PTE_BITS,
@@ -138,6 +159,7 @@ begin
 
       cmd_region                => cmd_region,
       cmd_addr                  => cmd_addr,
+      cmd_size                  => cmd_size,
       cmd_free                  => cmd_free,
       cmd_alloc                 => cmd_alloc,
       cmd_realloc               => cmd_realloc,
@@ -169,7 +191,7 @@ begin
       bus_rdat_last             => bus_rdat_last
     );
 
-  host_mem : BusReadWriteSlaveMock
+  dev_mem : BusReadWriteSlaveMock
     generic map (
       BUS_ADDR_WIDTH            => BUS_ADDR_WIDTH,
       BUS_LEN_WIDTH             => BUS_LEN_WIDTH,

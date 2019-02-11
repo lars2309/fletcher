@@ -53,6 +53,7 @@ package MM is
       MEM_SIZES                   : nat_array;
       MEM_MAP_BASE                : unsigned(ADDR_WIDTH_LIMIT-1 downto 0);
       MEM_MAP_SIZE_LOG2           : natural;
+      VM_BASE                     : unsigned(ADDR_WIDTH_LIMIT-1 downto 0);
       PT_ADDR                     : unsigned(ADDR_WIDTH_LIMIT-1 downto 0);
       PT_ENTRIES_LOG2             : natural;
       PTE_BITS                    : natural;
@@ -83,6 +84,7 @@ package MM is
       reset                       : in  std_logic;
       cmd_region                  : in  std_logic_vector(log2ceil(MEM_REGIONS)-1 downto 0);
       cmd_addr                    : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+      cmd_size                    : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
       cmd_free                    : in  std_logic;
       cmd_alloc                   : in  std_logic;
       cmd_realloc                 : in  std_logic;

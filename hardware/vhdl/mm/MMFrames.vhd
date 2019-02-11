@@ -86,6 +86,10 @@ architecture Behavioral of MMFrames is
     variable frame  : unsigned(TOTAL_FRAMES_LOG2-1 downto 0);
     variable region : natural;
   begin
+    if xor_reduct(slv(frame_in)) /= '0' and xor_reduct(slv(frame_in)) /= '1' then
+      addr := (others => 'X');
+      return slv(addr);
+    end if;
     frame := unsigned(frame_in);
     region := 0;
     addr := MEM_MAP_BASE;
@@ -103,6 +107,10 @@ architecture Behavioral of MMFrames is
     variable addr   : unsigned(BUS_ADDR_WIDTH-1 downto 0);
     variable region : natural;
   begin
+    if xor_reduct(addr_in) /= '0' and xor_reduct(addr_in) /= '1' then
+      region := 0;
+      return region;
+    end if;
     addr := unsigned(addr_in);
     if addr < MEM_MAP_BASE then
       return 0;
