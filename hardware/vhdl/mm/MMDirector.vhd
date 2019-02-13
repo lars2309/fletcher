@@ -105,7 +105,9 @@ architecture Behavioral of MMDirector is
   constant BUS_DATA_BYTES       : natural := BUS_DATA_WIDTH / BYTE_SIZE;
   constant PT_SIZE_LOG2         : natural := PT_ENTRIES_LOG2 + log2ceil( (PTE_BITS+BYTE_SIZE-1) / BYTE_SIZE);
   constant PT_SIZE              : natural := 2**PT_SIZE_LOG2;
-  constant PT_PER_FRAME         : natural := 2**(PAGE_SIZE_LOG2 - PT_ENTRIES_LOG2 - log2ceil( (PTE_BITS+BYTE_SIZE-1) / BYTE_SIZE));
+  -- Offset of the first usable PT into the frame (first space is taken by bitmap)
+  constant PT_FIRST_NR          : natural := 1;
+  constant PT_PER_FRAME         : natural := 2**(PAGE_SIZE_LOG2 - PT_ENTRIES_LOG2 - log2ceil( (PTE_BITS+BYTE_SIZE-1) / BYTE_SIZE)) - PT_FIRST_NR;
   constant PTE_SIZE             : natural := 2**log2ceil( (PTE_BITS+BYTE_SIZE-1) / BYTE_SIZE);
 
   constant PTE_MAPPED           : natural := 0;
@@ -115,37 +117,67 @@ architecture Behavioral of MMDirector is
   constant VM_SIZE_L1_LOG2      : natural := VM_SIZE_L2_LOG2 + PT_ENTRIES_LOG2;
   constant VM_SIZE_L0_LOG2      : natural := VM_SIZE_L1_LOG2 + PT_ENTRIES_LOG2;
 
-  function PAGE_OFFSET (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
-                    return unsigned is
+  function OVERLAY (over  : unsigned;
+                    under : unsigned)
+    return unsigned is
+    variable ret : unsigned(under'length-1 downto 0);
   begin
-    return resize(addr(PAGE_SIZE_LOG2-1 downto 0), BUS_ADDR_WIDTH);
+    ret := under;
+    ret(over'length-1 downto 0) := over;
+    return ret;
+  end OVERLAY;
+
+  function PAGE_OFFSET (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
+    return unsigned is
+  begin
+    return resize(addr(PAGE_SIZE_LOG2-1 downto 0), addr'length);
   end PAGE_OFFSET;
 
   function PT_OFFSET (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
-                    return unsigned is
+    return unsigned is
   begin
-    return resize(addr(PT_SIZE_LOG2-1 downto 0), BUS_ADDR_WIDTH);
+    return resize(addr(PT_SIZE_LOG2-1 downto 0), addr'length);
   end PT_OFFSET;
 
-  function PAGE_BASE (addr : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0))
-                    return std_logic_vector is
-    variable base : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0) := (others => '0');
+  function PAGE_BASE (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
+    return unsigned is
   begin
-    base(BUS_ADDR_WIDTH-1 downto PAGE_SIZE_LOG2) := addr(BUS_ADDR_WIDTH-1 downto PAGE_SIZE_LOG2);
-    return base;
+    return align_beq(addr, PAGE_SIZE_LOG2);
   end PAGE_BASE;
 
-  function PAGE_BASE (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
-                    return std_logic_vector is
+  function PTE_ADDR (pt_base : unsigned(BUS_ADDR_WIDTH-1 downto 0);
+                     vm_addr : unsigned(BUS_ADDR_WIDTH-1 downto 0);
+                     pt_level: natural)
+    return unsigned is
+    variable index : unsigned(PT_ENTRIES_LOG2-1 downto 0);
+    variable ret : unsigned(BUS_ADDR_WIDTH-1 downto 0) := (others => '0');
   begin
-    return PAGE_BASE(std_logic_vector(addr));
-  end PAGE_BASE;
+    if pt_level = 1 then
+      index := vm_addr(PAGE_SIZE_LOG2 + PT_ENTRIES_LOG2 * 2 - 1 downto PAGE_SIZE_LOG2 + PT_ENTRIES_LOG2);
+    elsif pt_level = 2 then
+      index := vm_addr(PAGE_SIZE_LOG2 + PT_ENTRIES_LOG2 downto PAGE_SIZE_LOG2);
+    else
+      index := (others => 'X');
+    end if;
+    return OVERLAY(
+      shift_left(
+        resize(index, index'length + log2ceil(PTE_SIZE)),
+        log2ceil(PTE_SIZE)),
+      pt_base);
+  end PTE_ADDR;
 
-  function PAGE_BASE (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
-                    return unsigned is
+  function ADDR_BUS_ALIGN (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
+    return unsigned is
   begin
-    return unsigned(PAGE_BASE(std_logic_vector(addr)));
-  end PAGE_BASE;
+    return OVERLAY(to_unsigned(0, log2ceil(BUS_DATA_BYTES)), addr);
+  end ADDR_BUS_ALIGN;
+
+  function ADDR_BUS_OFFSET (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
+    return unsigned is
+  begin
+    return resize(addr(log2ceil(BUS_DATA_BYTES)-1 downto 0), addr'length);
+  end ADDR_BUS_OFFSET;
+
 
   signal frames_cmd_region      : std_logic_vector(log2ceil(MEM_REGIONS)-1 downto 0);
   signal frames_cmd_addr        : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
@@ -162,16 +194,27 @@ architecture Behavioral of MMDirector is
   signal frames_resp_ready      : std_logic;
 
   signal addr, addr_next        : unsigned(BUS_ADDR_WIDTH-1 downto 0);
-  signal addr_vm, addr_vm_next        : unsigned(BUS_ADDR_WIDTH-1 downto 0);
+  signal addr_vm, addr_vm_next  : unsigned(BUS_ADDR_WIDTH-1 downto 0);
+  signal addr_pt, addr_pt_next  : unsigned(BUS_ADDR_WIDTH-1 downto 0);
+  signal size, size_next        : unsigned(BUS_ADDR_WIDTH-1 downto 0);
   signal region, region_next    : unsigned(log2ceil(MEM_REGIONS)-1 downto 0);
-  signal arg, arg_next          : unsigned(work.Utils.max(BYTE_SIZE, BUS_LEN_WIDTH)-1 downto 0);
+  signal arg, arg_next          : unsigned(BYTE_SIZE-1 downto 0);
+  signal beat, beat_next        : unsigned(log2ceil(BUS_BURST_MAX_LEN)-1 downto 0);
 
   type state_type is (RESET_ST, IDLE, FAIL, CLEAR_FRAMES, CLEAR_FRAMES_CHECK,
                       RESERVE_PT, RESERVE_PT_CHECK, PT0_INIT,
-                      VMALLOC, VMALLOC_CHECK_PT0, VMALLOC_CHECK_PT0_DATA, VMALLOC_RESERVE_FRAME, VMALLOC_FINISH,
-                      PT_FRAME_INIT_ADDR, PT_FRAME_INIT_DATA,
-                      PT_NEW, PT_NEW_CHECK_BM, PT_NEW_MARK_BM_ADDR, PT_NEW_MARK_BM_DATA,
-                      PT_NEW_CLEAR_ADDR, PT_NEW_CLEAR_DATA);
+
+                      VMALLOC, VMALLOC_CHECK_PT0, VMALLOC_CHECK_PT0_DATA,
+                      VMALLOC_RESERVE_FRAME, VMALLOC_FINISH,
+
+                      SET_PTE_RANGE, SET_PTE_RANGE_L1_CHECK,
+                      SET_PTE_RANGE_L1_UPDATE_ADDR, SET_PTE_RANGE_L1_UPDATE_DAT,
+                      SET_PTE_RANGE_L2_UPDATE_ADDR, SET_PTE_RANGE_L2_UPDATE_DAT,
+
+                      PT_NEW, PT_NEW_CHECK_BM, PT_NEW_MARK_BM_ADDR,
+                      PT_NEW_MARK_BM_DATA, PT_NEW_CLEAR_ADDR, PT_NEW_CLEAR_DATA,
+
+                      PT_FRAME_INIT_ADDR, PT_FRAME_INIT_DATA );
   constant STATE_STACK_DEPTH : natural := 3;
   type state_stack_type is array (STATE_STACK_DEPTH-1 downto 0) of state_type;
   signal state_stack, state_stack_next : state_stack_type;
@@ -220,6 +263,8 @@ begin
     report "BUS_BURST_MAX_LEN is not a power of two; this may cause bursts to cross 4k boundaries"
     severity warning;
 
+-- TODO: assert that L1 PT address refers to first possible PT in that frame.
+
   process (clk) begin
     if rising_edge(clk) then
       if reset = '1' then
@@ -227,28 +272,37 @@ begin
         state_stack(0) <= RESET_ST;
         addr    <= (others => '0');
         addr_vm <= (others => '0');
+        addr_pt <= (others => '0');
         arg     <= (others => '0');
+        size    <= (others => '0');
+        beat    <= (others => '0');
       else
         state_stack <= state_stack_next;
         addr    <= addr_next;
         addr_vm <= addr_vm_next;
+        addr_pt <= addr_pt_next;
         arg     <= arg_next;
+        size    <= size_next;
+        beat    <= beat_next;
       end if;
     end if;
   end process;
 
-  process (state_stack, addr, addr_vm, arg,
+  process (state_stack, addr, addr_vm, addr_pt, arg, size, beat,
            cmd_region, cmd_addr, cmd_free, cmd_alloc, cmd_realloc, cmd_valid,
            resp_ready,
            frames_cmd_ready, frames_resp_addr, frames_resp_success, frames_resp_valid,
            bus_wreq_ready, bus_wdat_ready,
            bus_rreq_ready, bus_rdat_data, bus_rdat_last, bus_rdat_valid)
-    variable counter : natural := 0;
+    variable counter : unsigned(BUS_ADDR_WIDTH-1 downto 0) := (others => '0');
   begin
     state_stack_next <= state_stack;
     addr_next        <= addr;
     addr_vm_next     <= addr_vm;
+    addr_pt_next     <= addr_pt;
     arg_next         <= arg;
+    size_next        <= size;
+    beat_next        <= beat;
 
     resp_success <= '0';
     resp_valid   <= '0';
@@ -306,7 +360,7 @@ begin
       -- Reserve the designated frame for the root page table.
       frames_cmd_valid <= '1';
       frames_cmd_alloc <= '1';
-      frames_cmd_addr  <= PAGE_BASE(PT_ADDR);
+      frames_cmd_addr  <= slv(PAGE_BASE(PT_ADDR));
       if frames_cmd_ready = '1' then
         state_stack_next(0) <= RESERVE_PT_CHECK;
       end if;
@@ -316,7 +370,7 @@ begin
       -- Execute the `frame initialize' routine to set bitmap, continue to PT0_INIT.
       frames_resp_ready <= '1';
       if frames_resp_valid = '1' then
-        if (frames_resp_success = '1') and (frames_resp_addr = PAGE_BASE(PT_ADDR)) then
+        if (frames_resp_success = '1') and (u(frames_resp_addr) = PAGE_BASE(PT_ADDR)) then
           state_stack_next(0) <= PT_FRAME_INIT_ADDR;
           state_stack_next(1) <= PT0_INIT;
           addr_next           <= PAGE_BASE(PT_ADDR);
@@ -334,32 +388,34 @@ begin
     when IDLE =>
       if cmd_valid = '1' then
 
-        if cmd_alloc = '1' or cmd_realloc = '1' then
-          -- TODO: implement true realloc which can move the virtual address.
-          -- cmd_region cmd_addr
+        if cmd_alloc = '1' then
           if unsigned(cmd_region) = 0 then
             -- TODO: host allocation
             state_stack_next(0) <= FAIL;
           else
             state_stack_next <= push_state(state_stack, VMALLOC);
           end if;
-        end if;
 
-        if cmd_free = '1' then
-          
+        elsif cmd_free = '1' then
+          -- TODO
+          state_stack_next(0) <= FAIL;
+
+        elsif cmd_realloc = '1' then
+          -- TODO
+          state_stack_next(0) <= FAIL;
         end if;
       end if;
 
     -- === START OF VMALLOC ROUTINE ===
     -- Find big enough free chunk in virtual address space.
     -- Allocate single frame for start of allocation in the given region.
-    -- `addr' will contain virtual address of allocation.
+    -- `addr_vm' will contain virtual address of allocation.
 
     when VMALLOC =>
       -- Request the L0 page table to find a high-level gap.
       -- TODO: find gaps in lower level page tables.
       addr_next <= PT_ADDR;
-      arg_next  <= (others => '0');
+      size_next <= (others => '0');
       state_stack_next(0) <= VMALLOC_CHECK_PT0;
 
     when VMALLOC_CHECK_PT0 =>
@@ -371,12 +427,13 @@ begin
       end if;
 
     when VMALLOC_CHECK_PT0_DATA =>
+      -- Check the returned PTEs for allocation gaps.
       bus_rdat_ready <= '1';
       if bus_rdat_valid = '1' then
         -- For each PTE in the beat
-        counter := int(arg);
+        counter := size;
         for i in 0 to BUS_DATA_BYTES / PTE_SIZE - 1 loop
-          if bus_rdat_data(PTE_SIZE*i+PTE_MAPPED) = '0' then
+          if bus_rdat_data(PTE_SIZE*i + PTE_MAPPED) = '0' then
             if counter = 0 then
               -- Start of gap
               addr_vm_next <= shift_left(PT_OFFSET(addr), VM_SIZE_L1_LOG2);
@@ -385,38 +442,161 @@ begin
             counter := counter + 1;
           else -- PTE_MAPPED
             -- Make gap invalid
-            counter := 0;
+            counter := (others => '0');
           end if;
-          exit when counter > shift_right(unsigned(cmd_size), VM_SIZE_L1_LOG2);
+          exit when counter >= shift_right_round_up(unsigned(cmd_size), VM_SIZE_L1_LOG2);
         end loop;
-        arg_next <= to_unsigned(counter, arg'length);
+        size_next <= counter;
 
-        if counter > shift_right(unsigned(cmd_size), VM_SIZE_L1_LOG2) then
-          state_stack_next <= push_state(PT_MARK_MAPPED);
+        if counter >= shift_right_round_up(unsigned(cmd_size), VM_SIZE_L1_LOG2) then
+          -- Gap is big enough, continue to allocate a frame
+          state_stack_next(0) <= VMALLOC_RESERVE_FRAME;
         else
+          -- Check more L0 entries
           state_stack_next(0) <= VMALLOC_CHECK_PT0;
           addr_next           <= addr + BUS_DATA_BYTES;
         end if;
       end if;
 
     when VMALLOC_RESERVE_FRAME =>
+      -- Find a frame in the given region, result will be available later.
       frames_cmd_valid  <= '1';
       frames_cmd_find   <= '1';
       frames_cmd_region <= slv(unsigned(cmd_region) - 1);
       if frames_cmd_ready = '1' then
-        state_stack_next(0) <= ;
-        -- TODO write frame address
+        -- addr_vm  : virtual base address to start at
+        -- cmd_size : length to set
+        state_stack_next    <= push_state(state_stack, SET_PTE_RANGE);
+        state_stack_next(1) <= VMALLOC_FINISH;
+        size_next <= unsigned(cmd_size);
+        -- Take first page mapping from frame allocator
+        arg_next  <= to_unsigned(1, arg'length);
+        addr_next <= (others => '0');
       end if;
 
     when VMALLOC_FINISH =>
       resp_valid   <= '1';
       resp_success <= '1';
-      resp_addr    <= slv(addr);
+      resp_addr    <= slv(addr_vm);
       if resp_ready = '1' then
         state_stack_next <= pop_state(state_stack);
       end if;
 
-    when PT_MARK_MAPPED
+    -- === START OF SET_PTE_RANGE ROUTINE ===
+    -- Set mapping for a range of virtual addresses, create page tables as needed.
+    -- `addr_vm` contains address to start mapping at.
+    -- `size`    contains length of mapping.
+    -- `addr`    must be initialized to `addr_vm`. (Is used to keep track of progress)
+    -- arg(0) = '1' -> Take first frame from frame allocator.
+    -- arg(1) = '1' -> Conditional allocation: stop when already mapped. TODO
+
+    when SET_PTE_RANGE =>
+      -- Get the L1 PTE
+      bus_rreq_valid <= '1';
+      bus_rreq_addr  <= slv(ADDR_BUS_ALIGN(PTE_ADDR(PT_ADDR, addr, 1)));
+      bus_rreq_len   <= slv(to_unsigned(1, bus_wreq_len'length));
+      if bus_rreq_ready = '1' then
+        state_stack_next(0) <= SET_PTE_RANGE_L1_CHECK;
+      end if;
+
+    when SET_PTE_RANGE_L1_CHECK =>
+      bus_rdat_ready <= '1';
+      if bus_rdat_valid = '1' then
+        -- Check PRESENT bit of PTE referred to by addr.
+        if bus_rdat_data(
+             PTE_SIZE * int(ADDR_BUS_OFFSET(PTE_ADDR(PT_ADDR, addr, 1)))
+             + PTE_PRESENT
+           ) = '1'
+        then
+          -- Page table already exists.
+          addr_pt_next <= align_beq(
+              u(bus_rdat_data(
+                BYTE_SIZE * (PTE_SIZE * int(ADDR_BUS_OFFSET(PTE_ADDR(PT_ADDR, addr, 1))) + PTE_SIZE)
+                downto
+                BYTE_SIZE * PTE_SIZE * int(ADDR_BUS_OFFSET(PTE_ADDR(PT_ADDR, addr, 1)))
+              )),
+              PT_SIZE_LOG2
+            );
+          state_stack_next(0) <= SET_PTE_RANGE_L2_UPDATE_ADDR;
+        else
+          -- Need to allocate a page table.
+          state_stack_next    <= push_state(state_stack, PT_NEW);
+          state_stack_next(1) <= SET_PTE_RANGE_L1_UPDATE_ADDR;
+        end if;
+      end if;
+
+    when SET_PTE_RANGE_L1_UPDATE_ADDR =>
+      -- A new PT was allocated, update the corresponding L1 entry.
+      bus_wreq_valid <= '1';
+      bus_wreq_addr  <= slv(ADDR_BUS_ALIGN(PTE_ADDR(PT_ADDR, addr, 1)));
+      bus_wreq_len   <= slv(to_unsigned(1, bus_wreq_len'length));
+      if bus_wreq_ready = '1' then
+        state_stack_next(0) <= SET_PTE_RANGE_L1_UPDATE_DAT;
+      end if;
+
+    when SET_PTE_RANGE_L1_UPDATE_DAT =>
+      -- Update the PTE
+      bus_wdat_valid  <= '1';
+      bus_wdat_last   <= '1';
+      -- Duplicate the address over the data bus
+      for i in 0 to BUS_DATA_BYTES/PTE_SIZE-1 loop
+        bus_wdat_data(PTE_SIZE * (i+1) - 1 downto PTE_SIZE * i) <= slv(addr_pt);
+        -- Mark the entry as mapped and present
+        bus_wdat_data(PTE_SIZE * i + PTE_MAPPED)  <= '1';
+        bus_wdat_data(PTE_SIZE * i + PTE_PRESENT) <= '1';
+      end loop;
+      -- Use strobe to write the correct entry
+      bus_wdat_strobe <= (others => '0');
+      bus_wdat_strobe(
+          PTE_SIZE * int(ADDR_BUS_OFFSET(PTE_ADDR(PT_ADDR, addr, 1))) + PTE_SIZE
+          downto
+          PTE_SIZE * int(ADDR_BUS_OFFSET(PTE_ADDR(PT_ADDR, addr, 1)))
+        ) <= (others => '1');
+      if bus_wdat_ready = '1' then
+        state_stack_next(0) <= SET_PTE_RANGE_L2_UPDATE_ADDR;
+      end if;
+
+    when SET_PTE_RANGE_L2_UPDATE_ADDR =>
+      bus_wreq_valid <= '1';
+      bus_wreq_addr  <= slv(ADDR_BUS_ALIGN(PTE_ADDR(PT_ADDR, addr, 2)));
+      bus_wreq_len   <= slv(to_unsigned(1, bus_wreq_len'length));
+      if bus_wreq_ready = '1' then
+        state_stack_next(0) <= SET_PTE_RANGE_L2_UPDATE_DAT;
+      end if;
+
+    when SET_PTE_RANGE_L2_UPDATE_DAT =>
+      frames_resp_ready <= '1';
+      if frames_resp_valid = '1' then
+        bus_wdat_valid  <= '1';
+      end if;
+      bus_wdat_last   <= '1';
+      -- Duplicate the address over the data bus.
+      for i in 0 to BUS_DATA_BYTES/PTE_SIZE-1 loop
+        if arg(0) = '1' then
+          -- Map to the allocated frame.
+          bus_wdat_data(PTE_SIZE * (i+1) - 1 downto PTE_SIZE * i) <= frames_resp_addr;
+          -- Mark the entry as mapped and present.
+          bus_wdat_data(PTE_SIZE * i + PTE_MAPPED)  <= '1';
+          bus_wdat_data(PTE_SIZE * i + PTE_PRESENT) <= '1';
+        else
+          -- Mark as mapped, but do not allocate frames.
+          bus_wdat_data(PTE_SIZE * (i+1) - 1 downto PTE_SIZE * i) <= (others => '0');
+          bus_wdat_data(PTE_SIZE * i + PTE_MAPPED)  <= '1';
+        end if;
+      end loop;
+      -- Do not try to use allocated frame on next iteration.
+      arg_next(0) <= '0';
+      -- Use strobe to write the correct entry.
+      bus_wdat_strobe <= (others => '0');
+      bus_wdat_strobe(
+          PTE_SIZE * int(ADDR_BUS_OFFSET(PTE_ADDR(PT_ADDR, addr, 2))) + PTE_SIZE
+          downto
+          PTE_SIZE * int(ADDR_BUS_OFFSET(PTE_ADDR(PT_ADDR, addr, 2)))
+        ) <= (others => '1');
+      if bus_wdat_ready = '1' then
+      --TODO update address, check allocated size; return to L1 on boundary.
+        state_stack_next(0) <= SET_PTE_RANGE_L2_UPDATE_ADDR;
+      end if;
 
     -- === START OF FRAME_INIT ROUTINE ===
     -- Clear the usage bitmap of the frame at `addr'.
@@ -424,7 +604,8 @@ begin
     -- Does not preserve contents of the frame.
 
     when PT_FRAME_INIT_ADDR =>
-      -- Can write further than the bitmap, because the entire frame should be unused at this point.
+      -- Can write further than the bitmap,
+      -- because the entire frame should be unused at this point.
       bus_wreq_valid <= '1';
       bus_wreq_addr  <= slv(addr);
       bus_wreq_len   <= slv(to_unsigned(1, bus_wreq_len'length));
@@ -454,13 +635,16 @@ begin
     -- === START OF PT_NEW ROUTINE ===
     -- Find a free spot for a page table on frame `addr',
     -- mark it as used, and initialize the page table.
-    -- `addr' will contain the base address of the new page table.
+    -- `addr_pt' will contain the base address of the new page table.
+    -- `addr` remains unchanged.
 
     when PT_NEW =>
       -- Find a free spot for a PT
       bus_rreq_valid <= '1';
-      bus_rreq_addr  <= PAGE_BASE(addr);
+      bus_rreq_addr  <= slv(PAGE_BASE(addr));
       bus_rreq_len   <= slv(to_unsigned(1, bus_rreq_len'length));
+      -- Use addr_pt to store addr
+      addr_pt_next   <= addr;
       -- TODO implement finding empty spots past BUS_DATA_WIDTH entries
       if bus_rreq_ready = '1' then
         state_stack_next(0) <= PT_NEW_CHECK_BM;
@@ -481,7 +665,9 @@ begin
             -- Bit 0 refers to the first possible page table in this frame,
             -- which exists on the first aligned location after the bitmap.
             state_stack_next(0) <= PT_NEW_MARK_BM_ADDR;
-            addr_next           <= PAGE_BASE(addr) + (i+1) * 2**PT_SIZE_LOG2;
+            addr_next           <= OVERLAY(
+                                     shift_left(to_unsigned(i+1, PAGE_SIZE_LOG2), PT_SIZE_LOG2),
+                                     PAGE_BASE(addr));
             -- Save the byte that needs to be written
             arg_next            <= resize(unsigned(bus_rdat_data((i/BYTE_SIZE)*BYTE_SIZE+BYTE_SIZE-1 downto (i/BYTE_SIZE)*BYTE_SIZE)), arg_next'length);
             arg_next(i mod BYTE_SIZE) <= '1';
@@ -493,7 +679,7 @@ begin
     when PT_NEW_MARK_BM_ADDR =>
       -- Set address for marking bit in bitmap
       bus_wreq_valid <= '1';
-      bus_wreq_addr  <= PAGE_BASE(addr);
+      bus_wreq_addr  <= slv(PAGE_BASE(addr));
       bus_wreq_len   <= slv(to_unsigned(1, bus_wreq_len'length));
       -- TODO: enable bitmap location > BUS_DATA_WIDTH
       if bus_wreq_ready = '1' then
@@ -506,7 +692,12 @@ begin
         bus_wdat_data(BYTE_SIZE*(i+1)-1 downto BYTE_SIZE*i) <= slv(arg(BYTE_SIZE-1 downto 0));
       end loop;
       bus_wdat_strobe <= (others => '0');
-      bus_wdat_strobe(int(div_floor(shift_right_cut(PAGE_OFFSET(addr), PT_SIZE_LOG2), BYTE_SIZE))) <= '1';
+      -- Get page table number referenced by addr and figure out which byte of the bitmap it is in.
+      bus_wdat_strobe(int(
+        div_floor(
+          shift_right_cut(PAGE_OFFSET(addr), PT_SIZE_LOG2) - PT_FIRST_NR,
+          BYTE_SIZE)
+        )) <= '1';
       bus_wdat_last <= '1';
       if bus_wdat_ready = '1' then
         state_stack_next(0) <= PT_NEW_CLEAR_ADDR;
@@ -516,11 +707,18 @@ begin
       bus_wreq_valid <= '1';
       bus_wreq_addr  <= slv(addr);
       -- The number of beats in the burst
-      arg_next       <= to_unsigned(work.Utils.min(BUS_BURST_MAX_LEN, ((PT_SIZE - int(PT_OFFSET(addr)))+BUS_DATA_BYTES-1) / BUS_DATA_BYTES), arg'length);
-      bus_wreq_len   <= slv(resize(arg_next, bus_wreq_len'length));
+      beat_next      <= to_unsigned(
+                          work.Utils.min(
+                            BUS_BURST_MAX_LEN,
+                            int(div_ceil(
+                              to_unsigned(PT_SIZE, log2ceil(PT_SIZE)) - PT_OFFSET(addr),
+                              BUS_DATA_BYTES))
+                          ),
+                          beat'length);
+      bus_wreq_len   <= slv(resize(beat_next, bus_wreq_len'length));
       if bus_wreq_ready = '1' then
         state_stack_next(0) <= PT_NEW_CLEAR_DATA;
-        addr_next           <= addr + arg_next * BUS_DATA_BYTES;
+        addr_next           <= addr + beat_next * BUS_DATA_BYTES;
       end if;
 
     when PT_NEW_CLEAR_DATA =>
@@ -530,11 +728,13 @@ begin
       bus_wdat_last <= '1';
       if bus_wdat_ready = '1' then
         -- One beat processed
-        arg_next <= arg - 1;
-        if arg = 1 then
+        beat_next <= beat - 1;
+        if beat = 1 then
           -- This is the last beat
           if PT_OFFSET(addr) = 0 then
-            addr_next  <= addr - PT_SIZE;
+            -- Set return and restore addr
+            addr_pt_next <= addr - PT_SIZE;
+            addr_next    <= addr_pt;
             state_stack_next <= pop_state(state_stack);
           else
             state_stack_next(0) <= PT_NEW_CLEAR_ADDR;
