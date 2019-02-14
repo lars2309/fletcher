@@ -18,6 +18,10 @@ package MM is
   function ZEROS(arg : in natural)
                  return std_logic_vector;
 
+  function DIV_CEIL (numerator   : natural;
+                     denominator : natural)
+    return natural;
+
   component MMFrames is
     generic (
       PAGE_SIZE_LOG2              : natural;
@@ -153,5 +157,12 @@ package body MM is
   begin
     return ret;
   end ZEROS;
+
+  function DIV_CEIL (numerator   : natural;
+                     denominator : natural)
+    return natural is
+  begin
+    return (numerator + denominator - 1) / denominator;
+  end DIV_CEIL;
 
 end MM;

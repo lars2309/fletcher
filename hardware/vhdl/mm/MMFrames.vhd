@@ -165,7 +165,7 @@ begin
   end process;
 
   process (state, region, frame, cmd_addr, cmd_region, cmd_valid,
-           cmd_alloc, cmd_free, cmd_clear, cmd_find) begin
+           cmd_alloc, cmd_free, cmd_clear, cmd_find, resp_ready) begin
     state_next   <= state;
     frame_next   <= frame;
     region_next  <= region;
