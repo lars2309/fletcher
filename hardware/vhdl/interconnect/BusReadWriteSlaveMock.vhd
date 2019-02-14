@@ -229,7 +229,13 @@ begin
           end loop;
           
           -- Print or dump the data to an SREC file
-          mem_write(mem, std_logic_vector(addr), wdat_data);
+          mem_read(mem, std_logic_vector(addr), data);
+          for i in 0 to wdat_strobe'length-1 loop
+--            if wdat_strobe(i) = '1' then
+              data(8*(i+1)-1  downto 8*i) := wdat_data(8*(i+1)-1  downto 8*i);
+--            end if;
+          end loop;
+          mem_write(mem, std_logic_vector(addr), data);
           if (SREC_FILE = "") then
             dumpStdOut("Write > " & sim_hex_no0x(std_logic_vector(addr)) & " > " & sim_hex_no0x(wdat_data));
           else

@@ -111,6 +111,7 @@ begin
     TbReset                     <= '0';
     wait until rising_edge(TbClock);
 
+    -- Allocate 3 GB
     cmd_alloc  <= '1';
     cmd_size   <= slv(shift_left(to_unsigned(3, cmd_size'length), 30));
     cmd_region <= slv(to_unsigned(1, cmd_region'length));
@@ -126,6 +127,16 @@ begin
     wait for 0 ns;
     resp_ready <= '0';
 
+    -- Allocate 34 GB
+    cmd_alloc  <= '1';
+    cmd_size   <= slv(shift_left(to_unsigned(34, cmd_size'length), 30));
+    cmd_region <= slv(to_unsigned(1, cmd_region'length));
+    handshake_out(TbClock, cmd_ready, cmd_valid);
+    cmd_alloc  <= '0';
+
+    handshake_in(TbClock, resp_ready, resp_valid);
+
+    -- Free the first allocation
     cmd_free <= '1';
     cmd_addr <= addr;
     handshake_out(TbClock, cmd_ready, cmd_valid);

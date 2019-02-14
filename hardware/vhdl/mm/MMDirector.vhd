@@ -113,6 +113,7 @@ architecture Behavioral of MMDirector is
 
   constant PTE_MAPPED           : natural := 0;
   constant PTE_PRESENT          : natural := 1;
+  constant PTE_BOUNDARY         : natural := 2;
 
   constant VM_SIZE_L2_LOG2      : natural := PAGE_SIZE_LOG2;
   constant VM_SIZE_L1_LOG2      : natural := VM_SIZE_L2_LOG2 + PT_ENTRIES_LOG2;
@@ -485,7 +486,7 @@ begin
       if bus_rdat_valid = '1' then
         -- For each PTE in the beat
         for i in 0 to BUS_DATA_BYTES / PTE_SIZE - 1 loop
-          if bus_rdat_data(PTE_SIZE*i + PTE_MAPPED) = '0' then
+          if bus_rdat_data(PTE_WIDTH*i + PTE_MAPPED) = '0' then
             if v.size = 0 then
               -- Start of gap
               v.addr_vm := PTE_TO_VA(PT_INDEX(v.addr), 1);
@@ -517,6 +518,7 @@ begin
       frames_cmd_region <= slv(unsigned(cmd_region) - 1);
 
       if frames_cmd_ready = '1' then
+        cmd_ready        <= '1';
         -- addr_vm  : virtual base address to start at
         -- cmd_size : length to set
         v.state_stack    := push_state(v.state_stack, SET_PTE_RANGE);
@@ -690,18 +692,19 @@ begin
       end if;
 
     -- === START OF PT_NEW ROUTINE ===
-    -- Find a free spot for a page table on frame `addr',
+    -- Find a free spot for a page table.
     -- mark it as used, and initialize the page table.
     -- `addr_pt' will contain the base address of the new page table.
     -- `addr` remains unchanged.
 
     when PT_NEW =>
       -- Find a free spot for a PT
+      -- Use addr_pt to store addr
+      v.addr_pt      := v.addr;
+      v.addr         := PT_ADDR;
       bus_rreq_valid <= '1';
       bus_rreq_addr  <= slv(PAGE_BASE(v.addr));
       bus_rreq_len   <= slv(to_unsigned(1, bus_rreq_len'length));
-      -- Use addr_pt to store addr
-      v.addr_pt      := v.addr;
       -- TODO implement finding empty spots past BUS_DATA_WIDTH entries
       if bus_rreq_ready = '1' then
         v.state_stack(0) := PT_NEW_CHECK_BM;
