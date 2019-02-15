@@ -360,6 +360,7 @@ begin
 
     resp_success <= '0';
     resp_valid   <= '0';
+    resp_addr    <= (others => 'U');
     cmd_ready    <= '0';
 
     frames_cmd_valid  <= '0';
@@ -489,7 +490,7 @@ begin
           if bus_rdat_data(PTE_WIDTH*i + PTE_MAPPED) = '0' then
             if v.size = 0 then
               -- Start of gap
-              v.addr_vm := PTE_TO_VA(PT_INDEX(v.addr), 1);
+              v.addr_vm := PTE_TO_VA(PT_INDEX(v.addr) + i, 1);
             end if;
             -- Increase size of gap
             v.size := v.size + 1;
@@ -617,7 +618,9 @@ begin
       end if;
 
     when SET_PTE_RANGE_L2_UPDATE_DAT =>
-      frames_resp_ready <= '1';
+      if v.arg(0) = '1' then
+        frames_resp_ready <= '1';
+      end if;
       if frames_resp_valid = '1' or v.arg(0) = '0' then
         bus_wdat_valid  <= '1';
       end if;
@@ -636,8 +639,6 @@ begin
           bus_wdat_data(PTE_WIDTH * i + PTE_MAPPED)  <= '1';
         end if;
       end loop;
-      -- Do not try to use allocated frame on next iteration.
-      v.arg(0) := '0';
       -- Use strobe to write the correct entry.
       bus_wdat_strobe <= slv(OVERLAY(
           not u(ZEROS(PTE_SIZE)),
@@ -647,7 +648,7 @@ begin
         if PAGE_BASE(v.addr) = PAGE_BASE(v.addr_vm) + PAGE_BASE(v.size) then
           -- Allocated enough space
           v.state_stack := pop_state(v.state_stack);
-        elsif (not EXTRACT(v.addr_vm, PAGE_SIZE_LOG2, PT_ENTRIES_LOG2)) = 0 then
+        elsif (not EXTRACT(v.addr, PAGE_SIZE_LOG2, PT_ENTRIES_LOG2)) = 0 then
           -- At end of L2 page table, go to next table through L1.
           v.state_stack(0) := SET_PTE_RANGE;
         else
@@ -655,6 +656,8 @@ begin
           v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_ADDR;
         end if;
         v.addr := v.addr + LOG2_TO_UNSIGNED(VM_SIZE_L2_LOG2);
+        -- Do not try to use allocated frame on next iteration.
+        v.arg(0) := '0';
       end if;
 
     -- === START OF FRAME_INIT ROUTINE ===
