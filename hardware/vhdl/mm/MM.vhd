@@ -116,6 +116,11 @@ package MM is
       bus_wdat_strobe             : out std_logic_vector(BUS_STROBE_WIDTH-1 downto 0);
       bus_wdat_last               : out std_logic;
 
+      -- Response channel
+      bus_resp_valid              : in  std_logic;
+      bus_resp_ready              : out std_logic;
+      bus_resp_ok                 : in  std_logic;
+
       -- Read address channel
       bus_rreq_addr               : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
       bus_rreq_len                : out std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
@@ -127,6 +132,36 @@ package MM is
       bus_rdat_last               : in  std_logic;
       bus_rdat_valid              : in  std_logic;
       bus_rdat_ready              : out std_logic
+    );
+  end component;
+
+  component MMHostInterface is
+    generic (
+      NUM_REGS                    : natural := 6+3;
+      REG_WIDTH                   : natural := 32;
+      BUS_ADDR_WIDTH              : natural := 64;
+      MEM_REGIONS                 : natural
+    );
+    port (
+      clk                         : in  std_logic;
+      reset                       : in  std_logic;
+      cmd_region                  : out std_logic_vector(log2ceil(MEM_REGIONS)-1 downto 0);
+      cmd_addr                    : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+      cmd_size                    : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+      cmd_free                    : out std_logic;
+      cmd_alloc                   : out std_logic;
+      cmd_realloc                 : out std_logic;
+      cmd_valid                   : out std_logic;
+      cmd_ready                   : in  std_logic;
+
+      resp_addr                   : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+      resp_success                : in  std_logic;
+      resp_valid                  : in  std_logic;
+      resp_ready                  : out std_logic;
+
+      regs_in                     : in  std_logic_vector(NUM_REGS*REG_WIDTH-1 downto 0);
+      regs_out                    : out std_logic_vector(NUM_REGS*REG_WIDTH-1 downto 0);
+      regs_out_en                 : out std_logic_vector(NUM_REGS-1 downto 0)
     );
   end component;
 

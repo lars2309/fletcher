@@ -12,7 +12,7 @@ package MM_tc_params is
   constant BUS_ADDR_WIDTH              : natural := 64;
   constant BUS_DATA_WIDTH              : natural := 512;
   constant BUS_STROBE_WIDTH            : natural := 512/8;
-  constant BUS_LEN_WIDTH               : natural := 9;
+  constant BUS_LEN_WIDTH               : natural := 8;
   constant BUS_BURST_STEP_LEN          : natural := 16;
   constant BUS_BURST_MAX_LEN           : natural := 128;
 

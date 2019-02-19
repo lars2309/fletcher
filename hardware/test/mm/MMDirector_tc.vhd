@@ -61,6 +61,9 @@ architecture tb of MMDirector_tc is
   signal bus_wdat_data          : std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
   signal bus_wdat_strobe        : std_logic_vector(BUS_STROBE_WIDTH-1 downto 0);
   signal bus_wdat_last          : std_logic;
+  signal bus_resp_valid         : std_logic;
+  signal bus_resp_ready         : std_logic;
+  signal bus_resp_ok            : std_logic;
 
   signal TbClock                : std_logic                                               := '0';
   signal TbReset                : std_logic                                               := '0';
@@ -199,7 +202,11 @@ begin
       bus_rdat_valid            => bus_rdat_valid,
       bus_rdat_ready            => bus_rdat_ready,
       bus_rdat_data             => bus_rdat_data,
-      bus_rdat_last             => bus_rdat_last
+      bus_rdat_last             => bus_rdat_last,
+      
+      bus_resp_valid            => bus_resp_valid,
+      bus_resp_ready            => bus_resp_ready,
+      bus_resp_ok               => bus_resp_ok
     );
 
   dev_mem : BusReadWriteSlaveMock

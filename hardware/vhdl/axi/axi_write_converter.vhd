@@ -48,11 +48,13 @@ entity axi_write_converter is
     -- should be set to false to prevent redundant buffering
     -- of the master bus response channel
     ENABLE_FIFO                 : boolean := true;
-    
+
     SLV_REQ_SLICE_DEPTH         : natural := 2;
     SLV_DAT_SLICE_DEPTH         : natural := 2;
+    SLV_RSP_SLICE_DEPTH         : natural := 2;
     MST_REQ_SLICE_DEPTH         : natural := 2;
-    MST_DAT_SLICE_DEPTH         : natural := 2
+    MST_DAT_SLICE_DEPTH         : natural := 2;
+    MST_RSP_SLICE_DEPTH         : natural := 2
 
   );
 
@@ -74,20 +76,30 @@ entity axi_write_converter is
     slv_bus_wdat_strobe         : in  std_logic_vector(SLAVE_DATA_WIDTH/8-1 downto 0);
     slv_bus_wdat_last           : in  std_logic;
 
+    -- Write response channel
+    slv_bus_resp_valid          : out std_logic;
+    slv_bus_resp_ready          : in  std_logic;
+    slv_bus_resp_ok             : out std_logic;
+
     -- AXI BUS
-    -- Read address channel
+    -- Write address channel
     m_axi_awaddr                : out std_logic_vector(ADDR_WIDTH-1 downto 0);
     m_axi_awlen                 : out std_logic_vector(MASTER_LEN_WIDTH-1 downto 0);
     m_axi_awvalid               : out std_logic;
     m_axi_awready               : in  std_logic;
     m_axi_awsize                : out std_logic_vector(2 downto 0);
 
-    -- Read data channel
+    -- Write data channel
     m_axi_wvalid                : out std_logic;
     m_axi_wready                : in  std_logic;
     m_axi_wdata                 : out std_logic_vector(MASTER_DATA_WIDTH-1 downto 0);
     m_axi_wstrb                 : out std_logic_vector(MASTER_DATA_WIDTH/8-1 downto 0);
-    m_axi_wlast                 : out std_logic
+    m_axi_wlast                 : out std_logic;
+
+    -- Write response channel
+    m_axi_bvalid                : in  std_logic;
+    m_axi_bready                : out std_logic;
+    m_axi_bresp                 : in  std_logic_vector(1 downto 0)
   );
 end entity axi_write_converter;
 
@@ -190,6 +202,9 @@ architecture rtl of axi_write_converter is
   signal int_slv_bus_wdat_last  : std_logic;
   signal int_slv_bus_wdat_valid : std_logic;
   signal int_slv_bus_wdat_ready : std_logic;
+  signal int_slv_bus_resp_valid : std_logic;
+  signal int_slv_bus_resp_ready : std_logic;
+  signal int_slv_bus_resp_ok    : std_logic;
   signal int_m_axi_awaddr       : std_logic_vector(ADDR_WIDTH-1 downto 0);
   signal int_m_axi_awlen        : std_logic_vector(MASTER_LEN_WIDTH-1 downto 0);
   signal int_m_axi_awvalid      : std_logic;
@@ -200,16 +215,23 @@ architecture rtl of axi_write_converter is
   signal int_m_axi_wlast        : std_logic;
   signal int_m_axi_wvalid       : std_logic;
   signal int_m_axi_wready       : std_logic;
+  signal int_m_axi_bvalid       : std_logic;
+  signal int_m_axi_bready       : std_logic;
+  signal int_m_axi_bresp        : std_logic_vector(1 downto 0);
 
   signal int_slv_bus_wreq_all   : std_logic_vector(FWACI(2)-1 downto 0);
   signal int_slv_bus_wdat_all   : std_logic_vector(FWDCI(3)-1 downto 0);
+  signal int_slv_bus_resp_all   : std_logic_vector(0 downto 0);
   signal int_m_axi_awall        : std_logic_vector(AWACI(2)-1 downto 0);
   signal int_m_axi_wall         : std_logic_vector(AWDCI(3)-1 downto 0);
+  signal int_m_axi_ball         : std_logic_vector(1 downto 0);
   signal slv_bus_wreq_all       : std_logic_vector(FWACI(2)-1 downto 0);
   signal slv_bus_wdat_all       : std_logic_vector(FWDCI(3)-1 downto 0);
+  signal slv_bus_resp_all       : std_logic_vector(0 downto 0);
   signal m_axi_awall            : std_logic_vector(AWACI(2)-1 downto 0);
   signal m_axi_wall             : std_logic_vector(AWDCI(3)-1 downto 0);
-  
+  signal m_axi_ball             : std_logic_vector(1 downto 0);
+
 begin
 
   -- Reset
@@ -223,7 +245,7 @@ begin
   pass_through_gen: if RATIO = 1 generate
     int_slv_bus_wreq_ready      <= int_m_axi_awready;
     int_m_axi_awaddr            <= int_slv_bus_wreq_addr;
-    int_m_axi_awlen             <= slv(resize(u(slv_bus_wreq_len) - 1, MASTER_LEN_WIDTH));
+    int_m_axi_awlen             <= slv(resize(u(int_slv_bus_wreq_len) - 1, MASTER_LEN_WIDTH));
     int_m_axi_awvalid           <= int_slv_bus_wreq_valid;
 
     int_slv_bus_wdat_ready      <= int_m_axi_wready;
@@ -231,10 +253,15 @@ begin
     int_m_axi_wstrb             <= int_slv_bus_wdat_strobe;
     int_m_axi_wlast             <= int_slv_bus_wdat_last;
     int_m_axi_wvalid            <= int_slv_bus_wdat_valid;
+
+    int_m_axi_bready            <= int_slv_bus_resp_ready;
+    int_slv_bus_resp_ok         <= not int_m_axi_bresp(1);
+    int_slv_bus_resp_valid      <= int_m_axi_bvalid;
   end generate;
 
   -- If the ratio is larger than 1, instantiate the serializer, etc..
   serialize_gen: if RATIO > 1 generate
+    -- TODO connect response channel for RATIO > 1
     -----------------------------------------------------------------------------
     -- Write Request channels
     -----------------------------------------------------------------------------
@@ -459,6 +486,27 @@ begin
   int_slv_bus_wdat_strobe       <= int_slv_bus_wdat_all(FWDCI(2)-1 downto FWDCI(1));
   int_slv_bus_wdat_last         <= int_slv_bus_wdat_all(                  FWDCI(0));
 
+  -- Fletcher response slice ---------------------------------------------------
+  int_slv_bus_resp_all          <= "" & int_slv_bus_resp_ok;
+
+  frpc_slice : StreamBuffer
+    generic map (
+      MIN_DEPTH                 => SLV_RSP_SLICE_DEPTH,
+      DATA_WIDTH                => slv_bus_resp_all'length
+    )
+    port map (
+      clk                       => clk,
+      reset                     => reset,
+      in_ready                  => int_slv_bus_resp_ready,
+      in_valid                  => int_slv_bus_resp_valid,
+      in_data                   => int_slv_bus_resp_all,
+      out_ready                 => slv_bus_resp_ready,
+      out_valid                 => slv_bus_resp_valid,
+      out_data                  => slv_bus_resp_all
+    );
+
+  slv_bus_resp_ok               <= slv_bus_resp_all(0);
+ 
   -- AXI write address slice ---------------------------------------------------
   int_m_axi_awall               <= int_m_axi_awaddr 
                                  & int_m_axi_awlen;
@@ -507,6 +555,26 @@ begin
   m_axi_wstrb                   <= m_axi_wall(AWDCI(2)-1 downto AWDCI(1));
   m_axi_wlast                   <= m_axi_wall(                  AWDCI(0));
 
-  
+  -- AXI write response slice ------------------------------------------------------
+  m_axi_ball                    <= m_axi_bresp;
+
+  arpc_slice : StreamBuffer
+    generic map (
+      MIN_DEPTH                 => MST_RSP_SLICE_DEPTH,
+      DATA_WIDTH                => m_axi_ball'length
+    )
+    port map (
+      clk                       => clk,
+      reset                     => reset,
+      in_ready                  => m_axi_bready,
+      in_valid                  => m_axi_bvalid,
+      in_data                   => m_axi_ball,
+      out_ready                 => int_m_axi_bready,
+      out_valid                 => int_m_axi_bvalid,
+      out_data                  => int_m_axi_ball
+    );
+
+  int_m_axi_bresp               <= int_m_axi_ball;
+
 end architecture rtl;
 

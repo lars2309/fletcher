@@ -128,6 +128,7 @@ proc add_mm {{source_dir ""}} {
   add_source $source_dir/mm/MM.vhd
   add_source $source_dir/mm/MMFrames.vhd
   add_source $source_dir/mm/MMDirector.vhd
+  add_source $source_dir/mm/MMHostInterface.vhd
 }
 
 proc add_mm_tb {{source_dir ""}} {
