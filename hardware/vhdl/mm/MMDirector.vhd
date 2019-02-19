@@ -86,6 +86,11 @@ entity MMDirector is
     bus_wdat_strobe             : out std_logic_vector(BUS_STROBE_WIDTH-1 downto 0);
     bus_wdat_last               : out std_logic;
 
+    -- Response channel
+    bus_resp_valid              : in  std_logic;
+    bus_resp_ready              : out std_logic;
+    bus_resp_ok                 : in  std_logic;
+
     -- Read address channel
     bus_rreq_addr               : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
     bus_rreq_len                : out std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
@@ -386,6 +391,7 @@ begin
     bus_rreq_len    <= (others => 'U'); --slv(to_unsigned(1, bus_wreq_len'length));
 
     bus_rdat_ready  <= '0';
+    bus_resp_ready  <= '1'; -- TODO
 
     case v.state_stack(0) is
 
@@ -645,19 +651,20 @@ begin
           to_unsigned(0, bus_wdat_strobe'length),
           int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr, 2)))));
       if bus_wdat_ready = '1' then
+        -- Do not try to use allocated frame on next iteration.
+        v.arg(0) := '0';
+        -- Next address is increased by the size addressable by the written entries
+        v.addr := v.addr + LOG2_TO_UNSIGNED(VM_SIZE_L2_LOG2);
         if PAGE_BASE(v.addr) = PAGE_BASE(v.addr_vm) + PAGE_BASE(v.size) then
           -- Allocated enough space
           v.state_stack := pop_state(v.state_stack);
-        elsif (not EXTRACT(v.addr, PAGE_SIZE_LOG2, PT_ENTRIES_LOG2)) = 0 then
+        elsif (EXTRACT(v.addr, PAGE_SIZE_LOG2, PT_ENTRIES_LOG2)) = 0 then
           -- At end of L2 page table, go to next table through L1.
           v.state_stack(0) := SET_PTE_RANGE;
         else
           -- Continue with next PTE.
           v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_ADDR;
         end if;
-        v.addr := v.addr + LOG2_TO_UNSIGNED(VM_SIZE_L2_LOG2);
-        -- Do not try to use allocated frame on next iteration.
-        v.arg(0) := '0';
       end if;
 
     -- === START OF FRAME_INIT ROUTINE ===
