@@ -127,6 +127,7 @@ proc add_mm {{source_dir ""}} {
   set source_dir [source_dir_or_default $source_dir]
   add_source $source_dir/mm/MM.vhd
   add_source $source_dir/mm/MMFrames.vhd
+  add_source $source_dir/mm/MMBarrier.vhd
   add_source $source_dir/mm/MMDirector.vhd
   add_source $source_dir/mm/MMHostInterface.vhd
 }
@@ -137,6 +138,7 @@ proc add_mm_tb {{source_dir ""}} {
   add_source $source_dir/../test/mm/MM_tc_params.vhd
   add_source $source_dir/../test/mm/BusReadWriteSlaveMock_tc.vhd
   add_source $source_dir/../test/mm/MMFrames_tc.vhd
+  add_source $source_dir/../test/mm/MMBarrier_tc.vhd
   add_source $source_dir/../test/mm/MMDirector_tc.vhd
   add_source $source_dir/../test/mm/MMSystem_tc.vhd
 }

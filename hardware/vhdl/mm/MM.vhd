@@ -165,6 +165,40 @@ package MM is
     );
   end component;
 
+  component MMBarrier is
+    generic (
+      BUS_ADDR_WIDTH              : natural := 64;
+      BUS_LEN_WIDTH               : natural := 8;
+      MAX_OUTSTANDING             : natural := 31
+    );
+    port (
+      clk                         : in  std_logic;
+      reset                       : in  std_logic;
+      dirty                       : out std_logic;
+
+      -- Slave write request channel
+      slv_wreq_valid              : in  std_logic;
+      slv_wreq_ready              : out std_logic;
+      slv_wreq_addr               : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+      slv_wreq_len                : in  std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
+      slv_wreq_barrier            : in  std_logic;
+      -- Master write request channel
+      mst_wreq_valid              : out std_logic;
+      mst_wreq_ready              : in  std_logic;
+      mst_wreq_addr               : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+      mst_wreq_len                : out std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
+
+      -- Slave response channel
+      slv_resp_valid              : out std_logic;
+      slv_resp_ready              : in  std_logic := '1';
+      slv_resp_ok                 : out std_logic;
+      -- Master response channel
+      mst_resp_valid              : in  std_logic;
+      mst_resp_ready              : out std_logic;
+      mst_resp_ok                 : in  std_logic
+    );
+  end component;
+
 end package;
 
 package body MM is
