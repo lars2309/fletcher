@@ -104,6 +104,9 @@ begin
   bus_reset <= TbReset;
   acc_reset <= TbReset;
 
+  bus_resp_ok    <= '1';
+  bus_resp_valid <= bus_wreq_valid and bus_wreq_ready;
+
   stimuli : process
     variable addr : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
   begin
@@ -140,9 +143,9 @@ begin
     handshake_in(TbClock, resp_ready, resp_valid);
 
     -- Free the first allocation
-    cmd_free <= '1';
-    cmd_addr <= addr;
-    handshake_out(TbClock, cmd_ready, cmd_valid);
+--    cmd_free <= '1';
+--    cmd_addr <= addr;
+--    handshake_out(TbClock, cmd_ready, cmd_valid);
 
 
     TbSimEnded                  <= '0';
