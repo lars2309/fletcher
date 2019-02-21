@@ -365,7 +365,7 @@ begin
            cmd_region, cmd_addr, cmd_free, cmd_alloc, cmd_realloc, cmd_valid,
            resp_ready,
            frames_cmd_ready, frames_resp_addr, frames_resp_success, frames_resp_valid,
-           int_bus_wreq_ready, bus_wdat_ready,
+           int_bus_wreq_ready, bus_wdat_ready, int_bus_dirty,
            bus_rreq_ready, bus_rdat_data, bus_rdat_last, bus_rdat_valid) is
     variable v : reg_type;
   begin
@@ -815,11 +815,12 @@ begin
       bus_wdat_valid  <= '1';
       bus_wdat_data   <= (others => '0');
       bus_wdat_strobe <= (others => '1');
-      bus_wdat_last <= '1';
       if bus_wdat_ready = '1' then
         -- One beat processed
         v.beat := v.beat - 1;
+        bus_wdat_last <= '0';
         if v.beat = 0 then
+          bus_wdat_last <= '1';
           -- This is the last beat
           if PT_OFFSET(v.addr) = 0 then
             -- Set return and restore addr
