@@ -15,6 +15,7 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.std_logic_misc.all;
+use ieee.numeric_std.all;
 
 library work;
 use work.Arrow.all;
@@ -23,7 +24,6 @@ use work.Interconnect.all;
 use work.Wrapper.all;
 use work.Utils.all;
 use work.MM.all;
-use work.MM_tc_params.all;
 
 entity fletcher_wrapper is
   generic(
@@ -81,6 +81,17 @@ entity fletcher_wrapper is
 end fletcher_wrapper;
 
 architecture Implementation of fletcher_wrapper is
+
+  constant PAGE_SIZE_LOG2              : natural := 22;
+  constant VM_BASE                     : unsigned(BUS_ADDR_WIDTH-1 downto 0) := X"4000_0000_0000_0000";
+  constant MEM_REGIONS                 : natural := 1;
+  constant MEM_SIZES                   : nat_array := (1024, 0);
+  constant MEM_MAP_BASE                : unsigned(BUS_ADDR_WIDTH-1 downto 0) := (others => '0');
+  constant MEM_MAP_SIZE_LOG2           : natural := 37;
+  constant PT_ENTRIES_LOG2             : natural := 13;
+  constant PTE_BITS                    : natural := BUS_ADDR_WIDTH;
+  constant PT_ADDR_INTERM              : unsigned(BUS_ADDR_WIDTH-1 downto 0) := MEM_MAP_BASE;
+  constant PT_ADDR                     : unsigned(BUS_ADDR_WIDTH-1 downto 0) := PT_ADDR_INTERM + 2**PT_ENTRIES_LOG2 * ( (PTE_BITS+BYTE_SIZE-1) / BYTE_SIZE);
 
   signal cmd_region   : std_logic_vector(log2ceil(MEM_REGIONS)-1 downto 0);
   signal cmd_addr     : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
