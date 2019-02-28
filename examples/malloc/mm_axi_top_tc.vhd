@@ -305,7 +305,8 @@ begin
       BUS_STROBE_WIDTH            => BUS_STROBE_WIDTH,
       BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
       BUS_BURST_MAX_LEN           => BUS_BURST_MAX_LEN,
-      BUS_BURST_STEP_LEN          => BUS_BURST_STEP_LEN
+      BUS_BURST_STEP_LEN          => BUS_BURST_STEP_LEN,
+      NUM_REGS                    => 9
     )
     port map (
       acc_clk                     => acc_clk,

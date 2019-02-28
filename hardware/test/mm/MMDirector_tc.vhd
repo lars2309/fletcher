@@ -31,7 +31,7 @@ architecture tb of MMDirector_tc is
   signal bus_reset              : std_logic                                               := '0';
   signal acc_reset              : std_logic                                               := '0';
 
-  signal cmd_region             : std_logic_vector(log2ceil(MEM_REGIONS)-1 downto 0);
+  signal cmd_region             : std_logic_vector(log2ceil(MEM_REGIONS+1)-1 downto 0);
   signal cmd_addr               : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
   signal cmd_size               : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
   signal cmd_free               : std_logic                                               := '0';

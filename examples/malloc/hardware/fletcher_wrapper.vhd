@@ -93,7 +93,7 @@ architecture Implementation of fletcher_wrapper is
   constant PT_ADDR_INTERM              : unsigned(BUS_ADDR_WIDTH-1 downto 0) := MEM_MAP_BASE;
   constant PT_ADDR                     : unsigned(BUS_ADDR_WIDTH-1 downto 0) := PT_ADDR_INTERM + 2**PT_ENTRIES_LOG2 * ( (PTE_BITS+BYTE_SIZE-1) / BYTE_SIZE);
 
-  signal cmd_region   : std_logic_vector(log2ceil(MEM_REGIONS)-1 downto 0);
+  signal cmd_region   : std_logic_vector(log2ceil(MEM_REGIONS+1)-1 downto 0);
   signal cmd_addr     : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
   signal cmd_size     : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
   signal cmd_free     : std_logic;

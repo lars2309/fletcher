@@ -58,7 +58,7 @@ read_ip [ list \
 
 # Generate the IP used in cl_arrow 
 generate_target all [get_files $CL_DIR/design/ip/axi_interconnect_top/axi_interconnect_top.xci]
-synth_ip [get_files $CL_DIR/design/ip/axi_interconnect_top/axi_interconnect_top.xci] -force
+synth_ip [get_files $CL_DIR/design/ip/axi_interconnect_top/axi_interconnect_top.xci]
 
 #Read DDR IP
 read_ip [ list \

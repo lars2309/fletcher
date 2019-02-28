@@ -91,7 +91,7 @@ initial begin
   tb.poke_bar1(.addr(4 * 3), .data(32'h0000_0000));
 
   // Allocate
-  tb.poke_bar1(.addr(4 * 5), .data(32'h0000_0011));
+  tb.poke_bar1(.addr(4 * 5), .data(32'h0000_0003));
 
   // Wait for completion
 

@@ -58,7 +58,7 @@ entity MMDirector is
   port (
     clk                         : in  std_logic;
     reset                       : in  std_logic;
-    cmd_region                  : in  std_logic_vector(log2ceil(MEM_REGIONS)-1 downto 0);
+    cmd_region                  : in  std_logic_vector(log2ceil(MEM_REGIONS+1)-1 downto 0);
     cmd_addr                    : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
     cmd_size                    : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
     cmd_free                    : in  std_logic;
@@ -241,7 +241,7 @@ architecture Behavioral of MMDirector is
   function BYTES_IN_BEATS (beats : unsigned)
     return unsigned is
   begin
-    return beats & u(ZEROS(log2ceil(BUS_DATA_BYTES)));
+    return beats & to_unsigned(0, log2ceil(BUS_DATA_BYTES));
   end function;
 
   signal int_bus_wreq_valid     : std_logic;
@@ -303,7 +303,7 @@ architecture Behavioral of MMDirector is
     addr_vm                     : unsigned(BUS_ADDR_WIDTH-1 downto 0);
     addr_pt                     : unsigned(BUS_ADDR_WIDTH-1 downto 0);
     size                        : unsigned(BUS_ADDR_WIDTH-1 downto 0);
-    region                      : unsigned(log2ceil(MEM_REGIONS)-1 downto 0);
+    region                      : unsigned(log2ceil(MEM_REGIONS+1)-1 downto 0);
     arg                         : unsigned(1 downto 0);
     byte_buffer                 : unsigned(BYTE_SIZE-1 downto 0);
     beat                        : unsigned(log2ceil(BUS_BURST_MAX_LEN+1)-1 downto 0);
@@ -362,7 +362,7 @@ begin
   end process;
 
   process (r,
-           cmd_region, cmd_addr, cmd_free, cmd_alloc, cmd_realloc, cmd_valid,
+           cmd_region, cmd_addr, cmd_free, cmd_alloc, cmd_realloc, cmd_valid, cmd_size,
            resp_ready,
            frames_cmd_ready, frames_resp_addr, frames_resp_success, frames_resp_valid,
            int_bus_wreq_ready, bus_wdat_ready, int_bus_dirty,
@@ -373,12 +373,12 @@ begin
 
     resp_success <= '0';
     resp_valid   <= '0';
-    resp_addr    <= (others => 'U');
+    resp_addr    <= (others => '0');
     cmd_ready    <= '0';
 
     frames_cmd_valid  <= '0';
-    frames_cmd_region <= (others => 'U');
-    frames_cmd_addr   <= (others => 'U');
+    frames_cmd_region <= (others => '0');
+    frames_cmd_addr   <= (others => '0');
     frames_cmd_free   <= '0';
     frames_cmd_alloc  <= '0';
     frames_cmd_find   <= '0';
@@ -386,21 +386,33 @@ begin
     frames_resp_ready <= '0';
 
     int_bus_wreq_valid   <= '0';
-    int_bus_wreq_addr    <= (others => 'U'); --slv(addr);
-    int_bus_wreq_len     <= (others => 'U'); --slv(to_unsigned(1, bus_wreq_len'length));
+    int_bus_wreq_addr    <= (others => '0'); --slv(addr);
+    int_bus_wreq_len     <= (others => '0'); --slv(to_unsigned(1, bus_wreq_len'length));
     int_bus_wreq_barrier <= '1';
 
     bus_wdat_valid  <= '0';
-    bus_wdat_data   <= (others => 'U'); --(others => '0');
-    bus_wdat_strobe <= (others => 'U'); --(others => '1');
-    bus_wdat_last   <= 'U'; --'0';
+    bus_wdat_data   <= (others => '0');
+    bus_wdat_strobe <= (others => '1');
+    bus_wdat_last   <= '0';
 
     bus_rreq_valid  <= '0';
-    bus_rreq_addr   <= (others => 'U'); --slv(addr);
-    bus_rreq_len    <= (others => 'U'); --slv(to_unsigned(1, bus_wreq_len'length));
+    bus_rreq_addr   <= (others => '0'); --slv(addr);
+    bus_rreq_len    <= (others => '0'); --slv(to_unsigned(1, bus_wreq_len'length));
 
     bus_rdat_ready  <= '0';
-    bus_resp_ready  <= '1'; -- TODO
+
+--pragma synthesis_off
+    resp_addr         <= (others => 'U');
+    frames_cmd_region <= (others => 'U');
+    frames_cmd_addr   <= (others => 'U');
+    int_bus_wreq_addr <= (others => 'U');
+    int_bus_wreq_len  <= (others => 'U');
+    bus_wdat_data     <= (others => 'U');
+    bus_wdat_strobe   <= (others => 'U');
+    bus_wdat_last     <= 'U';
+    bus_rreq_addr     <= (others => 'U');
+    bus_rreq_len      <= (others => 'U');
+--pragma synthesis_on
 
     case v.state_stack(0) is
 
@@ -500,31 +512,48 @@ begin
 
     when VMALLOC_CHECK_PT0_DATA =>
       -- Check the returned PTEs for allocation gaps.
+      -- v.size tracks the size of the gap,
+      -- the EXTRACT() function selects the relevant portion to meet timing.
       bus_rdat_ready <= '1';
       if bus_rdat_valid = '1' then
         -- For each PTE in the beat
         for i in 0 to BUS_DATA_BYTES / PTE_SIZE - 1 loop
           if bus_rdat_data(PTE_WIDTH*i + PTE_MAPPED) = '0' then
-            if v.size = 0 then
+            if EXTRACT(v.size, VM_SIZE_L1_LOG2, VM_SIZE_L0_LOG2 - VM_SIZE_L1_LOG2) = 0 then
               -- Start of gap
               v.addr_vm := PTE_TO_VA(PT_INDEX(v.addr) + i, 1);
             end if;
             -- Increase size of gap
-            v.size := v.size + 1;
+            v.size := shift_left(
+                        resize(
+                          EXTRACT(v.size, VM_SIZE_L1_LOG2, VM_SIZE_L0_LOG2 - VM_SIZE_L1_LOG2) + 1,
+                          v.size'length),
+                        VM_SIZE_L1_LOG2);
           else -- PTE_MAPPED
             -- Make gap invalid
             v.size := (others => '0');
           end if;
-          exit when v.size >= shift_right_round_up(unsigned(cmd_size), VM_SIZE_L1_LOG2);
+          exit when EXTRACT(v.size, VM_SIZE_L1_LOG2, VM_SIZE_L0_LOG2 - VM_SIZE_L1_LOG2)
+              = EXTRACT(
+                shift_right_round_up(unsigned(cmd_size), VM_SIZE_L1_LOG2),
+                0,
+                VM_SIZE_L0_LOG2 - VM_SIZE_L1_LOG2);
         end loop;
 
-        if v.size >= shift_right_round_up(unsigned(cmd_size), VM_SIZE_L1_LOG2) then
+        -- Next set of PTEs
+        v.addr           := v.addr + BUS_DATA_BYTES;
+
+        if EXTRACT(v.size, VM_SIZE_L1_LOG2, VM_SIZE_L0_LOG2 - VM_SIZE_L1_LOG2)
+             = EXTRACT(
+               shift_right_round_up(unsigned(cmd_size), VM_SIZE_L1_LOG2),
+               0,
+               VM_SIZE_L0_LOG2 - VM_SIZE_L1_LOG2)
+        then
           -- Gap is big enough, continue to allocate a frame
           v.state_stack(0) := VMALLOC_RESERVE_FRAME;
         else
           -- Check more L0 entries
           v.state_stack(0) := VMALLOC_CHECK_PT0;
-          v.addr           := v.addr + BUS_DATA_BYTES;
         end if;
       end if;
 
@@ -533,7 +562,7 @@ begin
       -- Find a frame in the given region, result will be available later.
       frames_cmd_valid  <= '1';
       frames_cmd_find   <= '1';
-      frames_cmd_region <= slv(unsigned(cmd_region) - 1);
+      frames_cmd_region <= slv(resize(unsigned(cmd_region) - 1, frames_cmd_region'length));
 
       if frames_cmd_ready = '1' then
         cmd_ready        <= '1';
@@ -623,7 +652,7 @@ begin
       end loop;
       -- Use strobe to write the correct entry
       bus_wdat_strobe <= slv(OVERLAY(
-          not u(ZEROS(PTE_SIZE)),
+          not to_unsigned(0, PTE_SIZE),
           to_unsigned(0, bus_wdat_strobe'length),
           int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, v.addr, 1)))));
       if bus_wdat_ready = '1' then
@@ -662,7 +691,7 @@ begin
       end loop;
       -- Use strobe to write the correct entry.
       bus_wdat_strobe <= slv(OVERLAY(
-          not u(ZEROS(PTE_SIZE)),
+          not to_unsigned(0, PTE_SIZE),
           to_unsigned(0, bus_wdat_strobe'length),
           int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr, 2)))));
       if bus_wdat_ready = '1' then

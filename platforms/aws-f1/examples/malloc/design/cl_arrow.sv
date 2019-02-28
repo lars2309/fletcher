@@ -517,12 +517,12 @@ axi_interconnect_top AXI_INTERCONNECT (
 );
 
 // Read channel defaults:
-assign arrow_mst.arsize         = 3'b110; // 512 bit beats
+//assign arrow_mst.arsize         = 3'b110; // 512 bit beats
 //assign arrow_mst.arburst        = 2'b01; // incremental
 
 // Not using any of these:
 assign arrow_mst.arid           = 0;
-assign arrow_mst_awid           = 0;
+assign arrow_mst.awid           = 0;
 //assign arrow_mst.arlock         = 0;
 //assign arrow_mst.arcache        = 4'b0010;
 //assign arrow_mst.arprot         = 3'b000;

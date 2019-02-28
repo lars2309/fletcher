@@ -75,6 +75,7 @@ architecture Behavioral of MMFrames is
       addr := addr - LOG2_TO_UNSIGNED(MEM_MAP_SIZE_LOG2);
       frame := frame + MEM_SIZES(region);
       region := region + 1;
+      exit when region = MEM_REGIONS;
     end loop;
     frame := frame + addr(TOTAL_FRAMES_LOG2 + PAGE_SIZE_LOG2 - 1 downto PAGE_SIZE_LOG2);
     return unsigned(frame);
@@ -97,8 +98,9 @@ architecture Behavioral of MMFrames is
       addr := addr + LOG2_TO_UNSIGNED(MEM_MAP_SIZE_LOG2);
       frame := frame - MEM_SIZES(region);
       region := region + 1;
+      exit when region = MEM_REGIONS;
     end loop;
-    addr := addr + (frame & unsigned(ZEROS(PAGE_SIZE_LOG2)));
+    addr := addr + (frame & to_unsigned(0, PAGE_SIZE_LOG2));
     return std_logic_vector(addr);
   end FRAME_TO_PAGE;
 
@@ -120,6 +122,7 @@ architecture Behavioral of MMFrames is
     while addr > LOG2_TO_UNSIGNED(MEM_MAP_SIZE_LOG2) loop
       addr := addr - LOG2_TO_UNSIGNED(MEM_MAP_SIZE_LOG2);
       region := region + 1;
+      exit when region = MEM_REGIONS;
     end loop;
     return region;
   end PAGE_TO_REGION;
@@ -164,7 +167,7 @@ begin
     end if;
   end process;
 
-  process (state, region, frame, cmd_addr, cmd_region, cmd_valid,
+  process (state, r_data, region, frame, cmd_addr, cmd_region, cmd_valid,
            cmd_alloc, cmd_free, cmd_clear, cmd_find, resp_ready) begin
     state_next   <= state;
     frame_next   <= frame;

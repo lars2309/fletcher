@@ -15,9 +15,6 @@ package MM is
   function XOR_REDUCT(arg : in std_logic_vector)
                       return std_logic;
 
-  function ZEROS(arg : in natural)
-                 return std_logic_vector;
-
   function DIV_CEIL (numerator   : natural;
                      denominator : natural)
     return natural;
@@ -62,6 +59,8 @@ package MM is
       PT_ENTRIES_LOG2             : natural;
       PTE_BITS                    : natural;
 
+      MAX_OUTSTANDING_TRANSACTIONS: natural := 63;
+
       ---------------------------------------------------------------------------
       -- Bus metrics and configuration
       ---------------------------------------------------------------------------
@@ -86,7 +85,7 @@ package MM is
     port (
       clk                         : in  std_logic;
       reset                       : in  std_logic;
-      cmd_region                  : in  std_logic_vector(log2ceil(MEM_REGIONS)-1 downto 0);
+      cmd_region                  : in  std_logic_vector(log2ceil(MEM_REGIONS+1)-1 downto 0);
       cmd_addr                    : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
       cmd_size                    : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
       cmd_free                    : in  std_logic;
@@ -145,7 +144,7 @@ package MM is
     port (
       clk                         : in  std_logic;
       reset                       : in  std_logic;
-      cmd_region                  : out std_logic_vector(log2ceil(MEM_REGIONS)-1 downto 0);
+      cmd_region                  : out std_logic_vector(log2ceil(MEM_REGIONS+1)-1 downto 0);
       cmd_addr                    : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
       cmd_size                    : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
       cmd_free                    : out std_logic;
@@ -219,13 +218,6 @@ package body MM is
     end loop;
     return ret;
   end XOR_REDUCT;
-
-  function ZEROS(arg : in natural)
-                 return std_logic_vector is
-    variable ret : std_logic_vector(arg-1 downto 0) := (others => '0');
-  begin
-    return ret;
-  end ZEROS;
 
   function DIV_CEIL (numerator   : natural;
                      denominator : natural)
