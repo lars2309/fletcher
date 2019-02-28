@@ -47,7 +47,7 @@
 using fletcher::Timer;
 
 
-void fmalloc(std::shared_ptr<fletcher::Platform> platform, uint64_t size) {
+uint64_t fmalloc(std::shared_ptr<fletcher::Platform> platform, uint64_t size) {
   // Set region to 1
   platform->writeMMIO(4, 1);
 
@@ -63,8 +63,12 @@ void fmalloc(std::shared_ptr<fletcher::Platform> platform, uint64_t size) {
   // Wait for completion
   do {
 //    usleep(1);
-    platform()->readMMIO(FLETCHER_REG_STATUS, &rv);
+    platform()->readMMIO(8, &rv);
   } while ((rv & 1) != 1);
+
+  uint64_t address;
+  platform()->readMMIO64(6, &address);
+  return address;
 }
 
 /**
@@ -88,7 +92,7 @@ int main(int argc, char ** argv) {
   std::vector<double> t_alloc();
 
   t.start();
-  
+  fmalloc(platform, 300*1024*1024);
   t.stop();
   t_alloc[0] = t.seconds();
 
