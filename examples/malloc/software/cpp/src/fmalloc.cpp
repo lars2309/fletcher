@@ -125,6 +125,10 @@ int main(int argc, char ** argv) {
   for (int i = 0; i < n_mallocs; i++) {
     std::cout << "device malloc of " << std::setw(12) << std::hex << malloc_sizes[i] << " bytes at " << maddr[i] << " " << std::dec;
     PRINT_TIME(t_alloc[i], "");
+    if (i > 0 && maddr[i-1] + malloc_sizes[i-1] > maddr[i]) {
+      std::cout << "ERROR: overlapping allocation" << std::endl;
+      status = EXIT_FAILURE;
+    }
   }
 
   // Report the run times:
