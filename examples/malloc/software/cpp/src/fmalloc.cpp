@@ -63,12 +63,20 @@ uint64_t fmalloc(std::shared_ptr<fletcher::Platform> platform, uint64_t size) {
   // Wait for completion
   do {
 //    usleep(1);
-    platform()->readMMIO(8, &rv);
+    platform->readMMIO(8, &rv);
   } while ((rv & 1) != 1);
 
   uint64_t address;
-  platform()->readMMIO64(6, &address);
+  platform->readMMIO64(6, &address);
   return address;
+}
+
+double calc_sum(const std::vector<double> &values) {
+  return accumulate(values.begin(), values.end(), 0.0);
+}
+
+uint32_t calc_sum(const std::vector<uint32_t> &values) {
+  return static_cast<uint32_t>(accumulate(values.begin(), values.end(), 0.0));
 }
 
 /**
@@ -78,6 +86,19 @@ uint64_t fmalloc(std::shared_ptr<fletcher::Platform> platform, uint64_t size) {
  */
 int main(int argc, char ** argv) {
   int status = EXIT_SUCCESS;
+
+  int n_mallocs = 10;
+  int malloc_sizes[] = {
+      1024*1024*300,
+      1024*1024*1024*32,
+      1024*1024*1024*32+1,
+      1024*1024*1024*32-1,
+      1024*1024*1024*64,
+      1024*1024*1024*128,
+      1024*1024*1024*256,
+      1024*1024*1024*512,
+      1024*1024*1024*1024,
+      1024*1024*1024*2048};
 
   // Initialize FPGA
   std::shared_ptr<fletcher::Platform> platform;
@@ -89,12 +110,19 @@ int main(int argc, char ** argv) {
   platform->init();
 
   Timer t;
-  std::vector<double> t_alloc();
+  std::vector<double> t_alloc(n_mallocs);
+  std::vector<uint64_t> maddr(n_mallocs);
 
-  t.start();
-  fmalloc(platform, 300*1024*1024);
-  t.stop();
-  t_alloc[0] = t.seconds();
+  for (int i = 0; i < n_mallocs; i++) {
+    t.start();
+    maddr[i] = fmalloc(platform, malloc_sizes[i]);
+    t.stop();
+    t_alloc[i] = t.seconds();
+  }
+  for (int i = 0; i < n_mallocs; i++) {
+    std::cout << "device malloc of " << std::hex << malloc_sizes[i] << " bytes at " << maddr[i] << std::dec;
+    PRINT_TIME(calc_sum(t_alloc), "");
+  }
 
   // Report the run times:
   PRINT_TIME(calc_sum(t_alloc), "allocation");
