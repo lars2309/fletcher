@@ -51,7 +51,7 @@ uint64_t fmalloc(std::shared_ptr<fletcher::Platform> platform, uint64_t size) {
   // Set region to 1
   platform->writeMMIO(4, 1);
 
-  // Set size to 3 GB
+  // Set size
   uint32_t rv = size;
   platform->writeMMIO(2, rv);
   rv = size >> 32;
@@ -68,6 +68,8 @@ uint64_t fmalloc(std::shared_ptr<fletcher::Platform> platform, uint64_t size) {
 
   uint64_t address;
   platform->readMMIO64(6, &address);
+  rv = 0;
+  platform->writeMMIO(8, rv);
   return address;
 }
 
@@ -120,8 +122,8 @@ int main(int argc, char ** argv) {
     t_alloc[i] = t.seconds();
   }
   for (int i = 0; i < n_mallocs; i++) {
-    std::cout << "device malloc of " << std::hex << malloc_sizes[i] << " bytes at " << maddr[i] << std::dec;
-    PRINT_TIME(calc_sum(t_alloc), "");
+    std::cout << "device malloc of " << std::setw(12) << std::hex << malloc_sizes[i] << " bytes at " << maddr[i] << " " << std::dec;
+    PRINT_TIME(t_alloc[i], "");
   }
 
   // Report the run times:
