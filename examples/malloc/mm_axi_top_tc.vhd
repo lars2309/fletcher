@@ -161,13 +161,13 @@ begin
     slv_wreq_addr <= slv(to_unsigned(2*4, slv_wreq_addr'length));
     handshake_out(TbClock, slv_wreq_ready, slv_wreq_valid);
 
-    slv_wdat_data <= slv(shift_left(to_unsigned(3, BUS_ADDR_WIDTH), 30)(slv_wdat_data'length-1 downto 0));
+    slv_wdat_data <= slv(shift_left(to_unsigned(3, BUS_ADDR_WIDTH), 20)(slv_wdat_data'length-1 downto 0));
     handshake_out(TbClock, slv_wdat_ready, slv_wdat_valid);
 
     slv_wreq_addr <= slv(to_unsigned(2*4+4, slv_wreq_addr'length));
     handshake_out(TbClock, slv_wreq_ready, slv_wreq_valid);
 
-    slv_wdat_data <= slv(shift_left(to_unsigned(3, BUS_ADDR_WIDTH), 30)(slv_wdat_data'length*2-1 downto slv_wdat_data'length));
+    slv_wdat_data <= slv(shift_left(to_unsigned(3, BUS_ADDR_WIDTH), 20)(slv_wdat_data'length*2-1 downto slv_wdat_data'length));
     handshake_out(TbClock, slv_wdat_ready, slv_wdat_valid);
 
     -- Allocate

@@ -171,6 +171,19 @@ architecture Behavioral of MMDirector is
     return align_beq(addr, PAGE_SIZE_LOG2);
   end PAGE_BASE;
 
+  -- Convert a size to a number of pages, rounding up.
+  function PAGE_COUNT (size : unsigned)
+    return unsigned is
+    variable ret : unsigned(BUS_ADDR_WIDTH-1 downto 0);
+  begin
+    ret := resize(size, ret'length);
+    -- Set bits that cannot be used in our address space to '0'.
+    ret(ret'high downto VM_SIZE_L0_LOG2) := (others => '0');
+    -- Round up to pages.
+    ret := shift_right_round_up(size, PAGE_SIZE_LOG2);
+    return ret;
+  end PAGE_COUNT;
+
   function PT_INDEX (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
     return unsigned is
   begin
@@ -609,6 +622,7 @@ begin
       bus_rdat_ready <= '1';
       if bus_rdat_valid = '1' then
         -- Check PRESENT bit of PTE referred to by addr.
+        -- We ignore any present entries without checking the L2 table for simplicity of implementation.
         if bus_rdat_data(
              PTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, v.addr, 1)))
              + PTE_PRESENT
@@ -688,6 +702,10 @@ begin
           bus_wdat_data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= (others => '0');
           bus_wdat_data(PTE_WIDTH * i + PTE_MAPPED)  <= '1';
         end if;
+        if PAGE_BASE(v.addr) = PAGE_BASE(v.addr_vm) + shift_left(PAGE_COUNT(v.size), PAGE_SIZE_LOG2) then
+          -- Last entry of mapping
+          bus_wdat_data(PTE_WIDTH * i + PTE_BOUNDARY) <= '1';
+        end if;
       end loop;
       -- Use strobe to write the correct entry.
       bus_wdat_strobe <= slv(OVERLAY(
@@ -699,7 +717,7 @@ begin
         v.arg(0) := '0';
         -- Next address is increased by the size addressable by the written entries
         v.addr := v.addr + LOG2_TO_UNSIGNED(VM_SIZE_L2_LOG2);
-        if PAGE_BASE(v.addr) = PAGE_BASE(v.addr_vm) + PAGE_BASE(v.size) then
+        if PAGE_BASE(v.addr) = PAGE_BASE(v.addr_vm) + shift_left(PAGE_COUNT(v.size), PAGE_SIZE_LOG2) then
           -- Allocated enough space
           v.state_stack := pop_state(v.state_stack);
         elsif (EXTRACT(v.addr, PAGE_SIZE_LOG2, PT_ENTRIES_LOG2)) = 0 then
