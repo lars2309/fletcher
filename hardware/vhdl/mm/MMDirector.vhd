@@ -126,6 +126,19 @@ architecture Behavioral of MMDirector is
   constant VM_SIZE_L1_LOG2      : natural := VM_SIZE_L2_LOG2 + PT_ENTRIES_LOG2;
   constant VM_SIZE_L0_LOG2      : natural := VM_SIZE_L1_LOG2 + PT_ENTRIES_LOG2;
 
+  function CLAMP (val   : unsigned;
+                  clamp : natural)
+    return unsigned is
+    variable ret : unsigned(log2ceil(clamp+1)-1 downto 0);
+  begin
+    if val > clamp then
+      ret := to_unsigned(clamp, ret'length);
+    else
+      ret := val(ret'length-1 downto 0);
+    end if;
+    return ret;
+  end CLAMP;
+
   function OVERLAY (over  : unsigned;
                     under : unsigned;
                     offset: natural)
@@ -152,6 +165,56 @@ architecture Behavioral of MMDirector is
   begin
     return vec(offset + length - 1 downto offset);
   end EXTRACT;
+
+  function TAKE_EVERY (vec      : unsigned;
+                       interval : natural;
+                       offset   : natural)
+    return unsigned is
+    variable ret : unsigned(vec'length / interval - 1 downto 0);
+  begin
+    for N in 0 to vec'length / interval - 1 loop
+      ret(N) := vec(interval * N + offset);
+    end loop;
+    return ret;
+  end TAKE_EVERY;
+
+  function FIND_GAP (mask  : unsigned;
+                     rsize : unsigned)
+    return unsigned is
+    variable csize : unsigned(rsize'length-1 downto 0);
+    variable start : unsigned(rsize'length-1 downto 0);
+  begin
+    csize := (others => '0');
+    start := (others => '0');
+    for N in 0 to mask'length-1 loop
+      if mask(N) = '0' then
+        csize := csize + 1;
+      else
+        csize := (others => '0');
+        start := to_unsigned(N + 1, start'length);
+      end if;
+      exit when csize = rsize;
+    end loop;
+    return start & csize;
+  end FIND_GAP;
+
+  function FIND_GAP_SIZE (mask  : unsigned;
+                          rsize : unsigned)
+    return unsigned is
+    variable ret : unsigned(rsize'length*2-1 downto 0);
+  begin
+    ret := FIND_GAP(mask, rsize);
+    return ret(rsize'length-1 downto 0);
+  end FIND_GAP_SIZE;
+
+  function FIND_GAP_START (mask  : unsigned;
+                           rsize : unsigned)
+    return unsigned is
+    variable ret : unsigned(rsize'length*2-1 downto 0);
+  begin
+    ret := FIND_GAP(mask, rsize);
+    return ret(rsize'length*2-1 downto rsize'length);
+  end FIND_GAP_START;
 
   function PAGE_OFFSET (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
     return unsigned is
@@ -510,7 +573,11 @@ begin
       -- Request the L0 page table to find a high-level gap.
       -- TODO: find gaps in lower level page tables.
       v.addr           := PT_ADDR;
-      v.size           := (others => '0');
+      v.size           := shift_left(
+                              shift_right_round_up(unsigned(cmd_size), VM_SIZE_L1_LOG2),
+                              VM_SIZE_L1_LOG2
+                            );
+      v.addr_vm        := PTE_TO_VA(PT_INDEX(v.addr), 1);
       v.state_stack(0) := VMALLOC_CHECK_PT0;
 
     when VMALLOC_CHECK_PT0 =>
@@ -525,43 +592,46 @@ begin
 
     when VMALLOC_CHECK_PT0_DATA =>
       -- Check the returned PTEs for allocation gaps.
-      -- v.size tracks the size of the gap,
-      -- the EXTRACT() function selects the relevant portion to meet timing.
+      -- v.size tracks the remaining gap size to be found, rounded up to L1 PTE coverage.
       bus_rdat_ready <= '1';
       if bus_rdat_valid = '1' then
-        -- For each PTE in the beat
-        for i in 0 to BUS_DATA_BYTES / PTE_SIZE - 1 loop
-          if bus_rdat_data(PTE_WIDTH*i + PTE_MAPPED) = '0' then
-            if EXTRACT(v.size, VM_SIZE_L1_LOG2, VM_SIZE_L0_LOG2 - VM_SIZE_L1_LOG2) = 0 then
-              -- Start of gap
-              v.addr_vm := PTE_TO_VA(PT_INDEX(v.addr) + i, 1);
-            end if;
-            -- Increase size of gap
-            v.size := shift_left(
-                        resize(
-                          EXTRACT(v.size, VM_SIZE_L1_LOG2, VM_SIZE_L0_LOG2 - VM_SIZE_L1_LOG2) + 1,
-                          v.size'length),
-                        VM_SIZE_L1_LOG2);
-          else -- PTE_MAPPED
-            -- Make gap invalid
-            v.size := (others => '0');
-          end if;
-          exit when EXTRACT(v.size, VM_SIZE_L1_LOG2, VM_SIZE_L0_LOG2 - VM_SIZE_L1_LOG2)
-              = EXTRACT(
-                shift_right_round_up(unsigned(cmd_size), VM_SIZE_L1_LOG2),
-                0,
-                VM_SIZE_L0_LOG2 - VM_SIZE_L1_LOG2);
-        end loop;
+        -- needed size: CLAMP(shift_right(v.size, VM_SIZE_L1_LOG2), BUS_DATA_BYTES / PTE_SIZE)
+        if
+          -- Not a continuation
+          FIND_GAP_START(
+              TAKE_EVERY(u(bus_rdat_data), PTE_WIDTH, PTE_MAPPED),
+              CLAMP(shift_right(v.size, VM_SIZE_L1_LOG2), BUS_DATA_BYTES / PTE_SIZE)
+          ) /= 0
+        then
+          -- New gap was started
+          v.addr_vm := PTE_TO_VA(
+              PT_INDEX(v.addr) + FIND_GAP_START(
+                    TAKE_EVERY(u(bus_rdat_data), PTE_WIDTH, PTE_MAPPED),
+                    CLAMP(shift_right(v.size, VM_SIZE_L1_LOG2), BUS_DATA_BYTES / PTE_SIZE)),
+              1);
+          -- Subtract the gap size from requested size.
+          v.size := shift_left(
+              shift_right_round_up(unsigned(cmd_size), VM_SIZE_L1_LOG2)
+              - FIND_GAP_SIZE(
+                TAKE_EVERY(u(bus_rdat_data), PTE_WIDTH, PTE_MAPPED),
+                CLAMP(shift_right(v.size, VM_SIZE_L1_LOG2), BUS_DATA_BYTES / PTE_SIZE)
+              ),
+              VM_SIZE_L1_LOG2);
+        else
+          -- Subtract the gap size from leftover size.
+          v.size := shift_left(
+              shift_right(v.size, VM_SIZE_L1_LOG2)
+              - FIND_GAP_SIZE(
+                TAKE_EVERY(u(bus_rdat_data), PTE_WIDTH, PTE_MAPPED),
+                CLAMP(shift_right(v.size, VM_SIZE_L1_LOG2), BUS_DATA_BYTES / PTE_SIZE)
+              ),
+              VM_SIZE_L1_LOG2);
+        end if;
 
         -- Next set of PTEs
         v.addr           := v.addr + BUS_DATA_BYTES;
 
-        if EXTRACT(v.size, VM_SIZE_L1_LOG2, VM_SIZE_L0_LOG2 - VM_SIZE_L1_LOG2)
-             = EXTRACT(
-               shift_right_round_up(unsigned(cmd_size), VM_SIZE_L1_LOG2),
-               0,
-               VM_SIZE_L0_LOG2 - VM_SIZE_L1_LOG2)
-        then
+        if 0 = EXTRACT(v.size, VM_SIZE_L1_LOG2, VM_SIZE_L0_LOG2 - VM_SIZE_L1_LOG2) then
           -- Gap is big enough, continue to allocate a frame
           v.state_stack(0) := VMALLOC_RESERVE_FRAME;
         else
@@ -702,7 +772,9 @@ begin
           bus_wdat_data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= (others => '0');
           bus_wdat_data(PTE_WIDTH * i + PTE_MAPPED)  <= '1';
         end if;
-        if PAGE_BASE(v.addr) = PAGE_BASE(v.addr_vm) + shift_left(PAGE_COUNT(v.size), PAGE_SIZE_LOG2) then
+        if PAGE_BASE(v.addr) + LOG2_TO_UNSIGNED(VM_SIZE_L2_LOG2)
+          = PAGE_BASE(v.addr_vm) + shift_left(PAGE_COUNT(v.size), PAGE_SIZE_LOG2)
+        then
           -- Last entry of mapping
           bus_wdat_data(PTE_WIDTH * i + PTE_BOUNDARY) <= '1';
         end if;
