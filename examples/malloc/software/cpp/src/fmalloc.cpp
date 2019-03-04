@@ -91,16 +91,17 @@ int main(int argc, char ** argv) {
 
   int n_mallocs = 10;
   uint64_t malloc_sizes[] = {
-      1024L*1024*300,
-      1024L*1024*1024*32,
-      1024L*1024*1024*32+1,
-      1024L*1024*1024*32-1,
+      1024L*1024*1,         //  1 MB, sub-page
+      1024L*1024*4,         //  4 MB, page
+      1024L*1024*1024*32-1, // 32 GB, full L2 page table, one less
+      1024L*1024*1024*32,   // 32 GB, full L2 page table, exact
+      1024L*1024*1024*32+1, // 32 GB, full L2 page table, one more
       1024L*1024*1024*64,
       1024L*1024*1024*128,
       1024L*1024*1024*256,
       1024L*1024*1024*512,
-      1024L*1024*1024*1024,
-      1024L*1024*1024*2048};
+      1024L*1024*1024*1024  //  1 TB
+    };
 
   // Initialize FPGA
   std::shared_ptr<fletcher::Platform> platform;
