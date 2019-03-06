@@ -198,6 +198,39 @@ package MM is
     );
   end component;
 
+  component MMTranslator is
+    generic (
+      BUS_ADDR_WIDTH              : natural := 64;
+      BUS_LEN_WIDTH               : natural := 8
+    );
+    port (
+      clk                         : in  std_logic;
+      reset                       : in  std_logic;
+
+      -- Slave request channel
+      slv_req_valid               : in  std_logic;
+      slv_req_ready               : out std_logic;
+      slv_req_addr                : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+      slv_req_len                 : in  std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
+      -- Master request channel
+      mst_req_valid               : out std_logic;
+      mst_req_ready               : in  std_logic;
+      mst_req_addr                : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+      mst_req_len                 : out std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
+
+      -- Translate request channel
+      req_valid                   : out std_logic;
+      req_ready                   : in  std_logic;
+      req_addr                    : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+      -- Translate response channel
+      resp_valid                  : in  std_logic;
+      resp_ready                  : out std_logic;
+      resp_virt                   : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+      resp_phys                   : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+      resp_mask                   : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0)
+    );
+  end component;
+
 end package;
 
 package body MM is

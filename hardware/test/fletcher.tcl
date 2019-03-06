@@ -130,6 +130,7 @@ proc add_mm {{source_dir ""}} {
   add_source $source_dir/mm/MMBarrier.vhd
   add_source $source_dir/mm/MMDirector.vhd
   add_source $source_dir/mm/MMHostInterface.vhd
+  add_source $source_dir/mm/MMTranslator.vhd
 }
 
 proc add_mm_tb {{source_dir ""}} {
@@ -141,6 +142,7 @@ proc add_mm_tb {{source_dir ""}} {
   add_source $source_dir/../test/mm/MMBarrier_tc.vhd
   add_source $source_dir/../test/mm/MMDirector_tc.vhd
   add_source $source_dir/../test/mm/MMSystem_tc.vhd
+  add_source $source_dir/../test/mm/MMTranslator_tc.vhd
 }
 
 proc add_buffers {{source_dir ""}} {
