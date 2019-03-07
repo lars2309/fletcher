@@ -139,33 +139,6 @@ architecture Behavioral of MMDirector is
     return ret;
   end CLAMP;
 
-  function OVERLAY (over  : unsigned;
-                    under : unsigned;
-                    offset: natural)
-    return unsigned is
-    variable ret : unsigned(under'length-1 downto 0);
-  begin
-    ret := under;
-    ret(over'length + offset - 1 downto offset) := over;
-    return ret;
-  end OVERLAY;
-
-  function OVERLAY (over  : unsigned;
-                    under : unsigned)
-    return unsigned is
-    variable ret : unsigned(under'length-1 downto 0);
-  begin
-    return OVERLAY(over, under, 0);
-  end OVERLAY;
-
-  function EXTRACT (vec    : unsigned;
-                    offset : natural;
-                    length : natural)
-    return unsigned is
-  begin
-    return vec(offset + length - 1 downto offset);
-  end EXTRACT;
-
   function TAKE_EVERY (vec      : unsigned;
                        interval : natural;
                        offset   : natural)

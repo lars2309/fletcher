@@ -207,10 +207,10 @@ package Interconnect is
       ARB_METHOD                : string  := "ROUND-ROBIN";
       MAX_OUTSTANDING           : natural := 2;
       RAM_CONFIG                : string  := "";
-      SLV_REQ_SLICES            : boolean;
-      MST_REQ_SLICE             : boolean;
-      MST_DAT_SLICE             : boolean;
-      SLV_DAT_SLICES            : boolean
+      SLV_REQ_SLICES            : boolean := true;
+      MST_REQ_SLICE             : boolean := true;
+      MST_DAT_SLICE             : boolean := true;
+      SLV_DAT_SLICES            : boolean := true
     );
     port (
       bus_clk                   : in  std_logic;

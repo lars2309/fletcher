@@ -30,5 +30,35 @@ package MM_tc_params is
   constant PTE_BITS                    : natural := BUS_ADDR_WIDTH;
   constant PT_ADDR_INTERM              : unsigned(BUS_ADDR_WIDTH-1 downto 0) := MEM_MAP_BASE;
   constant PT_ADDR                     : unsigned(BUS_ADDR_WIDTH-1 downto 0) := PT_ADDR_INTERM + 2**PT_ENTRIES_LOG2 * ( (PTE_BITS+BYTE_SIZE-1) / BYTE_SIZE);
+
+  type bus_r_t is record
+    req_valid         : std_logic;
+    req_ready         : std_logic;
+    req_addr          : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+    req_len           : std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
+    req_size          : std_logic_vector(2 downto 0);
+    dat_valid         : std_logic;
+    dat_ready         : std_logic;
+    dat_data          : std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
+    dat_last          : std_logic;
+  end record bus_r_t;
+
+  type bus_w_t is record
+    req_valid         : std_logic;
+    req_ready         : std_logic;
+    req_addr          : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+    req_len           : std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
+    req_size          : std_logic_vector(2 downto 0);
+    dat_valid         : std_logic;
+    dat_ready         : std_logic;
+    dat_data          : std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
+    dat_strobe        : std_logic_vector(BUS_STROBE_WIDTH-1 downto 0);
+    dat_last          : std_logic;
+    resp_valid        : std_logic;
+    resp_ready        : std_logic;
+    resp_ok           : std_logic;
+    resp_resp         : std_logic_vector(1 downto 0);
+  end record bus_w_t;
+
 end package;
 
