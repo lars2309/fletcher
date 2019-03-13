@@ -634,11 +634,13 @@ begin
           -- Get segment of mapped address from the read data.
           frames_cmd_valid  <= '1';
           frames_cmd_find   <= '1';
-          frames_cmd_region <= slv(EXTRACT(
-                unsigned(bus_rdat_data),
-                BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2))) + PTE_SEGMENT,
-                log2ceil(MEM_REGIONS)
-              ));
+          if log2ceil(MEM_REGIONS) > 0 then
+            frames_cmd_region <= slv(EXTRACT(
+                  unsigned(bus_rdat_data),
+                  BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2))) + PTE_SEGMENT,
+                  log2ceil(MEM_REGIONS)
+                ));
+          end if;
           -- Store all flags of the mapping (skip the address itself)
           v.addr            := resize(
               EXTRACT(
