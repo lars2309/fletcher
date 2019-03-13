@@ -12,6 +12,7 @@ package MM is
   constant PTE_MAPPED       : natural := 0;
   constant PTE_PRESENT      : natural := 1;
   constant PTE_BOUNDARY     : natural := 2;
+  constant PTE_SEGMENT      : natural := 3;
 
   function LOG2_TO_UNSIGNED (v : natural)
                              return unsigned;
@@ -116,6 +117,14 @@ package MM is
       resp_valid                  : out std_logic;
       resp_ready                  : in  std_logic;
 
+      mmu_req_valid               : in  std_logic := '0';
+      mmu_req_ready               : out std_logic;
+      mmu_req_addr                : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0) := (others => '0');
+
+      mmu_resp_valid              : out std_logic;
+      mmu_resp_ready              : in  std_logic := '1';
+      mmu_resp_addr               : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+
       ---------------------------------------------------------------------------
       -- Bus write channels
       ---------------------------------------------------------------------------
@@ -217,6 +226,9 @@ package MM is
 
   component MMTranslator is
     generic (
+      VM_BASE                     : unsigned(ADDR_WIDTH_LIMIT-1 downto 0);
+      PT_ENTRIES_LOG2             : natural;
+      PAGE_SIZE_LOG2              : natural;
       BUS_ADDR_WIDTH              : natural := 64;
       BUS_LEN_WIDTH               : natural := 8
     );
@@ -300,7 +312,15 @@ package MM is
       resp_ready                  : in  std_logic;
       resp_virt                   : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
       resp_phys                   : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-      resp_mask                   : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0)
+      resp_mask                   : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+
+      dir_req_valid               : out std_logic;
+      dir_req_ready               : in  std_logic := '0';
+      dir_req_addr                : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+      
+      dir_resp_valid              : in  std_logic := '0';
+      dir_resp_ready              : out std_logic;
+      dir_resp_addr               : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0) := (others => '0')
     );
   end component;
 

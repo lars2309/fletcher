@@ -187,11 +187,11 @@ begin
       cmd_ready <= '1';
 
       if cmd_valid = '1' then
-        frame_next  <= PAGE_TO_FRAME(cmd_addr);
-        region_next <= to_unsigned(PAGE_TO_REGION(cmd_addr), region'length);
 
         if cmd_alloc = '1' then
           state_next  <= ALLOC_CHECK;
+          region_next <= to_unsigned(PAGE_TO_REGION(cmd_addr), region'length);
+          frame_next  <= PAGE_TO_FRAME(cmd_addr);
 
         elsif cmd_free = '1' then
           state_next  <= FREE;

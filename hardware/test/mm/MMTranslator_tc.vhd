@@ -156,6 +156,9 @@ begin
 
   transl_inst : MMTranslator
     generic map (
+      VM_BASE                   => VM_BASE,
+      PT_ENTRIES_LOG2           => PT_ENTRIES_LOG2,
+      PAGE_SIZE_LOG2            => PAGE_SIZE_LOG2,
       BUS_ADDR_WIDTH            => BUS_ADDR_WIDTH,
       BUS_LEN_WIDTH             => BUS_LEN_WIDTH
     )

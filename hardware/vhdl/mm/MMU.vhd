@@ -72,7 +72,15 @@ entity MMU is
     resp_ready                  : in  std_logic;
     resp_virt                   : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
     resp_phys                   : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-    resp_mask                   : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0)
+    resp_mask                   : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+
+    dir_req_valid               : out std_logic;
+    dir_req_ready               : in  std_logic := '0';
+    dir_req_addr                : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+    
+    dir_resp_valid              : in  std_logic := '0';
+    dir_resp_ready              : out std_logic;
+    dir_resp_addr               : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0) := (others => '0')
   );
 end MMU;
 
@@ -118,7 +126,8 @@ architecture Behavioral of MMU is
 
   type state_type is (RESET_ST, IDLE, FAIL,
                       LOOKUP_L1_ADDR, LOOKUP_L1_DATA,
-                      LOOKUP_L2_ADDR, LOOKUP_L2_DATA);
+                      LOOKUP_L2_ADDR, LOOKUP_L2_DATA,
+                      REQUEST_MAPPING);
 
   type reg_type is record
     state                       : state_type;
@@ -149,37 +158,42 @@ begin
 
   process (r,
            bus_rreq_ready, bus_rdat_data, bus_rdat_last, bus_rdat_valid,
-           resp_ready, req_valid, req_addr) is
+           resp_ready, req_valid, req_addr,
+           dir_req_ready, dir_resp_valid, dir_resp_addr) is
     variable v : reg_type;
   begin
     v := r;
 
-    bus_rreq_valid       <= '0';
-    bus_rreq_len         <= (others => 'U');
-    bus_rreq_addr        <= (others => 'U');
-    bus_rdat_ready       <= '0';
+    bus_rreq_valid         <= '0';
+    bus_rreq_len           <= (others => 'U');
+    bus_rreq_addr          <= (others => 'U');
+    bus_rdat_ready         <= '0';
 
-    req_ready            <= '0';
+    req_ready              <= '0';
 
-    resp_valid           <= '0';
-    resp_virt            <= (others => 'U');
-    resp_phys            <= (others => 'U');
-    resp_mask            <= (others => 'U');
+    resp_valid             <= '0';
+    resp_virt              <= (others => 'U');
+    resp_phys              <= (others => 'U');
+    resp_mask              <= (others => 'U');
+
+    dir_req_valid          <= '0';
+    dir_req_addr           <= (others => 'U');
+    dir_resp_ready         <= '0';
 
     case v.state is
 
     when RESET_ST =>
-      v.state            := IDLE;
+      v.state              := IDLE;
 
     when IDLE =>
       if req_valid = '1' then
-        bus_rreq_valid   <= '1';
-        bus_rreq_len     <= slv(to_unsigned(1, bus_rreq_len'length));
-        bus_rreq_addr    <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(PT_ADDR, u(req_addr), 1)));
-        v.addr           := u(req_addr);
+        bus_rreq_valid     <= '1';
+        bus_rreq_len       <= slv(to_unsigned(1, bus_rreq_len'length));
+        bus_rreq_addr      <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(PT_ADDR, u(req_addr), 1)));
+        v.addr             := u(req_addr);
         if bus_rreq_ready = '1' then
-          v.state        := LOOKUP_L1_DATA;
-          req_ready      <= '1';
+          v.state          := LOOKUP_L1_DATA;
+          req_ready        <= '1';
         end if;
       end if;
 
@@ -195,38 +209,65 @@ begin
             ),
             PT_SIZE_LOG2
           );
-        bus_rreq_valid   <= '1';
-        bus_rreq_len     <= slv(to_unsigned(1, bus_rreq_len'length));
-        bus_rreq_addr    <= slv(
+        bus_rreq_valid     <= '1';
+        bus_rreq_len       <= slv(to_unsigned(1, bus_rreq_len'length));
+        bus_rreq_addr      <= slv(
             ADDR_BUS_ALIGN(
               VA_TO_PTE(
                 v.addr_pt,
                 v.addr,
                 2)));
         if bus_rreq_ready = '1' then
-          v.state      := LOOKUP_L2_DATA;
-          bus_rdat_ready <= '1';
+          v.state          := LOOKUP_L2_DATA;
+          bus_rdat_ready   <= '1';
         end if;
       end if;
 
     when LOOKUP_L2_DATA =>
-      bus_rdat_ready     <= '1';
       if bus_rdat_valid = '1' then
-        resp_valid       <= '1';
-        resp_virt        <= slv(v.addr);
-        resp_phys        <= slv(align_beq(
-            EXTRACT(
+        if EXTRACT(
               unsigned(bus_rdat_data),
-              BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr, 2))),
-              BYTE_SIZE * PTE_SIZE
-            ),
-            PAGE_SIZE_LOG2
-          ));
+              BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr, 2))) + PTE_PRESENT,
+              1
+            ) = "1"
+        then
+          resp_valid       <= '1';
+          resp_virt        <= slv(v.addr);
+          resp_phys        <= slv(align_beq(
+              EXTRACT(
+                unsigned(bus_rdat_data),
+                BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr, 2))),
+                BYTE_SIZE * PTE_SIZE
+              ),
+              PAGE_SIZE_LOG2
+            ));
+          -- Create mask for single page
+          resp_mask        <= std_logic_vector(shift_left(to_signed(-1, BUS_ADDR_WIDTH), PAGE_SIZE_LOG2));
+          if resp_ready = '1' then
+            v.state        := IDLE;
+            bus_rdat_ready <= '1';
+          end if;
+
+        else
+          -- Page is not present
+          dir_req_valid    <= '1';
+          dir_req_addr     <= slv(v.addr);
+          if dir_req_ready = '1' then
+            v.state        := REQUEST_MAPPING;
+          end if;
+        end if;
+      end if;
+
+    when REQUEST_MAPPING =>
+      if dir_resp_valid = '1' then
+        resp_valid         <= '1';
+        resp_virt          <= slv(v.addr);
+        resp_phys          <= dir_resp_addr;
         -- Create mask for single page
-        resp_mask        <= std_logic_vector(shift_left(to_signed(-1, BUS_ADDR_WIDTH), PAGE_SIZE_LOG2));
+        resp_mask          <= std_logic_vector(shift_left(to_signed(-1, BUS_ADDR_WIDTH), PAGE_SIZE_LOG2));
         if resp_ready = '1' then
-          v.state        := IDLE;
-          bus_rdat_ready <= '1';
+          v.state          := IDLE;
+          dir_resp_ready   <= '1';
         end if;
       end if;
 

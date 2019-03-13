@@ -44,6 +44,14 @@ signal resp_success           : std_logic;
 signal resp_valid             : std_logic;
 signal resp_ready             : std_logic                                               := '0';
 
+signal mmu_req_valid          : std_logic;
+signal mmu_req_ready          : std_logic;
+signal mmu_req_addr           : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+
+signal mmu_resp_valid         : std_logic;
+signal mmu_resp_ready         : std_logic;
+signal mmu_resp_addr          : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+
 signal bus_r                  : bus_r_t;
 signal bus_w                  : bus_w_t;
 signal dir_r                  : bus_r_t;
@@ -192,6 +200,9 @@ end process;
 
 translator_inst : MMTranslator
   generic map (
+    VM_BASE                   => VM_BASE,
+    PT_ENTRIES_LOG2           => PT_ENTRIES_LOG2,
+    PAGE_SIZE_LOG2            => PAGE_SIZE_LOG2,
     BUS_ADDR_WIDTH            => BUS_ADDR_WIDTH,
     BUS_LEN_WIDTH             => BUS_LEN_WIDTH
   )
@@ -263,7 +274,15 @@ mmu_inst : MMU
     resp_ready                => tra_ready,
     resp_virt                 => tra_virt,
     resp_phys                 => tra_phys,
-    resp_mask                 => tra_mask
+    resp_mask                 => tra_mask,
+
+    dir_req_valid             => mmu_req_valid,
+    dir_req_ready             => mmu_req_ready,
+    dir_req_addr              => mmu_req_addr,
+
+    dir_resp_valid            => mmu_resp_valid,
+    dir_resp_ready            => mmu_resp_ready,
+    dir_resp_addr             => mmu_resp_addr
   );
 
 director : MMDirector
@@ -297,6 +316,14 @@ director : MMDirector
     resp_success              => resp_success,
     resp_valid                => resp_valid,
     resp_ready                => resp_ready,
+
+    mmu_req_valid             => mmu_req_valid,
+    mmu_req_ready             => mmu_req_ready,
+    mmu_req_addr              => mmu_req_addr,
+
+    mmu_resp_valid            => mmu_resp_valid,
+    mmu_resp_ready            => mmu_resp_ready,
+    mmu_resp_addr             => mmu_resp_addr,
 
     bus_wreq_valid            => bus_w.req_valid,
     bus_wreq_ready            => bus_w.req_ready,

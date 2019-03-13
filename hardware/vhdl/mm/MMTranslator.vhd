@@ -22,6 +22,9 @@ use work.MM.all;
 
 entity MMTranslator is
   generic (
+    VM_BASE                     : unsigned(ADDR_WIDTH_LIMIT-1 downto 0);
+    PT_ENTRIES_LOG2             : natural;
+    PAGE_SIZE_LOG2              : natural;
     BUS_ADDR_WIDTH              : natural := 64;
     BUS_LEN_WIDTH               : natural := 8
   );
@@ -55,6 +58,10 @@ end MMTranslator;
 
 
 architecture Behavioral of MMTranslator is
+  constant VM_SIZE_LOG2 : natural := PAGE_SIZE_LOG2 + PT_ENTRIES_LOG2 * 2;
+  constant VM_MASK      : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0)
+      := slv(shift_left(unsigned(to_signed(-1, BUS_ADDR_WIDTH)), VM_SIZE_LOG2));
+
   type map_type is record
     valid : std_logic;
     virt  : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
@@ -122,7 +129,12 @@ begin
     end if;
 
     if slv_req_valid = '1' then
-      if v.map_cur.valid = '1'
+      if u(slv_req_addr and VM_MASK) /= VM_BASE then
+        -- Pass through address not within virtual address space.
+        mst_req_addr     <= slv_req_addr;
+        mst_req_valid    <= '1';
+        slv_req_ready    <= mst_req_ready;
+      elsif v.map_cur.valid = '1'
         and (slv_req_addr and v.map_cur.mask) = v.map_cur.virt
       then
         -- Match on stored current map

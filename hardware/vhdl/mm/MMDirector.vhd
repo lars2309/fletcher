@@ -72,6 +72,14 @@ entity MMDirector is
     resp_valid                  : out std_logic;
     resp_ready                  : in  std_logic;
 
+    mmu_req_valid               : in  std_logic := '0';
+    mmu_req_ready               : out std_logic;
+    mmu_req_addr                : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0) := (others => '0');
+
+    mmu_resp_valid              : out std_logic;
+    mmu_resp_ready              : in  std_logic := '1';
+    mmu_resp_addr               : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+
     ---------------------------------------------------------------------------
     -- Bus write channels
     ---------------------------------------------------------------------------
@@ -320,6 +328,10 @@ architecture Behavioral of MMDirector is
                       VMALLOC, VMALLOC_CHECK_PT0, VMALLOC_CHECK_PT0_DATA,
                       VMALLOC_RESERVE_FRAME, VMALLOC_FINISH,
 
+                      MMU_GET_L1_ADDR, MMU_GET_L1_DAT,
+                      MMU_GET_L2_ADDR, MMU_GET_L2_DAT, MMU_RESP,
+                      MMU_SET_L2_ADDR, MMU_SET_L2_DAT,
+
                       SET_PTE_RANGE, SET_PTE_RANGE_L1_CHECK,
                       SET_PTE_RANGE_L1_UPDATE_ADDR, SET_PTE_RANGE_L1_UPDATE_DAT,
                       SET_PTE_RANGE_L2_UPDATE_ADDR, SET_PTE_RANGE_L2_UPDATE_DAT,
@@ -390,6 +402,10 @@ begin
     report "BUS_BURST_MAX_LEN is not a power of two; this may cause bursts to cross 4k boundaries"
     severity warning;
 
+  assert PTE_SEGMENT + log2ceil(MEM_REGIONS+1)-1 < PAGE_SIZE_LOG2
+    report "Too few bits available for segment ID in PTE"
+    severity failure;
+
 -- TODO: assert that L1 PT address refers to first possible PT in that frame.
 
   process (clk) begin
@@ -415,7 +431,8 @@ begin
            resp_ready,
            frames_cmd_ready, frames_resp_addr, frames_resp_success, frames_resp_valid,
            int_bus_wreq_ready, bus_wdat_ready, int_bus_dirty,
-           bus_rreq_ready, bus_rdat_data, bus_rdat_last, bus_rdat_valid) is
+           bus_rreq_ready, bus_rdat_data, bus_rdat_last, bus_rdat_valid,
+           mmu_req_valid, mmu_req_addr, mmu_resp_ready) is
     variable v : reg_type;
   begin
     v := r;
@@ -426,8 +443,8 @@ begin
     cmd_ready    <= '0';
 
     frames_cmd_valid  <= '0';
-    frames_cmd_region <= (others => '0');
-    frames_cmd_addr   <= (others => '0');
+    frames_cmd_region <= (others => 'U');
+    frames_cmd_addr   <= (others => 'U');
     frames_cmd_free   <= '0';
     frames_cmd_alloc  <= '0';
     frames_cmd_find   <= '0';
@@ -435,33 +452,25 @@ begin
     frames_resp_ready <= '0';
 
     int_bus_wreq_valid   <= '0';
-    int_bus_wreq_addr    <= (others => '0'); --slv(addr);
-    int_bus_wreq_len     <= (others => '0'); --slv(to_unsigned(1, bus_wreq_len'length));
+    int_bus_wreq_addr    <= (others => 'U'); --slv(addr);
+    int_bus_wreq_len     <= (others => 'U'); --slv(to_unsigned(1, bus_wreq_len'length));
     int_bus_wreq_barrier <= '1';
 
     bus_wdat_valid  <= '0';
-    bus_wdat_data   <= (others => '0');
-    bus_wdat_strobe <= (others => '1');
-    bus_wdat_last   <= '0';
+    bus_wdat_data   <= (others => 'U');
+    bus_wdat_strobe <= (others => 'U');
+    bus_wdat_last   <= 'U';
 
     bus_rreq_valid  <= '0';
-    bus_rreq_addr   <= (others => '0'); --slv(addr);
-    bus_rreq_len    <= (others => '0'); --slv(to_unsigned(1, bus_wreq_len'length));
+    bus_rreq_addr   <= (others => 'U'); --slv(addr);
+    bus_rreq_len    <= (others => 'U'); --slv(to_unsigned(1, bus_wreq_len'length));
 
     bus_rdat_ready  <= '0';
 
---pragma synthesis_off
-    resp_addr         <= (others => 'U');
-    frames_cmd_region <= (others => 'U');
-    frames_cmd_addr   <= (others => 'U');
-    int_bus_wreq_addr <= (others => 'U');
-    int_bus_wreq_len  <= (others => 'U');
-    bus_wdat_data     <= (others => 'U');
-    bus_wdat_strobe   <= (others => 'U');
-    bus_wdat_last     <= 'U';
-    bus_rreq_addr     <= (others => 'U');
-    bus_rreq_len      <= (others => 'U');
---pragma synthesis_on
+    mmu_req_ready   <= '0';
+
+    mmu_resp_valid  <= '0';
+    mmu_resp_addr   <= (others => 'U');
 
     case v.state_stack(0) is
 
@@ -517,7 +526,12 @@ begin
       v.addr           := PT_ADDR;
 
     when IDLE =>
-      if cmd_valid = '1' then
+      mmu_req_ready <= '1';
+      if mmu_req_valid = '1' then
+        v.state_stack := push_state(v.state_stack, MMU_GET_L1_ADDR);
+        v.addr_vm     := u(mmu_req_addr);
+
+      elsif cmd_valid = '1' then
 
         if cmd_alloc = '1' then
           if unsigned(cmd_region) = 0 then
@@ -535,6 +549,149 @@ begin
           -- TODO
           v.state_stack(0) := FAIL;
         end if;
+      end if;
+
+    -- === START OF FRAME ALLOCATION ROUTINE ===
+    -- Allocates a frame for an already mapped virtual address, `addr_vm`.
+    -- Response is given on MMU channel.
+
+    when MMU_GET_L1_ADDR =>
+      -- Get the L1 PTE
+      bus_rreq_addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(PT_ADDR, v.addr_vm, 1)));
+      bus_rreq_len   <= slv(to_unsigned(1, bus_rreq_len'length));
+      if int_bus_dirty = '0' then
+        bus_rreq_valid <= '1';
+        if bus_rreq_ready = '1' then
+          v.state_stack(0) := MMU_GET_L1_DAT;
+        end if;
+      end if;
+
+    when MMU_GET_L1_DAT =>
+      bus_rdat_ready <= '1';
+      if bus_rdat_valid = '1' then
+        -- Check PRESENT bit of PTE referred to by addr_vm.
+        if bus_rdat_data(
+             PTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, v.addr_vm, 1)))
+             + PTE_PRESENT
+           ) /= '1'
+        then
+          -- Given address isn't mapped.
+          v.state_stack(0) := FAIL;
+        else
+          -- Get address of L2 page table from the read data.
+          v.addr_pt := align_beq(
+              EXTRACT(
+                unsigned(bus_rdat_data),
+                BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, v.addr_vm, 1))),
+                BYTE_SIZE * PTE_SIZE
+              ),
+              PT_SIZE_LOG2);
+          v.state_stack(0) := MMU_GET_L2_ADDR;
+        end if;
+      end if;
+
+    when MMU_GET_L2_ADDR =>
+      -- Get the L1 PTE
+      bus_rreq_addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(v.addr_pt, v.addr_vm, 2)));
+      bus_rreq_len   <= slv(to_unsigned(1, bus_rreq_len'length));
+      bus_rreq_valid <= '1';
+      if bus_rreq_ready = '1' then
+        v.state_stack(0) := MMU_GET_L2_DAT;
+      end if;
+
+    when MMU_GET_L2_DAT =>
+      if bus_rdat_valid = '1' then
+
+        if bus_rdat_data(
+             PTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2)))
+             + PTE_MAPPED
+           ) /= '1'
+        then
+          -- Given address isn't mapped.
+          bus_rdat_ready   <= '1';
+          v.state_stack(0) := FAIL;
+
+        elsif bus_rdat_data(
+             PTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2)))
+             + PTE_PRESENT
+           ) = '1'
+        then
+          -- Given address is already present, return the mapping.
+          mmu_resp_valid  <= '1';
+          mmu_resp_addr   <= slv(align_beq(
+              EXTRACT(
+                unsigned(bus_rdat_data),
+                BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2))),
+                BYTE_SIZE * PTE_SIZE
+              ),
+              PT_SIZE_LOG2));
+          if mmu_resp_ready = '1' then
+            bus_rdat_ready <= '1';
+            v.state_stack  := pop_state(v.state_stack);
+          end if;
+
+        else
+          -- Get segment of mapped address from the read data.
+          frames_cmd_valid  <= '1';
+          frames_cmd_find   <= '1';
+          frames_cmd_region <= slv(EXTRACT(
+                unsigned(bus_rdat_data),
+                BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2))) + PTE_SEGMENT,
+                log2ceil(MEM_REGIONS+1)-1
+              ));
+          -- Store all flags of the mapping (skip the address itself)
+          v.addr            := resize(
+              EXTRACT(
+                unsigned(bus_rdat_data),
+                BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2))) + PTE_SEGMENT,
+                PAGE_SIZE_LOG2
+              ),
+              v.addr'length
+            );
+          if frames_cmd_ready = '1' then
+            bus_rdat_ready   <= '1';
+            v.state_stack(0) := MMU_SET_L2_ADDR;
+          end if;
+        end if;
+      end if;
+
+    when MMU_SET_L2_ADDR =>
+      int_bus_wreq_valid <= '1';
+      int_bus_wreq_addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(v.addr_pt, v.addr_vm, 2)));
+      int_bus_wreq_len   <= slv(to_unsigned(1, int_bus_wreq_len'length));
+      if int_bus_wreq_ready = '1' then
+        v.state_stack(0) := MMU_RESP;
+      end if;
+
+    when MMU_RESP =>
+      -- Respond with the frame address as soon as possible.
+      mmu_resp_valid <= frames_resp_valid;
+      mmu_resp_addr  <= frames_resp_addr;
+      if mmu_resp_ready = '1' then
+        v.state_stack(0) := MMU_SET_L2_DAT;
+      end if;
+
+    when MMU_SET_L2_DAT =>
+      bus_wdat_valid  <= frames_resp_valid;
+      bus_wdat_last   <= '1';
+      -- Duplicate the address over the data bus.
+      for i in 0 to BUS_DATA_BYTES/PTE_SIZE-1 loop
+        -- Copy the existing flags.
+        bus_wdat_data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= slv(v.addr);
+        -- Mark the entry as present.
+        bus_wdat_data(PTE_WIDTH * i + PTE_PRESENT) <= '1';
+        -- Map to the allocated frame.
+        bus_wdat_data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i + PAGE_SIZE_LOG2)
+            <= slv(EXTRACT(u(frames_resp_addr), PAGE_SIZE_LOG2, PTE_WIDTH-PAGE_SIZE_LOG2));
+      end loop;
+      -- Use strobe to write the correct entry.
+      bus_wdat_strobe <= slv(OVERLAY(
+          not to_unsigned(0, PTE_SIZE),
+          to_unsigned(0, bus_wdat_strobe'length),
+          int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2)))));
+      if bus_wdat_ready = '1' then
+        frames_resp_ready <= '1';
+        v.state_stack     := pop_state(v.state_stack);
       end if;
 
     -- === START OF VMALLOC ROUTINE ===
@@ -726,7 +883,7 @@ begin
 
     when SET_PTE_RANGE_L2_UPDATE_DAT =>
       if v.arg(0) = '1' then
-        frames_resp_ready <= '1';
+        frames_resp_ready <= bus_wdat_ready;
       end if;
       if frames_resp_valid = '1' or v.arg(0) = '0' then
         bus_wdat_valid  <= '1';
