@@ -190,7 +190,7 @@ begin
         bus_rreq_valid     <= '1';
         bus_rreq_len       <= slv(to_unsigned(1, bus_rreq_len'length));
         bus_rreq_addr      <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(PT_ADDR, u(req_addr), 1)));
-        v.addr             := u(req_addr);
+        v.addr             := align_beq(u(req_addr), PAGE_SIZE_LOG2);
         if bus_rreq_ready = '1' then
           v.state          := LOOKUP_L1_DATA;
           req_ready        <= '1';

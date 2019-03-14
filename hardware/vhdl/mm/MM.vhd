@@ -37,6 +37,11 @@ package MM is
                     length : natural)
     return unsigned;
 
+  function EXTRACT (vec    : std_logic_vector;
+                    offset : natural;
+                    length : natural)
+    return std_logic_vector;
+
   component MMFrames is
     generic (
       PAGE_SIZE_LOG2              : natural;
@@ -226,9 +231,9 @@ package MM is
 
   component MMTranslator is
     generic (
-      VM_BASE                     : unsigned(ADDR_WIDTH_LIMIT-1 downto 0);
-      PT_ENTRIES_LOG2             : natural;
-      PAGE_SIZE_LOG2              : natural;
+      VM_BASE                     : unsigned(ADDR_WIDTH_LIMIT-1 downto 0) := (others => '0');
+      PT_ENTRIES_LOG2             : natural := 64/2;
+      PAGE_SIZE_LOG2              : natural := 0;
       BUS_ADDR_WIDTH              : natural := 64;
       BUS_LEN_WIDTH               : natural := 8
     );
@@ -379,4 +384,11 @@ package body MM is
     return vec(offset + length - 1 downto offset);
   end EXTRACT;
 
+  function EXTRACT (vec    : std_logic_vector;
+                    offset : natural;
+                    length : natural)
+    return std_logic_vector is
+  begin
+    return vec(offset + length - 1 downto offset);
+  end EXTRACT;
 end MM;

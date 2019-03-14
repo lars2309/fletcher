@@ -16,7 +16,7 @@
 // If you create your own design using our framework, you might leave everything
 // in this file as-is and start using this unit as a baseline.
 
-`define ARROW_TOP axi_top
+`define ARROW_TOP f1_top
 
 module cl_arrow
 (
