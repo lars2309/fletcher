@@ -265,7 +265,7 @@ package MM is
     );
   end component;
 
-  component MMU is
+  component MMWalker is
     generic (
       PAGE_SIZE_LOG2              : natural;
       PT_ADDR                     : unsigned(ADDR_WIDTH_LIMIT-1 downto 0);

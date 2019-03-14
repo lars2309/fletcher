@@ -20,7 +20,7 @@ library work;
 use work.Utils.all;
 use work.MM.all;
 
-entity MMU is
+entity MMWalker is
   generic (
     PAGE_SIZE_LOG2              : natural;
     PT_ADDR                     : unsigned(ADDR_WIDTH_LIMIT-1 downto 0);
@@ -82,10 +82,10 @@ entity MMU is
     dir_resp_ready              : out std_logic;
     dir_resp_addr               : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0) := (others => '0')
   );
-end MMU;
+end MMWalker;
 
 
-architecture Behavioral of MMU is
+architecture Behavioral of MMWalker is
   constant BUS_DATA_BYTES       : natural := BUS_DATA_WIDTH / BYTE_SIZE;
   constant PT_SIZE_LOG2         : natural := PT_ENTRIES_LOG2 + log2ceil(DIV_CEIL(PTE_BITS, BYTE_SIZE));
   constant PTE_SIZE             : natural := 2**log2ceil(DIV_CEIL(PTE_BITS, BYTE_SIZE));

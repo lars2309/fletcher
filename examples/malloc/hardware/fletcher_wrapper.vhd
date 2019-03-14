@@ -274,7 +274,7 @@ begin
       regs_out_en                 => regs_out_en(9-1 downto 0)
     );
 
-  mmu_inst : MMU
+  mmu_inst : MMWalker
     generic map (
       PAGE_SIZE_LOG2              => PAGE_SIZE_LOG2,
       PT_ADDR                     => PT_ADDR,

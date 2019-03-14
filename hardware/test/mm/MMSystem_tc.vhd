@@ -233,7 +233,7 @@ translator_inst : MMTranslator
     resp_mask                 => tra_mask
   );
 
-mmu_inst : MMU
+mmu_inst : MMWalker
   generic map (
     PAGE_SIZE_LOG2            => PAGE_SIZE_LOG2,
     PT_ADDR                   => PT_ADDR,
