@@ -235,7 +235,8 @@ package MM is
       PT_ENTRIES_LOG2             : natural := 64/2;
       PAGE_SIZE_LOG2              : natural := 0;
       BUS_ADDR_WIDTH              : natural := 64;
-      BUS_LEN_WIDTH               : natural := 8
+      BUS_LEN_WIDTH               : natural := 8;
+      USER_WIDTH                  : natural := 1
     );
     port (
       clk                         : in  std_logic;
@@ -246,11 +247,13 @@ package MM is
       slv_req_ready               : out std_logic;
       slv_req_addr                : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
       slv_req_len                 : in  std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
+      slv_req_user                : in  std_logic_vector(USER_WIDTH-1 downto 0) := (others => '0');
       -- Master request channel
       mst_req_valid               : out std_logic;
       mst_req_ready               : in  std_logic;
       mst_req_addr                : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
       mst_req_len                 : out std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
+      mst_req_user                : out std_logic_vector(USER_WIDTH-1 downto 0);
 
       -- Translate request channel
       req_valid                   : out std_logic;

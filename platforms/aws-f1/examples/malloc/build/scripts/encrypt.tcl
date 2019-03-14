@@ -93,9 +93,11 @@ file copy -force $FLETCHER_HARDWARE_DIR/vhdl/axi/axi_write_converter.vhd        
 
 file copy -force $FLETCHER_HARDWARE_DIR/vhdl/mm/MM.vhd                               $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/vhdl/mm/MMBarrier.vhd                        $TARGET_DIR
+file copy -force $FLETCHER_HARDWARE_DIR/vhdl/mm/MMDirector.vhd                       $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/vhdl/mm/MMFrames.vhd                         $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/vhdl/mm/MMHostInterface.vhd                  $TARGET_DIR
-file copy -force $FLETCHER_HARDWARE_DIR/vhdl/mm/MMDirector.vhd                       $TARGET_DIR
+file copy -force $FLETCHER_HARDWARE_DIR/vhdl/mm/MMTranslator.vhd                     $TARGET_DIR
+file copy -force $FLETCHER_HARDWARE_DIR/vhdl/mm/MMWalker.vhd                         $TARGET_DIR
 
 # Copy all project files
 set cl_filelist [glob -nocomplain -dir $FLETCHER_EXAMPLES_DIR/malloc/hardware/ *]

@@ -35,8 +35,7 @@ entity f1_top is
 
     -- MMIO bus properties
     SLV_BUS_ADDR_WIDTH          : natural := 32;
-    SLV_BUS_DATA_WIDTH          : natural := 32;
-    REG_WIDTH                   : natural := 32
+    SLV_BUS_DATA_WIDTH          : natural := 32
   );
   port (
     acc_clk                     : in  std_logic;
@@ -84,43 +83,48 @@ entity f1_top is
     -- AXI4 master as Device Memory Interface for Host
     ---------------------------------------------------------------------------
     -- Read address channel
-    ml_axi_araddr                : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-    ml_axi_arlen                 : out std_logic_vector(7 downto 0);
-    ml_axi_arvalid               : out std_logic;
-    ml_axi_arready               : in  std_logic;
-    ml_axi_arsize                : out std_logic_vector(2 downto 0);
+    ml_axi_araddr               : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+    ml_axi_arid                 : out std_logic_vector(15 downto 0);
+    ml_axi_arlen                : out std_logic_vector(7 downto 0);
+    ml_axi_arvalid              : out std_logic;
+    ml_axi_arready              : in  std_logic;
+    ml_axi_arsize               : out std_logic_vector(2 downto 0);
 
     -- Read data channel
-    ml_axi_rdata                 : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
-    ml_axi_rresp                 : in  std_logic_vector(1 downto 0);
-    ml_axi_rlast                 : in  std_logic;
-    ml_axi_rvalid                : in  std_logic;
-    ml_axi_rready                : out std_logic;
+    ml_axi_rdata                : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
+    ml_axi_rid                  : in  std_logic_vector(15 downto 0);
+    ml_axi_rresp                : in  std_logic_vector(1 downto 0);
+    ml_axi_rlast                : in  std_logic;
+    ml_axi_rvalid               : in  std_logic;
+    ml_axi_rready               : out std_logic;
 
     -- Write address channel
-    ml_axi_awvalid               : out std_logic;
-    ml_axi_awready               : in  std_logic;
-    ml_axi_awaddr                : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-    ml_axi_awlen                 : out std_logic_vector(7 downto 0);
-    ml_axi_awsize                : out std_logic_vector(2 downto 0);
+    ml_axi_awvalid              : out std_logic;
+    ml_axi_awready              : in  std_logic;
+    ml_axi_awid                 : out std_logic_vector(15 downto 0);
+    ml_axi_awaddr               : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+    ml_axi_awlen                : out std_logic_vector(7 downto 0);
+    ml_axi_awsize               : out std_logic_vector(2 downto 0);
 
     -- Write data channel
-    ml_axi_wvalid                : out std_logic;
-    ml_axi_wready                : in  std_logic;
-    ml_axi_wdata                 : out std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
-    ml_axi_wlast                 : out std_logic;
-    ml_axi_wstrb                 : out std_logic_vector(BUS_DATA_WIDTH/8-1 downto 0);
+    ml_axi_wvalid               : out std_logic;
+    ml_axi_wready               : in  std_logic;
+    ml_axi_wdata                : out std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
+    ml_axi_wlast                : out std_logic;
+    ml_axi_wstrb                : out std_logic_vector(BUS_DATA_WIDTH/8-1 downto 0);
 
     -- Write response channel
-    ml_axi_bvalid                : in  std_logic;
-    ml_axi_bready                : out std_logic;
-    ml_axi_bresp                 : in  std_logic_vector(1 downto 0);
+    ml_axi_bvalid               : in  std_logic;
+    ml_axi_bready               : out std_logic;
+    ml_axi_bid                  : in  std_logic_vector(15 downto 0);
+    ml_axi_bresp                : in  std_logic_vector(1 downto 0);
 
     ---------------------------------------------------------------------------
     -- AXI4 slave as Host Memory Interface
     ---------------------------------------------------------------------------
     -- Read address channel
     s_axi_araddr                : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+    s_axi_arid                  : in  std_logic_vector(15 downto 0);
     s_axi_arlen                 : in  std_logic_vector(7 downto 0);
     s_axi_arvalid               : in  std_logic;
     s_axi_arready               : out std_logic;
@@ -128,6 +132,7 @@ entity f1_top is
 
     -- Read data channel
     s_axi_rdata                 : out std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
+    s_axi_rid                   : out std_logic_vector(15 downto 0);
     s_axi_rresp                 : out std_logic_vector(1 downto 0);
     s_axi_rlast                 : out std_logic;
     s_axi_rvalid                : out std_logic;
@@ -136,6 +141,7 @@ entity f1_top is
     -- Write address channel
     s_axi_awvalid               : in  std_logic;
     s_axi_awready               : out std_logic;
+    s_axi_awid                  : in  std_logic_vector(15 downto 0);
     s_axi_awaddr                : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
     s_axi_awlen                 : in  std_logic_vector(7 downto 0);
     s_axi_awsize                : in  std_logic_vector(2 downto 0);
@@ -150,6 +156,7 @@ entity f1_top is
     -- Write response channel
     s_axi_bvalid                : out std_logic;
     s_axi_bready                : in  std_logic;
+    s_axi_bid                   : out std_logic_vector(15 downto 0);
     s_axi_bresp                 : out std_logic_vector(1 downto 0);
 
     ---------------------------------------------------------------------------
@@ -426,6 +433,7 @@ begin
   -- Device memory AXI slave for host
   -----------------------------------------------------------------------------
   -- Read data channel
+  s_axi_rid                     <= ml_axi_rid;
   s_axi_rdata                   <= ml_axi_rdata;
   s_axi_rresp                   <= ml_axi_rresp;
   s_axi_rlast                   <= ml_axi_rlast;
@@ -442,12 +450,14 @@ begin
   -- Write response channel
   s_axi_bvalid                  <= ml_axi_bvalid;
   ml_axi_bready                 <= s_axi_bready;
+  s_axi_bid                     <= ml_axi_bid;
   s_axi_bresp                   <= ml_axi_bresp;
 
   read_translator : MMTranslator
   generic map (
     BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
-    BUS_LEN_WIDTH               => BUS_LEN_WIDTH
+    BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
+    USER_WIDTH                  => 16
   )
   port map (
     clk                         => bus_clk,
@@ -458,11 +468,13 @@ begin
     slv_req_ready               => s_axi_arready,
     slv_req_addr                => s_axi_araddr,
     slv_req_len                 => s_axi_arlen,
+    slv_req_user                => s_axi_arid,
     -- Master request channel
     mst_req_valid               => ml_axi_arvalid,
     mst_req_ready               => ml_axi_arready,
     mst_req_addr                => ml_axi_araddr,
     mst_req_len                 => ml_axi_arlen,
+    mst_req_user                => ml_axi_arid,
 
     -- Translate request channel
     req_valid                   => tr_rq_valid,
@@ -479,7 +491,8 @@ begin
   write_translator : MMTranslator
   generic map (
     BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
-    BUS_LEN_WIDTH               => BUS_LEN_WIDTH
+    BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
+    USER_WIDTH                  => 16
   )
   port map (
     clk                         => bus_clk,
@@ -490,11 +503,13 @@ begin
     slv_req_ready               => s_axi_awready,
     slv_req_addr                => s_axi_awaddr,
     slv_req_len                 => s_axi_awlen,
+    slv_req_user                => s_axi_awid,
     -- Master request channel
     mst_req_valid               => ml_axi_awvalid,
     mst_req_ready               => ml_axi_awready,
     mst_req_addr                => ml_axi_awaddr,
     mst_req_len                 => ml_axi_awlen,
+    mst_req_user                => ml_axi_awid,
 
     -- Translate request channel
     req_valid                   => tr_wq_valid,

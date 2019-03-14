@@ -46,12 +46,13 @@ axi_bus_t dma_pcis();
 axi_bus_t pcis();
 
 axi_bus_t sh_bar1();
-axi_bus_t arrow_slv();
+axi_bus_t arrow_mmio();
 
 axi_bus_t ddr_c();
 axi_bus_t ddr();
 
 axi_bus_t arrow_mst();
+axi_bus_t arrow_loop();
 
 logic clk;
 (* dont_touch = "true" *) logic pipe_rst_n;
@@ -135,6 +136,7 @@ assign cl_sh_dma_wr_full        = 1'b0;
 assign cl_sh_dma_rd_full        = 1'b0;
 
 assign dma_pcis.awid[5:0]       = sh_cl_dma_pcis_awid   ;
+assign dma_pcis.awid[15:6]      = 10'h000               ;
 assign dma_pcis.awaddr          = sh_cl_dma_pcis_awaddr ;
 assign dma_pcis.awlen           = sh_cl_dma_pcis_awlen  ;
 assign dma_pcis.awsize          = sh_cl_dma_pcis_awsize ;
@@ -153,6 +155,7 @@ assign cl_sh_dma_pcis_bvalid    = dma_pcis.bvalid       ;
 assign dma_pcis.bready          = sh_cl_dma_pcis_bready ;
 
 assign dma_pcis.arid[5:0]       = sh_cl_dma_pcis_arid   ;
+assign dma_pcis.arid[15:6]      = 10'h000               ;
 assign dma_pcis.araddr          = sh_cl_dma_pcis_araddr ;
 assign dma_pcis.arlen           = sh_cl_dma_pcis_arlen  ;
 assign dma_pcis.arsize          = sh_cl_dma_pcis_arsize ;
@@ -238,27 +241,27 @@ axi_register_slice_light BAR1_SLICE (
   .s_axi_rresp   (sh_bar1.rresp    ),
 
   // Master out
-  .m_axi_awaddr  (arrow_slv.awaddr ),
-  .m_axi_awvalid (arrow_slv.awvalid),
-  .m_axi_awready (arrow_slv.awready),
+  .m_axi_awaddr  (arrow_mmio.awaddr ),
+  .m_axi_awvalid (arrow_mmio.awvalid),
+  .m_axi_awready (arrow_mmio.awready),
 
-  .m_axi_wdata   (arrow_slv.wdata  ),
-  .m_axi_wstrb   (arrow_slv.wstrb  ),
-  .m_axi_wvalid  (arrow_slv.wvalid ),
-  .m_axi_wready  (arrow_slv.wready ),
+  .m_axi_wdata   (arrow_mmio.wdata  ),
+  .m_axi_wstrb   (arrow_mmio.wstrb  ),
+  .m_axi_wvalid  (arrow_mmio.wvalid ),
+  .m_axi_wready  (arrow_mmio.wready ),
 
-  .m_axi_bresp   (arrow_slv.bresp  ),
-  .m_axi_bvalid  (arrow_slv.bvalid ),
-  .m_axi_bready  (arrow_slv.bready ),
+  .m_axi_bresp   (arrow_mmio.bresp  ),
+  .m_axi_bvalid  (arrow_mmio.bvalid ),
+  .m_axi_bready  (arrow_mmio.bready ),
 
-  .m_axi_araddr  (arrow_slv.araddr ),
-  .m_axi_arvalid (arrow_slv.arvalid),
-  .m_axi_arready (arrow_slv.arready),
+  .m_axi_araddr  (arrow_mmio.araddr ),
+  .m_axi_arvalid (arrow_mmio.arvalid),
+  .m_axi_arready (arrow_mmio.arready),
 
-  .m_axi_rdata   (arrow_slv.rdata  ),
-  .m_axi_rresp   (arrow_slv.rresp  ),
-  .m_axi_rvalid  (arrow_slv.rvalid ),
-  .m_axi_rready  (arrow_slv.rready )
+  .m_axi_rdata   (arrow_mmio.rdata  ),
+  .m_axi_rresp   (arrow_mmio.rresp  ),
+  .m_axi_rvalid  (arrow_mmio.rvalid ),
+  .m_axi_rready  (arrow_mmio.rready )
 );
 
 
@@ -402,38 +405,38 @@ axi_interconnect_top AXI_INTERCONNECT (
   .S00_AXI_AWCACHE(4'b11       ),
   .S00_AXI_AWPROT (3'b10       ),
   .S00_AXI_AWQOS  (4'b0        ),
-  .S00_AXI_AWID   (pcis.awid   ),
-  .S00_AXI_AWADDR (pcis.awaddr ),
-  .S00_AXI_AWLEN  (pcis.awlen  ),
-  .S00_AXI_AWSIZE (pcis.awsize ),
-  .S00_AXI_AWVALID(pcis.awvalid),
-  .S00_AXI_AWREADY(pcis.awready),
-  .S00_AXI_WDATA  (pcis.wdata  ),
-  .S00_AXI_WSTRB  (pcis.wstrb  ),
-  .S00_AXI_WLAST  (pcis.wlast  ),
-  .S00_AXI_WVALID (pcis.wvalid ),
-  .S00_AXI_WREADY (pcis.wready ),
-  .S00_AXI_BID    (pcis.bid    ),
-  .S00_AXI_BRESP  (pcis.bresp  ),
-  .S00_AXI_BVALID (pcis.bvalid ),
-  .S00_AXI_BREADY (pcis.bready ),
+  .S00_AXI_AWID   (arrow_loop.awid   ),
+  .S00_AXI_AWADDR (arrow_loop.awaddr ),
+  .S00_AXI_AWLEN  (arrow_loop.awlen  ),
+  .S00_AXI_AWSIZE (arrow_loop.awsize ),
+  .S00_AXI_AWVALID(arrow_loop.awvalid),
+  .S00_AXI_AWREADY(arrow_loop.awready),
+  .S00_AXI_WDATA  (arrow_loop.wdata  ),
+  .S00_AXI_WSTRB  (arrow_loop.wstrb  ),
+  .S00_AXI_WLAST  (arrow_loop.wlast  ),
+  .S00_AXI_WVALID (arrow_loop.wvalid ),
+  .S00_AXI_WREADY (arrow_loop.wready ),
+  .S00_AXI_BID    (arrow_loop.bid    ),
+  .S00_AXI_BRESP  (arrow_loop.bresp  ),
+  .S00_AXI_BVALID (arrow_loop.bvalid ),
+  .S00_AXI_BREADY (arrow_loop.bready ),
   .S00_AXI_ARBURST(2'b1        ),
   .S00_AXI_ARLOCK (1'b0        ),
   .S00_AXI_ARCACHE(4'b11       ),
   .S00_AXI_ARPROT (3'b10       ),
   .S00_AXI_ARQOS  (4'b0        ),
-  .S00_AXI_ARID   (pcis.arid   ),
-  .S00_AXI_ARADDR (pcis.araddr ),
-  .S00_AXI_ARLEN  (pcis.arlen  ),
-  .S00_AXI_ARSIZE (pcis.arsize ),
-  .S00_AXI_ARVALID(pcis.arvalid),
-  .S00_AXI_ARREADY(pcis.arready),
-  .S00_AXI_RID    (pcis.rid    ),
-  .S00_AXI_RDATA  (pcis.rdata  ),
-  .S00_AXI_RRESP  (pcis.rresp  ),
-  .S00_AXI_RLAST  (pcis.rlast  ),
-  .S00_AXI_RVALID (pcis.rvalid ),
-  .S00_AXI_RREADY (pcis.rready ),
+  .S00_AXI_ARID   (arrow_loop.arid   ),
+  .S00_AXI_ARADDR (arrow_loop.araddr ),
+  .S00_AXI_ARLEN  (arrow_loop.arlen  ),
+  .S00_AXI_ARSIZE (arrow_loop.arsize ),
+  .S00_AXI_ARVALID(arrow_loop.arvalid),
+  .S00_AXI_ARREADY(arrow_loop.arready),
+  .S00_AXI_RID    (arrow_loop.rid    ),
+  .S00_AXI_RDATA  (arrow_loop.rdata  ),
+  .S00_AXI_RRESP  (arrow_loop.rresp  ),
+  .S00_AXI_RLAST  (arrow_loop.rlast  ),
+  .S00_AXI_RVALID (arrow_loop.rvalid ),
+  .S00_AXI_RREADY (arrow_loop.rready ),
 
   //.s01_axi_areset_out_n(            ),
   .S01_AXI_ACLK   (clk              ),
@@ -442,7 +445,7 @@ axi_interconnect_top AXI_INTERCONNECT (
   .S01_AXI_AWCACHE(4'b11            ),
   .S01_AXI_AWPROT (3'b10            ),
   .S01_AXI_AWQOS  (4'b0             ),
-  .S01_AXI_AWID   (arrow_mst.awid   ),
+  .S01_AXI_AWID   (16'h0000         ),
   .S01_AXI_AWADDR (arrow_mst.awaddr ),
   .S01_AXI_AWLEN  (arrow_mst.awlen  ),
   .S01_AXI_AWSIZE (arrow_mst.awsize ),
@@ -462,7 +465,7 @@ axi_interconnect_top AXI_INTERCONNECT (
   .S01_AXI_ARCACHE(4'b11            ),
   .S01_AXI_ARPROT (3'b10            ),
   .S01_AXI_ARQOS  (4'b0             ),
-  .S01_AXI_ARID   (arrow_mst.arid   ),
+  .S01_AXI_ARID   (16'h0000         ),
   .S01_AXI_ARADDR (arrow_mst.araddr ),
   .S01_AXI_ARLEN  (arrow_mst.arlen  ),
   .S01_AXI_ARSIZE (arrow_mst.arsize ),
@@ -535,7 +538,7 @@ assign arrow_mst.awid           = 0;
    .acc_reset(sync_rst),
    .bus_reset_n(sync_rst_n),
 
-   // Master interface
+    // Master interface
    .m_axi_arvalid(arrow_mst.arvalid),
    .m_axi_arready(arrow_mst.arready),
    .m_axi_araddr (arrow_mst.araddr ),
@@ -548,43 +551,110 @@ assign arrow_mst.awid           = 0;
    .m_axi_rresp  (arrow_mst.rresp  ),
    .m_axi_rlast  (arrow_mst.rlast  ),
 
-    // Write address channel
    .m_axi_awvalid(arrow_mst.awvalid),
    .m_axi_awready(arrow_mst.awready),
-   .m_axi_awaddr (arrow_mst.awaddr),
-   .m_axi_awlen  (arrow_mst.awlen),
-   .m_axi_awsize (arrow_mst.awsize),
+   .m_axi_awaddr (arrow_mst.awaddr ),
+   .m_axi_awlen  (arrow_mst.awlen  ),
+   .m_axi_awsize (arrow_mst.awsize ),
 
-    // Write data channel
-   .m_axi_wvalid (arrow_mst.wvalid),
-   .m_axi_wready (arrow_mst.wready),
-   .m_axi_wdata  (arrow_mst.wdata),
-   .m_axi_wlast  (arrow_mst.wlast),
-   .m_axi_wstrb  (arrow_mst.wstrb),
+   .m_axi_wvalid (arrow_mst.wvalid ),
+   .m_axi_wready (arrow_mst.wready ),
+   .m_axi_wdata  (arrow_mst.wdata  ),
+   .m_axi_wlast  (arrow_mst.wlast  ),
+   .m_axi_wstrb  (arrow_mst.wstrb  ),
 
-    // Write response channel
    .m_axi_bvalid (arrow_mst.bvalid ),
    .m_axi_bready (arrow_mst.bready ),
    .m_axi_bresp  (arrow_mst.bresp  ),
 
-   // Slave interface
-   .s_axi_awvalid(arrow_slv.awvalid),
-   .s_axi_awready(arrow_slv.awready),
-   .s_axi_awaddr (arrow_slv.awaddr ),
-   .s_axi_wvalid (arrow_slv.wvalid ),
-   .s_axi_wready (arrow_slv.wready ),
-   .s_axi_wdata  (arrow_slv.wdata  ),
-   .s_axi_wstrb  (arrow_slv.wstrb  ),
-   .s_axi_bvalid (arrow_slv.bvalid ),
-   .s_axi_bready (arrow_slv.bready ),
-   .s_axi_bresp  (arrow_slv.bresp  ),
-   .s_axi_arvalid(arrow_slv.arvalid),
-   .s_axi_arready(arrow_slv.arready),
-   .s_axi_araddr (arrow_slv.araddr ),
-   .s_axi_rvalid (arrow_slv.rvalid ),
-   .s_axi_rready (arrow_slv.rready ),
-   .s_axi_rdata  (arrow_slv.rdata  ),
-   .s_axi_rresp  (arrow_slv.rresp  )
+    // Slave interface (device memory)
+   .s_axi_arvalid(pcis.arvalid),
+   .s_axi_arready(pcis.arready),
+   .s_axi_arid   (pcis.arid   ),
+   .s_axi_araddr (pcis.araddr ),
+   .s_axi_arlen  (pcis.arlen  ),
+   .s_axi_arsize (pcis.arsize ),
+
+   .s_axi_rvalid (pcis.rvalid ),
+   .s_axi_rready (pcis.rready ),
+   .s_axi_rid    (pcis.rid    ),
+   .s_axi_rdata  (pcis.rdata  ),
+   .s_axi_rresp  (pcis.rresp  ),
+   .s_axi_rlast  (pcis.rlast  ),
+
+   .s_axi_awvalid(pcis.awvalid),
+   .s_axi_awready(pcis.awready),
+   .s_axi_awid   (pcis.awid   ),
+   .s_axi_awaddr (pcis.awaddr ),
+   .s_axi_awlen  (pcis.awlen  ),
+   .s_axi_awsize (pcis.awsize ),
+
+   .s_axi_wvalid (pcis.wvalid ),
+   .s_axi_wready (pcis.wready ),
+   .s_axi_wdata  (pcis.wdata  ),
+   .s_axi_wlast  (pcis.wlast  ),
+   .s_axi_wstrb  (pcis.wstrb  ),
+
+   .s_axi_bvalid (pcis.bvalid ),
+   .s_axi_bready (pcis.bready ),
+   .s_axi_bid    (pcis.bid    ),
+   .s_axi_bresp  (pcis.bresp  ),
+
+    // Master interface (loopback)
+   .ml_axi_arvalid(arrow_loop.arvalid),
+   .ml_axi_arready(arrow_loop.arready),
+   .ml_axi_arid   (arrow_loop.arid   ),
+   .ml_axi_araddr (arrow_loop.araddr ),
+   .ml_axi_arlen  (arrow_loop.arlen  ),
+   .ml_axi_arsize (arrow_loop.arsize ),
+
+   .ml_axi_rvalid (arrow_loop.rvalid ),
+   .ml_axi_rready (arrow_loop.rready ),
+   .ml_axi_rid    (arrow_loop.rid    ),
+   .ml_axi_rdata  (arrow_loop.rdata  ),
+   .ml_axi_rresp  (arrow_loop.rresp  ),
+   .ml_axi_rlast  (arrow_loop.rlast  ),
+
+   .ml_axi_awvalid(arrow_loop.awvalid),
+   .ml_axi_awready(arrow_loop.awready),
+   .ml_axi_awid   (arrow_loop.awid   ),
+   .ml_axi_awaddr (arrow_loop.awaddr ),
+   .ml_axi_awlen  (arrow_loop.awlen  ),
+   .ml_axi_awsize (arrow_loop.awsize ),
+
+   .ml_axi_wvalid (arrow_loop.wvalid ),
+   .ml_axi_wready (arrow_loop.wready ),
+   .ml_axi_wdata  (arrow_loop.wdata  ),
+   .ml_axi_wlast  (arrow_loop.wlast  ),
+   .ml_axi_wstrb  (arrow_loop.wstrb  ),
+
+   .ml_axi_bvalid (arrow_loop.bvalid ),
+   .ml_axi_bready (arrow_loop.bready ),
+   .ml_axi_bid    (arrow_loop.bid    ),
+   .ml_axi_bresp  (arrow_loop.bresp  ),
+
+    // Slave interface (MMIO)
+   .s_axi_awvalid(arrow_mmio.awvalid),
+   .s_axi_awready(arrow_mmio.awready),
+   .s_axi_awaddr (arrow_mmio.awaddr ),
+
+   .s_axi_wvalid (arrow_mmio.wvalid ),
+   .s_axi_wready (arrow_mmio.wready ),
+   .s_axi_wdata  (arrow_mmio.wdata  ),
+   .s_axi_wstrb  (arrow_mmio.wstrb  ),
+
+   .s_axi_bvalid (arrow_mmio.bvalid ),
+   .s_axi_bready (arrow_mmio.bready ),
+   .s_axi_bresp  (arrow_mmio.bresp  ),
+
+   .s_axi_arvalid(arrow_mmio.arvalid),
+   .s_axi_arready(arrow_mmio.arready),
+   .s_axi_araddr (arrow_mmio.araddr ),
+
+   .s_axi_rvalid (arrow_mmio.rvalid ),
+   .s_axi_rready (arrow_mmio.rready ),
+   .s_axi_rdata  (arrow_mmio.rdata  ),
+   .s_axi_rresp  (arrow_mmio.rresp  )
 );
 
 endmodule
