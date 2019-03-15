@@ -634,27 +634,27 @@ assign arrow_mst.awid           = 0;
    .ml_axi_bresp  (arrow_loop.bresp  ),
 
     // Slave interface (MMIO)
-   .s_axi_awvalid(arrow_mmio.awvalid),
-   .s_axi_awready(arrow_mmio.awready),
-   .s_axi_awaddr (arrow_mmio.awaddr ),
+   .mmio_axi_awvalid(arrow_mmio.awvalid),
+   .mmio_axi_awready(arrow_mmio.awready),
+   .mmio_axi_awaddr (arrow_mmio.awaddr ),
 
-   .s_axi_wvalid (arrow_mmio.wvalid ),
-   .s_axi_wready (arrow_mmio.wready ),
-   .s_axi_wdata  (arrow_mmio.wdata  ),
-   .s_axi_wstrb  (arrow_mmio.wstrb  ),
+   .mmio_axi_wvalid (arrow_mmio.wvalid ),
+   .mmio_axi_wready (arrow_mmio.wready ),
+   .mmio_axi_wdata  (arrow_mmio.wdata  ),
+   .mmio_axi_wstrb  (arrow_mmio.wstrb  ),
 
-   .s_axi_bvalid (arrow_mmio.bvalid ),
-   .s_axi_bready (arrow_mmio.bready ),
-   .s_axi_bresp  (arrow_mmio.bresp  ),
+   .mmio_axi_bvalid (arrow_mmio.bvalid ),
+   .mmio_axi_bready (arrow_mmio.bready ),
+   .mmio_axi_bresp  (arrow_mmio.bresp  ),
 
-   .s_axi_arvalid(arrow_mmio.arvalid),
-   .s_axi_arready(arrow_mmio.arready),
-   .s_axi_araddr (arrow_mmio.araddr ),
+   .mmio_axi_arvalid(arrow_mmio.arvalid),
+   .mmio_axi_arready(arrow_mmio.arready),
+   .mmio_axi_araddr (arrow_mmio.araddr ),
 
-   .s_axi_rvalid (arrow_mmio.rvalid ),
-   .s_axi_rready (arrow_mmio.rready ),
-   .s_axi_rdata  (arrow_mmio.rdata  ),
-   .s_axi_rresp  (arrow_mmio.rresp  )
+   .mmio_axi_rvalid (arrow_mmio.rvalid ),
+   .mmio_axi_rready (arrow_mmio.rready ),
+   .mmio_axi_rdata  (arrow_mmio.rdata  ),
+   .mmio_axi_rresp  (arrow_mmio.rresp  )
 );
 
 endmodule
