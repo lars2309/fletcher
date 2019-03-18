@@ -45,6 +45,8 @@ module test_malloc();
 
 import tb_type_defines_pkg::*;
 
+int num_buf_bytes = 192;
+
 int         error_count;
 int         timeout_count;
 int         fail;
@@ -80,14 +82,16 @@ initial begin
   // Allow memory to initialize
   tb.nsec_delay(27000);
 
+  // Host data
+  `include "intlist.sv"
 
   $display("[%t] : Starting tests", $realtime);
 
   // Set region to 1
   tb.poke_bar1(.addr(4 * 4), .data(32'h0000_0001));
 
-  // Set size to 3 GB
-  tb.poke_bar1(.addr(4 * 2), .data(32'hc000_0000));
+  // Set size to 200 MB
+  tb.poke_bar1(.addr(4 * 2), .data(32'h00c8_0000));
   tb.poke_bar1(.addr(4 * 3), .data(32'h0000_0000));
 
   // Allocate
@@ -109,10 +113,55 @@ initial begin
   // Get address
   tb.peek_bar1(.addr(4 * 6), .data(read_data_lo));
   tb.peek_bar1(.addr(4 * 7), .data(read_data_hi));
-  $display("[%t] : malloc of size 3GB at %H_%H", $realtime, read_data_hi, read_data_lo);
+  $display("[%t] : malloc of size 200MB at %H_%H", $realtime, read_data_hi, read_data_lo);
 
   // Reset response
   tb.poke_bar1(.addr(4 * 8), .data(32'h0000_0000));
+
+
+
+  // Try to write to allocated memory.
+  $display("[%t] : Starting host to CL DMA transfers ", $realtime);
+
+  host_buffer_address = `HOST_ADDR;
+  cl_buffer_address = {read_data_hi, read_data_lo};
+
+  // Queue the data movement
+  tb.que_buffer_to_cl(
+    .chan(0),
+    .src_addr(host_buffer_address),
+    .cl_addr(cl_buffer_address),
+    .len(num_buf_bytes)
+  );
+
+  // Also write into second page
+  cl_buffer_address = cl_buffer_address + 1024*1024*4;
+  tb.que_buffer_to_cl(
+    .chan(0),
+    .src_addr(host_buffer_address),
+    .cl_addr(cl_buffer_address),
+    .len(num_buf_bytes)
+  );
+
+  // Start transfers of data to CL DDR
+  tb.start_que_to_cl(.chan(0));
+
+  // Wait for dma transfers to complete,
+  // increase the timeout if you have to transfer a lot of data
+  timeout_count = 0;
+  do begin
+    status[0] = tb.is_dma_to_cl_done(.chan(0));
+    #10ns;
+    timeout_count++;
+  end while ((status != 4'hf) && (timeout_count < 4000));
+
+  if (timeout_count >= 4000) begin
+    $display(
+      "[%t] : *** ERROR *** Timeout waiting for dma transfers from cl",
+      $realtime
+    );
+    error_count++;
+  end
 
 
 
