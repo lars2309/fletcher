@@ -137,7 +137,7 @@ architecture Behavioral of MMDirector is
   function CLAMP (val   : unsigned;
                   clamp : natural)
     return unsigned is
-    variable ret : unsigned(log2ceil(clamp+1)-1 downto 0);
+    variable ret : unsigned(val'length-1 downto 0);
   begin
     if val > clamp then
       ret := to_unsigned(clamp, ret'length);
