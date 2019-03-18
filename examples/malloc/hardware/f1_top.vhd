@@ -339,6 +339,10 @@ architecture Behavorial of f1_top is
   signal tr_wa_mask              : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
   signal tr_wa_data              : std_logic_vector(BUS_ADDR_WIDTH*3-1 downto 0);
 
+  signal s_axi_aruser            : std_logic_vector(s_axi_arid'length + s_axi_arsize'length - 1 downto 0);
+  signal ml_axi_aruser           : std_logic_vector(s_axi_arid'length + s_axi_arsize'length - 1 downto 0);
+  signal s_axi_awuser            : std_logic_vector(s_axi_awid'length + s_axi_awsize'length - 1 downto 0);
+  signal ml_axi_awuser           : std_logic_vector(s_axi_awid'length + s_axi_awsize'length - 1 downto 0);
 begin
 
   -- Active high reset
@@ -457,7 +461,7 @@ begin
   generic map (
     BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
     BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
-    USER_WIDTH                  => 16
+    USER_WIDTH                  => s_axi_aruser'length
   )
   port map (
     clk                         => bus_clk,
@@ -468,13 +472,13 @@ begin
     slv_req_ready               => s_axi_arready,
     slv_req_addr                => s_axi_araddr,
     slv_req_len                 => s_axi_arlen,
-    slv_req_user                => s_axi_arid,
+    slv_req_user                => s_axi_aruser,
     -- Master request channel
     mst_req_valid               => ml_axi_arvalid,
     mst_req_ready               => ml_axi_arready,
     mst_req_addr                => ml_axi_araddr,
     mst_req_len                 => ml_axi_arlen,
-    mst_req_user                => ml_axi_arid,
+    mst_req_user                => ml_axi_aruser,
 
     -- Translate request channel
     req_valid                   => tr_rq_valid,
@@ -487,12 +491,15 @@ begin
     resp_phys                   => tr_ra_phys,
     resp_mask                   => tr_ra_mask
   );
+  s_axi_aruser  <= s_axi_arid & s_axi_arsize;
+  ml_axi_arsize <= ml_axi_aruser(s_axi_arsize'high downto 0);
+  ml_axi_arid   <= ml_axi_aruser(s_axi_aruser'high downto s_axi_arsize'high + 1);
 
   write_translator : MMTranslator
   generic map (
     BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
     BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
-    USER_WIDTH                  => 16
+    USER_WIDTH                  => s_axi_awuser'length
   )
   port map (
     clk                         => bus_clk,
@@ -503,13 +510,13 @@ begin
     slv_req_ready               => s_axi_awready,
     slv_req_addr                => s_axi_awaddr,
     slv_req_len                 => s_axi_awlen,
-    slv_req_user                => s_axi_awid,
+    slv_req_user                => s_axi_awuser,
     -- Master request channel
     mst_req_valid               => ml_axi_awvalid,
     mst_req_ready               => ml_axi_awready,
     mst_req_addr                => ml_axi_awaddr,
     mst_req_len                 => ml_axi_awlen,
-    mst_req_user                => ml_axi_awid,
+    mst_req_user                => ml_axi_awuser,
 
     -- Translate request channel
     req_valid                   => tr_wq_valid,
@@ -522,6 +529,10 @@ begin
     resp_phys                   => tr_wa_phys,
     resp_mask                   => tr_wa_mask
   );
+  s_axi_awuser  <= s_axi_awid & s_axi_awsize;
+  ml_axi_awsize <= ml_axi_awuser(s_axi_awsize'high downto 0);
+  ml_axi_awid   <= ml_axi_awuser(s_axi_awuser'high downto s_axi_awsize'high + 1);
+
 
   tr_req_arb_inst : BusReadArbiter
   generic map (

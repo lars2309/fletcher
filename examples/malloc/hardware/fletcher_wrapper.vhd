@@ -307,15 +307,15 @@ begin
       bus_rdat_ready              => mmu_r.dat_ready,
 
       -- Translate request channel
-      req_valid                   => tr_req_valid,
-      req_ready                   => tr_req_ready,
-      req_addr                    => tr_req_addr,
+      req_valid                   => htr_req_valid,
+      req_ready                   => htr_req_ready,
+      req_addr                    => htr_req_addr,
       -- Translate response channel
-      resp_valid                  => tr_rsp_valid,
-      resp_ready                  => tr_rsp_ready,
-      resp_virt                   => tr_rsp_virt,
-      resp_phys                   => tr_rsp_phys,
-      resp_mask                   => tr_rsp_mask,
+      resp_valid                  => htr_resp_valid,
+      resp_ready                  => htr_resp_ready,
+      resp_virt                   => htr_resp_virt,
+      resp_phys                   => htr_resp_phys,
+      resp_mask                   => htr_resp_mask,
 
       dir_req_valid               => mmu_req_valid,
       dir_req_ready               => mmu_req_ready,
