@@ -154,6 +154,7 @@ int main(int argc, char ** argv) {
         t_write[i] = t.seconds();
       }
     } else {
+      source_buffers.push_back((unsigned char*) nullptr);
       t_write[i] = 0;
     }
   }
@@ -170,10 +171,10 @@ int main(int argc, char ** argv) {
       } else {
         // Copy data
         t.start();
-        platform()->copyDeviceToHost(maddr[i], check_buffers.back(), malloc_sizes[i]);
+        platform->copyDeviceToHost(maddr[i], check_buffers.back(), malloc_sizes[i]);
         t.stop();
         t_read[i] = t.seconds();
-        if (!memcmp(check_buffers.at(i), source_buffers.at(i), malloc_sizes[i])) {
+        if (!memcmp(check_buffers.back(), source_buffers.at(i), malloc_sizes[i])) {
           std::cerr << "Data does not match for buffer " << i << "." << std::endl;
         }
       }
