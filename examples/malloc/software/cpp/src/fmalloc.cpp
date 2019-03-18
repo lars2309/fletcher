@@ -96,11 +96,11 @@ int main(int argc, char ** argv) {
       1024L*1024*1024*32-1, // 32 GB, full L2 page table, one less
       1024L*1024*1024*32,   // 32 GB, full L2 page table, exact
       1024L*1024*1024*32+1, // 32 GB, full L2 page table, one more
-      1024L*1024*1024*64,
-      1024L*1024*1024*128,
-      1024L*1024*1024*256,
-      1024L*1024*1024*512,
-      1024L*1024*1024*1024  //  1 TB
+      1024L*1024*1024*64
+//      1024L*1024*1024*128,
+//      1024L*1024*1024*256,
+//      1024L*1024*1024*512,
+//      1024L*1024*1024*1024  //  1 TB
     };
 
   // Initialize FPGA
@@ -114,6 +114,8 @@ int main(int argc, char ** argv) {
 
   Timer t;
   std::vector<double> t_alloc(n_mallocs);
+  std::vector<double> t_write(n_mallocs);
+  std::vector<double> t_read(n_mallocs);
   std::vector<uint64_t> maddr(n_mallocs);
 
   for (int i = 0; i < n_mallocs; i++) {
@@ -130,6 +132,55 @@ int main(int argc, char ** argv) {
       status = EXIT_FAILURE;
     }
   }
+
+  // Put some data on the device.
+  const int max_data_size = 1024L*1024*1024; // Max 1GB for data copies.
+  std::ifstream file("/dev/urandom");
+  std::vector<uint8_t*> source_buffers;
+  for (int i = 0; i < n_mallocs; i++) {
+    if (malloc_sizes[i] <= max_data_size;
+      source_buffers.push_back(malloc(malloc_sizes[i]));
+      if (source_buffers.back() == nullptr) {
+        std::cerr << "Could not allocate " << malloc_sizes[i] << " bytes" std::endl;
+        status = EXIT_FAILURE;
+        break;
+      } else {
+        file.read(source_buffers.back(), malloc_sizes[i]);
+        // Copy data
+        t.start();
+        copyHostToDevice(source_buffers.back(), maddr[i], malloc_sizes[i]);
+        t.stop();
+        t_write[i] = t.seconds();
+      }
+    } else {
+      t_write[i] = 0;
+    }
+  }
+
+  // Read back written data.
+  std::vector<uint8_t*> check_buffers;
+  for (int i = 0; i < n_mallocs; i++) {
+    if (malloc_sizes[i] <= max_data_size;
+      check_buffers.push_back(malloc(malloc_sizes[i]));
+      if (check_buffers.back() == nullptr) {
+        std::cerr << "Could not allocate " << malloc_sizes[i] << " bytes." std::endl;
+        status = EXIT_FAILURE;
+        break;
+      } else {
+        // Copy data
+        t.start();
+        copyDeviceToHost(maddr[i], check_buffers.back(), malloc_sizes[i]);
+        t.stop();
+        t_read[i] = t.seconds();
+        if (!memcmp(check_buffers.at(i), source_buffers.at(i), malloc_sizes[i])) {
+          std::cerr << "Data does not match for buffer " << i << "." << std::endl;
+        }
+      }
+    } else {
+      t_read[i] = 0;
+    }
+  }
+
 
   // Report the run times:
   PRINT_TIME(calc_sum(t_alloc), "allocation");
