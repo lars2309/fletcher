@@ -89,19 +89,20 @@ uint32_t calc_sum(const std::vector<uint32_t> &values) {
 int main(int argc, char ** argv) {
   int status = EXIT_SUCCESS;
 
-  int n_mallocs = 10;
-  uint64_t malloc_sizes[] = {
-      1024L*1024*1,         //  1 MB, sub-page
-      1024L*1024*4,         //  4 MB, page
-      1024L*1024*1024*32-1, // 32 GB, full L2 page table, one less
-      1024L*1024*1024*32,   // 32 GB, full L2 page table, exact
-      1024L*1024*1024*32+1, // 32 GB, full L2 page table, one more
-      1024L*1024*1024*64
-//      1024L*1024*1024*128,
-//      1024L*1024*1024*256,
-//      1024L*1024*1024*512,
-//      1024L*1024*1024*1024  //  1 TB
-    };
+  std::vector<uint64_t> malloc_sizes;
+  malloc_sizes.push_back(1024L*1024 *1);         //  1 MB, sub-page
+  malloc_sizes.push_back(1024L*1024 *4);         //  4 MB, page
+  malloc_sizes.push_back(1024L*1024 *64);        // 64 MB
+  malloc_sizes.push_back(1024L*1024*1024);       //  1 GB
+  malloc_sizes.push_back(1024L*1024*1024* 32-1); // 32 GB, full L2 page table, one less
+  malloc_sizes.push_back(1024L*1024*1024* 32);   // 32 GB, full L2 page table, exact
+  malloc_sizes.push_back(1024L*1024*1024* 32+1); // 32 GB, full L2 page table, one more
+//  malloc_sizes.push_back(1024L*1024*1024* 64);
+//  malloc_sizes.push_back(1024L*1024*1024* 128);
+//  malloc_sizes.push_back(1024L*1024*1024* 256);
+//  malloc_sizes.push_back(1024L*1024*1024* 512);
+//  malloc_sizes.push_back(1024L*1024*1024* 1024); //  1 TB
+  int n_mallocs = malloc_sizes.size();
 
   // Initialize FPGA
   std::shared_ptr<fletcher::Platform> platform;
@@ -138,17 +139,17 @@ int main(int argc, char ** argv) {
   std::ifstream file("/dev/urandom");
   std::vector<uint8_t*> source_buffers;
   for (int i = 0; i < n_mallocs; i++) {
-    if (malloc_sizes[i] <= max_data_size;
-      source_buffers.push_back(malloc(malloc_sizes[i]));
+    if (malloc_sizes[i] <= max_data_size) {
+      source_buffers.push_back((unsigned char *) malloc(malloc_sizes[i]));
       if (source_buffers.back() == nullptr) {
-        std::cerr << "Could not allocate " << malloc_sizes[i] << " bytes" std::endl;
+        std::cerr << "Could not allocate " << malloc_sizes[i] << " bytes" << std::endl;
         status = EXIT_FAILURE;
         break;
       } else {
-        file.read(source_buffers.back(), malloc_sizes[i]);
+        file.read((char *) source_buffers.back(), malloc_sizes[i]);
         // Copy data
         t.start();
-        copyHostToDevice(source_buffers.back(), maddr[i], malloc_sizes[i]);
+        platform->copyHostToDevice(source_buffers.back(), maddr[i], malloc_sizes[i]);
         t.stop();
         t_write[i] = t.seconds();
       }
@@ -160,16 +161,16 @@ int main(int argc, char ** argv) {
   // Read back written data.
   std::vector<uint8_t*> check_buffers;
   for (int i = 0; i < n_mallocs; i++) {
-    if (malloc_sizes[i] <= max_data_size;
-      check_buffers.push_back(malloc(malloc_sizes[i]));
+    if (malloc_sizes[i] <= max_data_size) {
+      check_buffers.push_back((unsigned char *) malloc(malloc_sizes[i]));
       if (check_buffers.back() == nullptr) {
-        std::cerr << "Could not allocate " << malloc_sizes[i] << " bytes." std::endl;
+        std::cerr << "Could not allocate " << malloc_sizes[i] << " bytes." << std::endl;
         status = EXIT_FAILURE;
         break;
       } else {
         // Copy data
         t.start();
-        copyDeviceToHost(maddr[i], check_buffers.back(), malloc_sizes[i]);
+        platform()->copyDeviceToHost(maddr[i], check_buffers.back(), malloc_sizes[i]);
         t.stop();
         t_read[i] = t.seconds();
         if (!memcmp(check_buffers.at(i), source_buffers.at(i), malloc_sizes[i])) {
@@ -184,6 +185,8 @@ int main(int argc, char ** argv) {
 
   // Report the run times:
   PRINT_TIME(calc_sum(t_alloc), "allocation");
+  PRINT_TIME(calc_sum(t_write), "H2D");
+  PRINT_TIME(calc_sum(t_read), "D2H");
 
   if (status == EXIT_SUCCESS) {
     std::cout << "PASS" << std::endl;
