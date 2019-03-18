@@ -147,11 +147,13 @@ int main(int argc, char ** argv) {
         break;
       } else {
         file.read((char *) source_buffers.back(), malloc_sizes[i]);
+        std::cerr << "copying buffer to device...";
         // Copy data
         t.start();
         platform->copyHostToDevice(source_buffers.back(), maddr[i], malloc_sizes[i]);
         t.stop();
         t_write[i] = t.seconds();
+        std::cerr << "done" << std::endl;
       }
     } else {
       source_buffers.push_back((unsigned char*) nullptr);
@@ -170,12 +172,14 @@ int main(int argc, char ** argv) {
         break;
       } else {
         // Copy data
+        std::cerr << "copying buffer from device...";
         t.start();
         platform->copyDeviceToHost(maddr[i], check_buffers.back(), malloc_sizes[i]);
         t.stop();
         t_read[i] = t.seconds();
+        std::cerr << "done" << std::endl;
         if (!memcmp(check_buffers.back(), source_buffers.at(i), malloc_sizes[i])) {
-          std::cerr << "Data does not match for buffer " << i << "." << std::endl;
+          std::cerr << "ERROR: Data does not match for buffer " << i << "." << std::endl;
         }
       }
     } else {
