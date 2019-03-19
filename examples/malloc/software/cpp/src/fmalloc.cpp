@@ -178,7 +178,7 @@ int main(int argc, char ** argv) {
         t.stop();
         t_read[i] = t.seconds();
         std::cerr << "done" << std::endl;
-        if (!memcmp(check_buffers.back(), source_buffers.at(i), malloc_sizes[i])) {
+        if (memcmp(check_buffers.back(), source_buffers.at(i), malloc_sizes[i])) {
           std::cerr << "ERROR: Data does not match for buffer " << i << "." << std::endl;
         }
       }
