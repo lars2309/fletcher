@@ -645,7 +645,7 @@ begin
           v.addr            := resize(
               EXTRACT(
                 unsigned(bus_rdat_data),
-                BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2))) + PTE_SEGMENT,
+                BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2))),
                 PAGE_SIZE_LOG2
               ),
               v.addr'length

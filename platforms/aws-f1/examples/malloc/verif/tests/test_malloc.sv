@@ -162,7 +162,42 @@ initial begin
     );
     error_count++;
   end
+  $display("[%t] : Write complete", $realtime);
+  // Write is reported complete before response. Wait for duration of shell timeout.
+  #8000ns;
 
+
+  // Readback
+  $display("[%t] : Starting CL to host DMA transfers ", $realtime);
+
+  // Queue the data movement
+  tb.que_cl_to_buffer(
+    .chan(0),
+    .dst_addr(host_buffer_address),
+    .cl_addr(cl_buffer_address),
+    .len(num_buf_bytes)
+  );
+
+  // Start transfers of data to CL DDR
+  tb.start_que_to_buffer(.chan(0));
+
+  // Wait for dma transfers to complete,
+  // increase the timeout if you have to transfer a lot of data
+  timeout_count = 0;
+  do begin
+    status[0] = tb.is_dma_to_buffer_done(.chan(0));
+    #10ns;
+    timeout_count++;
+  end while ((status != 4'hf) && (timeout_count < 4000));
+
+  if (timeout_count >= 4000) begin
+    $display(
+      "[%t] : *** ERROR *** Timeout waiting for dma transfers from cl",
+      $realtime
+    );
+    error_count++;
+  end
+  $display("[%t] : Read complete", $realtime);
 
 
   // Set region to 1
