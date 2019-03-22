@@ -147,6 +147,14 @@ architecture Behavioral of MMDirector is
     return ret;
   end CLAMP;
 
+  function CLAMP_PTES_PER_BUS (val : unsigned)
+    return unsigned is
+    variable ret : unsigned(val'length-1 downto 0);
+  begin
+    ret := CLAMP(val, BUS_DATA_BYTES / PTE_SIZE);
+    return ret( log2ceil(BUS_DATA_BYTES / PTE_SIZE + 1) - 1 downto 0);
+  end CLAMP_PTES_PER_BUS;
+
   function TAKE_EVERY (vec      : unsigned;
                        interval : natural;
                        offset   : natural)
@@ -727,37 +735,47 @@ begin
       -- v.size tracks the remaining gap size to be found, rounded up to L1 PTE coverage.
       bus_rdat_ready <= '1';
       if bus_rdat_valid = '1' then
-        -- needed size: CLAMP(shift_right(v.size, VM_SIZE_L1_LOG2), BUS_DATA_BYTES / PTE_SIZE)
+        -- needed size: CLAMP_PTES_PER_BUS(shift_right(v.size, VM_SIZE_L1_LOG2))
         if
           -- Not a continuation
           FIND_GAP_START(
               TAKE_EVERY(u(bus_rdat_data), PTE_WIDTH, PTE_MAPPED),
-              CLAMP(shift_right(v.size, VM_SIZE_L1_LOG2), BUS_DATA_BYTES / PTE_SIZE)
+              CLAMP_PTES_PER_BUS(shift_right(v.size, VM_SIZE_L1_LOG2))
           ) /= 0
         then
           -- New gap was started
           v.addr_vm := PTE_TO_VA(
               PT_INDEX(v.addr) + FIND_GAP_START(
                     TAKE_EVERY(u(bus_rdat_data), PTE_WIDTH, PTE_MAPPED),
-                    CLAMP(shift_right(v.size, VM_SIZE_L1_LOG2), BUS_DATA_BYTES / PTE_SIZE)),
+                    CLAMP_PTES_PER_BUS(shift_right(v.size, VM_SIZE_L1_LOG2))),
               1);
           -- Subtract the gap size from requested size.
-          v.size := shift_left(
-              shift_right_round_up(unsigned(cmd_size), VM_SIZE_L1_LOG2)
-              - FIND_GAP_SIZE(
-                TAKE_EVERY(u(bus_rdat_data), PTE_WIDTH, PTE_MAPPED),
-                CLAMP(shift_right(v.size, VM_SIZE_L1_LOG2), BUS_DATA_BYTES / PTE_SIZE)
-              ),
-              VM_SIZE_L1_LOG2);
+          v.size := resize(
+              shift_left(
+                shift_right_round_up(
+                  resize(unsigned(cmd_size), VM_SIZE_L0_LOG2),
+                  VM_SIZE_L1_LOG2
+                ) - FIND_GAP_SIZE(
+                  TAKE_EVERY(u(bus_rdat_data), PTE_WIDTH, PTE_MAPPED),
+                  CLAMP_PTES_PER_BUS(shift_right(v.size, VM_SIZE_L1_LOG2))
+                ),
+                VM_SIZE_L1_LOG2),
+              v.size'length);
         else
           -- Subtract the gap size from leftover size.
-          v.size := shift_left(
-              shift_right(v.size, VM_SIZE_L1_LOG2)
-              - FIND_GAP_SIZE(
-                TAKE_EVERY(u(bus_rdat_data), PTE_WIDTH, PTE_MAPPED),
-                CLAMP(shift_right(v.size, VM_SIZE_L1_LOG2), BUS_DATA_BYTES / PTE_SIZE)
-              ),
-              VM_SIZE_L1_LOG2);
+          -- Ignore bits that are used for indexing with this page level,
+          -- and bits for unsupported sizes.
+          v.size := resize(
+              shift_left(
+                shift_right(
+                  resize(v.size, VM_SIZE_L0_LOG2),
+                  VM_SIZE_L1_LOG2
+                ) - FIND_GAP_SIZE(
+                  TAKE_EVERY(u(bus_rdat_data), PTE_WIDTH, PTE_MAPPED),
+                  CLAMP_PTES_PER_BUS(shift_right(v.size, VM_SIZE_L1_LOG2))
+                ),
+                VM_SIZE_L1_LOG2),
+              v.size'length);
         end if;
 
         -- Next set of PTEs
