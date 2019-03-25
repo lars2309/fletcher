@@ -254,6 +254,7 @@ begin
           dir_req_addr     <= slv(v.addr);
           if dir_req_ready = '1' then
             v.state        := REQUEST_MAPPING;
+            bus_rdat_ready <= '1';
           end if;
         end if;
       end if;
