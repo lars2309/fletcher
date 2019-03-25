@@ -90,8 +90,8 @@ initial begin
   // Set region to 1
   tb.poke_bar1(.addr(4 * 4), .data(32'h0000_0001));
 
-  // Set size to 200 MB
-  tb.poke_bar1(.addr(4 * 2), .data(32'h00c8_0000));
+  // Set size to 12 MB
+  tb.poke_bar1(.addr(4 * 2), .data(32'h00c0_0000));
   tb.poke_bar1(.addr(4 * 3), .data(32'h0000_0000));
 
   // Allocate
@@ -113,7 +113,7 @@ initial begin
   // Get address
   tb.peek_bar1(.addr(4 * 6), .data(read_data_lo));
   tb.peek_bar1(.addr(4 * 7), .data(read_data_hi));
-  $display("[%t] : malloc of size 200MB at %H_%H", $realtime, read_data_hi, read_data_lo);
+  $display("[%t] : malloc of size 12MB at %H_%H", $realtime, read_data_hi, read_data_lo);
 
   // Reset response
   tb.poke_bar1(.addr(4 * 8), .data(32'h0000_0000));
@@ -134,12 +134,18 @@ initial begin
     .len(num_buf_bytes)
   );
 
-  // Also write into second page
-  cl_buffer_address = cl_buffer_address + 1024*1024*4;
+  // Also write into second and third page
   tb.que_buffer_to_cl(
     .chan(0),
     .src_addr(host_buffer_address),
-    .cl_addr(cl_buffer_address),
+    .cl_addr(cl_buffer_address + 1024*1024*4),
+    .len(num_buf_bytes)
+  );
+
+  tb.que_buffer_to_cl(
+    .chan(0),
+    .src_addr(host_buffer_address),
+    .cl_addr(cl_buffer_address + 1024*1024*8),
     .len(num_buf_bytes)
   );
 
@@ -177,8 +183,20 @@ initial begin
     .cl_addr(cl_buffer_address),
     .len(num_buf_bytes)
   );
+  tb.que_cl_to_buffer(
+    .chan(0),
+    .dst_addr(host_buffer_address),
+    .cl_addr(cl_buffer_address + 1024*1024*4),
+    .len(num_buf_bytes)
+  );
+  tb.que_cl_to_buffer(
+    .chan(0),
+    .dst_addr(host_buffer_address),
+    .cl_addr(cl_buffer_address + 1024*1024*8),
+    .len(num_buf_bytes)
+  );
 
-  // Start transfers of data to CL DDR
+  // Start transfers of data from CL DDR
   tb.start_que_to_buffer(.chan(0));
 
   // Wait for dma transfers to complete,
@@ -199,7 +217,8 @@ initial begin
   end
   $display("[%t] : Read complete", $realtime);
 
-
+// Skip large allocation
+if (0 == 1) begin
   // Set region to 1
   tb.poke_bar1(.addr(4 * 4), .data(32'h0000_0001));
 
@@ -230,7 +249,7 @@ initial begin
 
   // Reset response
   tb.poke_bar1(.addr(4 * 8), .data(32'h0000_0000));
-
+end
 
   // Report pass/fail status
   $display("[%t] : Checking total error count...", $realtime);
