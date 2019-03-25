@@ -180,6 +180,7 @@ int main(int argc, char ** argv) {
         std::cerr << "done" << std::endl;
         if (memcmp(check_buffers.back(), source_buffers.at(i), malloc_sizes[i])) {
           std::cerr << "ERROR: Data does not match for buffer " << i << "." << std::endl;
+          status = EXIT_FAILURE;
         }
       }
     } else {
