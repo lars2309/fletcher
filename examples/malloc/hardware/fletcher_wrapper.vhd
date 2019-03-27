@@ -332,7 +332,7 @@ begin
       BUS_LEN_WIDTH             => BUS_LEN_WIDTH,
       BUS_DATA_WIDTH            => BUS_DATA_WIDTH,
       NUM_SLAVE_PORTS           => 2,
-      ARB_METHOD                => "FIXED";
+      ARB_METHOD                => "FIXED",
       MAX_OUTSTANDING           => 4,
       SLV_REQ_SLICES            => false,
       MST_REQ_SLICE             => false,
