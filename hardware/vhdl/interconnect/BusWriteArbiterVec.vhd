@@ -46,6 +46,9 @@ entity BusWriteArbiterVec is
     -- lower-indexed masters take precedence.
     ARB_METHOD                  : string := "ROUND-ROBIN";
 
+    -- Maximum number of requests forwarded before the data. This is rounded
+    -- upward to whatever is convenient internally.
+    MAX_DATA_LAG                : natural := 2;
     -- Maximum number of outstanding requests. This is rounded upward to
     -- whatever is convenient internally.
     MAX_OUTSTANDING             : natural := 2;
@@ -63,8 +66,13 @@ entity BusWriteArbiterVec is
     MST_DAT_SLICE               : boolean := false;
 
     -- Whether a register slice should be inserted into the slave data ports
-    SLV_DAT_SLICES              : boolean := true
+    SLV_DAT_SLICES              : boolean := true;
 
+    -- Whether a register slice should be inserted into the master response port
+    MST_RSP_SLICE               : boolean := true;
+
+    -- Whether a register slice should be inserted into the slave response ports
+    SLV_RSP_SLICES              : boolean := true
   );
   port (
 
@@ -83,6 +91,9 @@ entity BusWriteArbiterVec is
     bsv_wdat_data               : in  std_logic_vector(NUM_SLAVE_PORTS*BUS_DATA_WIDTH-1 downto 0);
     bsv_wdat_strobe             : in  std_logic_vector(NUM_SLAVE_PORTS*BUS_STROBE_WIDTH-1 downto 0);
     bsv_wdat_last               : in  std_logic_vector(NUM_SLAVE_PORTS-1 downto 0);
+    bsv_resp_valid              : out std_logic_vector(NUM_SLAVE_PORTS-1 downto 0);
+    bsv_resp_ready              : in  std_logic_vector(NUM_SLAVE_PORTS-1 downto 0) := (others => '1');
+    bsv_resp_ok                 : out std_logic_vector(NUM_SLAVE_PORTS-1 downto 0);
     
     -- Master port.
     mst_wreq_valid              : out std_logic;
@@ -93,7 +104,10 @@ entity BusWriteArbiterVec is
     mst_wdat_ready              : in  std_logic;
     mst_wdat_data               : out std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
     mst_wdat_strobe             : out std_logic_vector(BUS_STROBE_WIDTH-1 downto 0);
-    mst_wdat_last               : out  std_logic
+    mst_wdat_last               : out std_logic;
+    mst_resp_valid              : in  std_logic := '0';
+    mst_resp_ready              : out std_logic;
+    mst_resp_ok                 : in  std_logic := 'U'
 
   );
 end BusWriteArbiterVec;
@@ -108,11 +122,13 @@ architecture Behavioral of BusWriteArbiterVec is
   subtype bus_len_type    is std_logic_vector(BUS_LEN_WIDTH-1    downto 0);
   subtype bus_data_type   is std_logic_vector(BUS_DATA_WIDTH-1   downto 0);
   subtype bus_strobe_type is std_logic_vector(BUS_STROBE_WIDTH-1 downto 0);
+  subtype bus_resp_type   is std_logic_vector(0 downto 0);
 
   type bus_addr_array   is array (natural range <>) of bus_addr_type;
   type bus_len_array    is array (natural range <>) of bus_len_type;
   type bus_data_array   is array (natural range <>) of bus_data_type;
   type bus_strobe_array is array (natural range <>) of bus_strobe_type;
+  type bus_resp_array   is array (natural range <>) of bus_resp_type;
 
   -- Bus request channel serialization indices.
   constant BQI : nat_array := cumulative((
@@ -146,6 +162,9 @@ architecture Behavioral of BusWriteArbiterVec is
   signal bs_wdat_data           : bus_data_array(0 to NUM_SLAVE_PORTS-1);
   signal bs_wdat_strobe         : bus_strobe_array(0 to NUM_SLAVE_PORTS-1);
   signal bs_wdat_last           : std_logic_vector(0 to NUM_SLAVE_PORTS-1);
+  signal bs_resp_valid          : std_logic_vector(0 to NUM_SLAVE_PORTS-1);
+  signal bs_resp_ready          : std_logic_vector(0 to NUM_SLAVE_PORTS-1);
+  signal bs_resp_ok             : bus_resp_array(0 to NUM_SLAVE_PORTS-1);
 
   -- Register-sliced bus slave signals.
   signal bss_wreq_valid         : std_logic_vector(0 to NUM_SLAVE_PORTS-1);
@@ -157,6 +176,9 @@ architecture Behavioral of BusWriteArbiterVec is
   signal bss_wdat_data          : bus_data_array(0 to NUM_SLAVE_PORTS-1);
   signal bss_wdat_strobe        : bus_strobe_array(0 to NUM_SLAVE_PORTS-1);
   signal bss_wdat_last          : std_logic_vector(0 to NUM_SLAVE_PORTS-1);
+  signal bss_resp_valid         : std_logic_vector(0 to NUM_SLAVE_PORTS-1);
+  signal bss_resp_ready         : std_logic_vector(0 to NUM_SLAVE_PORTS-1);
+  signal bss_resp_ok            : bus_resp_array(0 to NUM_SLAVE_PORTS-1);
 
   -- Register-sliced bus master signals.
   signal bms_wreq_valid         : std_logic;
@@ -168,6 +190,9 @@ architecture Behavioral of BusWriteArbiterVec is
   signal bms_wdat_data          : bus_data_type;
   signal bms_wdat_strobe        : bus_strobe_type;
   signal bms_wdat_last          : std_logic;
+  signal bms_resp_valid         : std_logic;
+  signal bms_resp_ready         : std_logic;
+  signal bms_resp_ok            : bus_resp_type;
 
   -- Serialized arbiter input signals.
   signal arb_in_valid           : std_logic_vector(NUM_SLAVE_PORTS-1 downto 0);
@@ -178,16 +203,27 @@ architecture Behavioral of BusWriteArbiterVec is
   signal arb_out_valid          : std_logic;
   signal arb_out_ready          : std_logic;
 
-  -- Index stream stage A (between sync and buffer).
+  -- Index stream stage A (between sync and buffer, data routing).
   signal idxA_valid             : std_logic;
   signal idxA_ready             : std_logic;
   signal idxA_index             : std_logic_vector(INDEX_WIDTH-1 downto 0);
 
-  -- Index stream stage A (between buffer and sync).
+  -- Index stream stage B (between buffer and sync, data routing).
   signal idxB_valid             : std_logic;
   signal idxB_ready             : std_logic;
   signal idxB_index             : std_logic_vector(INDEX_WIDTH-1 downto 0);
   signal idxB_enable            : std_logic_vector(NUM_SLAVE_PORTS-1 downto 0);
+
+  -- Index stream stage C (between sync and buffer, response routing).
+  signal idxC_valid             : std_logic;
+  signal idxC_ready             : std_logic;
+  signal idxC_index             : std_logic_vector(INDEX_WIDTH-1 downto 0);
+
+  -- Index stream stage D (between buffer and sync, response routing).
+  signal idxD_valid             : std_logic;
+  signal idxD_ready             : std_logic;
+  signal idxD_index             : std_logic_vector(INDEX_WIDTH-1 downto 0);
+  signal idxD_enable            : std_logic_vector(NUM_SLAVE_PORTS-1 downto 0);
 
   -- Demultiplexed serialized response stream handshake signals.
   signal mux_wdat_valid         : std_logic;
@@ -195,6 +231,10 @@ architecture Behavioral of BusWriteArbiterVec is
   signal mux_wdat_data          : std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
   signal mux_wdat_strobe        : std_logic_vector(BUS_STROBE_WIDTH-1 downto 0);
   signal mux_wdat_last          : std_logic;
+
+  -- Demultiplexed serialized response stream handshake signals.
+  signal demux_valid            : std_logic_vector(NUM_SLAVE_PORTS-1 downto 0);
+  signal demux_ready            : std_logic_vector(NUM_SLAVE_PORTS-1 downto 0);
 
 begin
 
@@ -210,6 +250,9 @@ begin
     bs_wdat_data  (i) <= bsv_wdat_data((i+1)*BUS_DATA_WIDTH-1 downto i*BUS_DATA_WIDTH);
     bs_wdat_strobe(i) <= bsv_wdat_strobe((i+1)*BUS_STROBE_WIDTH-1 downto i*BUS_STROBE_WIDTH);
     bs_wdat_last  (i) <= bsv_wdat_last (i);
+    bsv_resp_valid(i) <= bs_resp_valid (i);
+    bs_resp_ready (i) <= bsv_resp_ready(i);
+    bsv_resp_ok   (i downto i) <= bs_resp_ok(i);
   end generate;
 
   -- Instantiate register slices for the slave ports.
@@ -272,6 +315,24 @@ begin
     bss_wdat_data(i)                    <= wdato_sData(BPI(2)-1 downto BPI(1));
     bss_wdat_last(i)                    <= wdato_sData(BPI(0));
 
+    -- Response register slice.
+    rsp_buffer_inst: StreamBuffer
+      generic map (
+        MIN_DEPTH                       => sel(SLV_RSP_SLICES, 2, 0),
+        DATA_WIDTH                      => 1
+      )
+      port map (
+        clk                             => bus_clk,
+        reset                           => bus_reset,
+
+        in_valid                        => bss_resp_valid(i),
+        in_ready                        => bss_resp_ready(i),
+        in_data                         => bss_resp_ok   (i),
+
+        out_valid                       => bs_resp_valid(i),
+        out_ready                       => bs_resp_ready(i),
+        out_data                        => bs_resp_ok   (i)
+      );
   end generate;
 
   -- Instantiate master request register slice.
@@ -325,6 +386,25 @@ begin
   mst_wdat_strobe                       <= mwdato_sData(BPI(3)-1 downto BPI(2));
   mst_wdat_data                         <= mwdato_sData(BPI(2)-1 downto BPI(1));
   mst_wdat_last                         <= mwdato_sData(BPI(0));
+
+  -- Instantiate master response register slice.
+  mst_resp_buffer_inst: StreamBuffer
+    generic map (
+      MIN_DEPTH                         => sel(MST_RSP_SLICE, 2, 0),
+      DATA_WIDTH                        => 1
+    )
+    port map (
+      clk                               => bus_clk,
+      reset                             => bus_reset,
+
+      in_valid                          => mst_resp_valid,
+      in_ready                          => mst_resp_ready,
+      in_data(0)                        => mst_resp_ok,
+
+      out_valid                         => bms_resp_valid,
+      out_ready                         => bms_resp_ready,
+      out_data                          => bms_resp_ok
+    );
 
   -- Concatenate the arbiter input stream signals.
   bss2arb_proc: process (bss_wreq_valid, bss_wreq_addr, bss_wreq_len) is
@@ -385,10 +465,10 @@ begin
       out_ready(0)                      => idxA_ready
     );
 
-  -- Instantiate the outstanding request buffer.
-  index_buffer_inst: StreamBuffer
+  -- Instantiate the outstanding request buffer. (To mux data)
+  index_dat_buffer_inst: StreamBuffer
     generic map (
-      MIN_DEPTH                         => MAX_OUTSTANDING,
+      MIN_DEPTH                         => MAX_DATA_LAG,
       DATA_WIDTH                        => INDEX_WIDTH,
       RAM_CONFIG                        => RAM_CONFIG
     )
@@ -406,7 +486,7 @@ begin
     );
 
   -- Decode the index signal to one-hot for the write data synchronizer.
-  index_to_oh_proc: process (idxB_index) is
+  index_to_oh_d_proc: process (idxB_index) is
   begin
     for i in 0 to NUM_SLAVE_PORTS-1 loop
       if to_integer(unsigned(idxB_index)) = i then
@@ -455,10 +535,11 @@ begin
   -- Instantiate the write data stream synchronizer. This synchronizes the 
   -- index stream with the selected write data stream (only popping from the
   -- index stream when the "last" flag is set in the write data stream).
+  -- The popped value is put into the "outstanding requests" buffer.
   wdat_sync_inst: StreamSync
     generic map (
       NUM_INPUTS                        => 2,
-      NUM_OUTPUTS                       => 1
+      NUM_OUTPUTS                       => 2
     )
     port map (
       clk                               => bus_clk,
@@ -472,12 +553,87 @@ begin
       in_advance(0)                     => '1',
 
       out_valid(0)                      => bms_wdat_valid,
-      out_ready(0)                      => bms_wdat_ready
+      out_valid(1)                      => idxC_valid,
+      out_ready(0)                      => bms_wdat_ready,
+      out_ready(1)                      => idxC_ready
     );
   
   bms_wdat_strobe                       <= mux_wdat_strobe;  
   bms_wdat_data                         <= mux_wdat_data;
   bms_wdat_last                         <= mux_wdat_last;
+
+  -- Instantiate the outstanding request buffer. (To route response)
+  index_rsp_buffer_inst: StreamBuffer
+    generic map (
+      MIN_DEPTH                         => MAX_OUTSTANDING,
+      DATA_WIDTH                        => INDEX_WIDTH,
+      RAM_CONFIG                        => RAM_CONFIG
+    )
+    port map (
+      clk                               => bus_clk,
+      reset                             => bus_reset,
+
+      in_valid                          => idxC_valid,
+      in_ready                          => idxC_ready,
+      in_data                           => idxC_index,
+
+      out_valid                         => idxD_valid,
+      out_ready                         => idxD_ready,
+      out_data                          => idxD_index
+    );
+
+  idxC_index <= idxB_index;
+
+  -- Decode the index signal to one-hot for the response synchronizer.
+  index_to_oh_r_proc: process (idxD_index) is
+  begin
+    for i in 0 to NUM_SLAVE_PORTS-1 loop
+      if to_integer(unsigned(idxD_index)) = i then
+        idxD_enable(i) <= '1';
+      else
+        idxD_enable(i) <= '0';
+      end if;
+    end loop;
+  end process;
+
+  -- Instantiate the response stream synchronizer. This synchronizer fullfills
+  -- two functions: it synchronizes the index stream with the response stream,
+  -- and it demultiplexes the response data to the appropriate master ports.
+  resp_sync_inst: StreamSync
+    generic map (
+      NUM_INPUTS                        => 2,
+      NUM_OUTPUTS                       => NUM_SLAVE_PORTS
+    )
+    port map (
+      clk                               => bus_clk,
+      reset                             => bus_reset,
+
+      in_valid(1)                       => idxD_valid,
+      in_valid(0)                       => bms_resp_valid,
+      in_ready(1)                       => idxD_ready,
+      in_ready(0)                       => bms_resp_ready,
+
+      out_valid                         => demux_valid,
+      out_ready                         => demux_ready,
+      out_enable                        => idxD_enable
+    );
+
+  -- Serialize/deserialize the demultiplexer signals. Also connect the data and
+  -- last signals from the slave response slice directly to all the master
+  -- reponse slices. Only the handshake signals differ here.
+  demux2bms_proc: process (demux_valid, bms_resp_ok) is
+  begin
+    for i in 0 to NUM_SLAVE_PORTS-1 loop
+      bss_resp_valid(i) <= demux_valid(i);
+      bss_resp_ok   (i) <= bms_resp_ok;
+    end loop;
+  end process;
+  bms2demux_proc: process (bss_resp_ready) is
+  begin
+    for i in 0 to NUM_SLAVE_PORTS-1 loop
+      demux_ready(i) <= bss_resp_ready(i);
+    end loop;
+  end process;
 
 end Behavioral;
 

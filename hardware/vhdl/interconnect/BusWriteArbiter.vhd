@@ -46,6 +46,9 @@ entity BusWriteArbiter is
     -- lower-indexed masters take precedence.
     ARB_METHOD                  : string := "ROUND-ROBIN";
 
+    -- Maximum number of requests forwarded before the data. This is rounded
+    -- upward to whatever is convenient internally.
+    MAX_DATA_LAG                : natural := 2;
     -- Maximum number of outstanding requests. This is rounded upward to
     -- whatever is convenient internally.
     MAX_OUTSTANDING             : natural := 2;
@@ -63,7 +66,13 @@ entity BusWriteArbiter is
     MST_DAT_SLICE               : boolean := true;
 
     -- Whether a register slice should be inserted into the slave data ports
-    SLV_DAT_SLICES              : boolean := true
+    SLV_DAT_SLICES              : boolean := true;
+
+    -- Whether a register slice should be inserted into the master response port
+    MST_RSP_SLICE               : boolean := true;
+
+    -- Whether a register slice should be inserted into the slave response ports
+    SLV_RSP_SLICES              : boolean := true
   );
   port (
 
@@ -82,6 +91,9 @@ entity BusWriteArbiter is
     mst_wdat_data               : out std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
     mst_wdat_strobe             : out std_logic_vector(BUS_STROBE_WIDTH-1 downto 0);
     mst_wdat_last               : out std_logic;
+    mst_resp_valid              : in  std_logic := '0';
+    mst_resp_ready              : out std_logic;
+    mst_resp_ok                 : in  std_logic := 'U';
 
     -- Ph'nglui mglw'nafh Cthulhu R'lyeh wgah'nagl fhtagn
 
@@ -95,6 +107,9 @@ entity BusWriteArbiter is
     bs00_wdat_data              : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0) := (others => 'U');
     bs00_wdat_strobe            : in  std_logic_vector(BUS_STROBE_WIDTH-1 downto 0) := (others => 'U');
     bs00_wdat_last              : in  std_logic := 'U';
+    bs00_resp_valid             : out std_logic;
+    bs00_resp_ready             : in  std_logic := '1';
+    bs00_resp_ok                : out std_logic;
 
     -- Slave port 1.
     bs01_wreq_valid             : in  std_logic := '0';
@@ -106,6 +121,9 @@ entity BusWriteArbiter is
     bs01_wdat_data              : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0) := (others => 'U');
     bs01_wdat_strobe            : in  std_logic_vector(BUS_STROBE_WIDTH-1 downto 0) := (others => 'U');
     bs01_wdat_last              : in  std_logic := 'U';
+    bs01_resp_valid             : out std_logic;
+    bs01_resp_ready             : in  std_logic := '1';
+    bs01_resp_ok                : out std_logic;
 
     -- Slave port 2.
     bs02_wreq_valid             : in  std_logic := '0';
@@ -117,6 +135,9 @@ entity BusWriteArbiter is
     bs02_wdat_data              : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0) := (others => 'U');
     bs02_wdat_strobe            : in  std_logic_vector(BUS_STROBE_WIDTH-1 downto 0) := (others => 'U');
     bs02_wdat_last              : in  std_logic := 'U';
+    bs02_resp_valid             : out std_logic;
+    bs02_resp_ready             : in  std_logic := '1';
+    bs02_resp_ok                : out std_logic;
 
     -- Slave port 3.
     bs03_wreq_valid             : in  std_logic := '0';
@@ -128,6 +149,9 @@ entity BusWriteArbiter is
     bs03_wdat_data              : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0) := (others => 'U');
     bs03_wdat_strobe            : in  std_logic_vector(BUS_STROBE_WIDTH-1 downto 0) := (others => 'U');
     bs03_wdat_last              : in  std_logic := 'U';
+    bs03_resp_valid             : out std_logic;
+    bs03_resp_ready             : in  std_logic := '1';
+    bs03_resp_ok                : out std_logic;
 
     -- Slave port 4.
     bs04_wreq_valid             : in  std_logic := '0';
@@ -139,6 +163,9 @@ entity BusWriteArbiter is
     bs04_wdat_data              : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0) := (others => 'U');
     bs04_wdat_strobe            : in  std_logic_vector(BUS_STROBE_WIDTH-1 downto 0) := (others => 'U');
     bs04_wdat_last              : in  std_logic := 'U';
+    bs04_resp_valid             : out std_logic;
+    bs04_resp_ready             : in  std_logic := '1';
+    bs04_resp_ok                : out std_logic;
 
     -- Slave port 5.
     bs05_wreq_valid             : in  std_logic := '0';
@@ -150,6 +177,9 @@ entity BusWriteArbiter is
     bs05_wdat_data              : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0) := (others => 'U');
     bs05_wdat_strobe            : in  std_logic_vector(BUS_STROBE_WIDTH-1 downto 0) := (others => 'U');
     bs05_wdat_last              : in  std_logic := 'U';
+    bs05_resp_valid             : out std_logic;
+    bs05_resp_ready             : in  std_logic := '1';
+    bs05_resp_ok                : out std_logic;
 
     -- Slave port 6.
     bs06_wreq_valid             : in  std_logic := '0';
@@ -161,6 +191,9 @@ entity BusWriteArbiter is
     bs06_wdat_data              : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0) := (others => 'U');
     bs06_wdat_strobe            : in  std_logic_vector(BUS_STROBE_WIDTH-1 downto 0) := (others => 'U');
     bs06_wdat_last              : in  std_logic := 'U';
+    bs06_resp_valid             : out std_logic;
+    bs06_resp_ready             : in  std_logic := '1';
+    bs06_resp_ok                : out std_logic;
 
     -- Slave port 7.
     bs07_wreq_valid             : in  std_logic := '0';
@@ -172,6 +205,9 @@ entity BusWriteArbiter is
     bs07_wdat_data              : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0) := (others => 'U');
     bs07_wdat_strobe            : in  std_logic_vector(BUS_STROBE_WIDTH-1 downto 0) := (others => 'U');
     bs07_wdat_last              : in  std_logic := 'U';
+    bs07_resp_valid             : out std_logic;
+    bs07_resp_ready             : in  std_logic := '1';
+    bs07_resp_ok                : out std_logic;
 
     -- Slave port 8.
     bs08_wreq_valid             : in  std_logic := '0';
@@ -183,6 +219,9 @@ entity BusWriteArbiter is
     bs08_wdat_data              : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0) := (others => 'U');
     bs08_wdat_strobe            : in  std_logic_vector(BUS_STROBE_WIDTH-1 downto 0) := (others => 'U');
     bs08_wdat_last              : in  std_logic := 'U';
+    bs08_resp_valid             : out std_logic;
+    bs08_resp_ready             : in  std_logic := '1';
+    bs08_resp_ok                : out std_logic;
 
     -- Slave port 9.
     bs09_wreq_valid             : in  std_logic := '0';
@@ -194,6 +233,9 @@ entity BusWriteArbiter is
     bs09_wdat_data              : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0) := (others => 'U');
     bs09_wdat_strobe            : in  std_logic_vector(BUS_STROBE_WIDTH-1 downto 0) := (others => 'U');
     bs09_wdat_last              : in  std_logic := 'U';
+    bs09_resp_valid             : out std_logic;
+    bs09_resp_ready             : in  std_logic := '1';
+    bs09_resp_ok                : out std_logic;
 
     -- Slave port 10.
     bs10_wreq_valid             : in  std_logic := '0';
@@ -205,6 +247,9 @@ entity BusWriteArbiter is
     bs10_wdat_data              : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0) := (others => 'U');
     bs10_wdat_strobe            : in  std_logic_vector(BUS_STROBE_WIDTH-1 downto 0) := (others => 'U');
     bs10_wdat_last              : in  std_logic := 'U';
+    bs10_resp_valid             : out std_logic;
+    bs10_resp_ready             : in  std_logic := '1';
+    bs10_resp_ok                : out std_logic;
 
     -- Slave port 11.
     bs11_wreq_valid             : in  std_logic := '0';
@@ -216,6 +261,9 @@ entity BusWriteArbiter is
     bs11_wdat_data              : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0) := (others => 'U');
     bs11_wdat_strobe            : in  std_logic_vector(BUS_STROBE_WIDTH-1 downto 0) := (others => 'U');
     bs11_wdat_last              : in  std_logic := 'U';
+    bs11_resp_valid             : out std_logic;
+    bs11_resp_ready             : in  std_logic := '1';
+    bs11_resp_ok                : out std_logic;
 
     -- Slave port 12.
     bs12_wreq_valid             : in  std_logic := '0';
@@ -227,6 +275,9 @@ entity BusWriteArbiter is
     bs12_wdat_data              : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0) := (others => 'U');
     bs12_wdat_strobe            : in  std_logic_vector(BUS_STROBE_WIDTH-1 downto 0) := (others => 'U');
     bs12_wdat_last              : in  std_logic := 'U';
+    bs12_resp_valid             : out std_logic;
+    bs12_resp_ready             : in  std_logic := '1';
+    bs12_resp_ok                : out std_logic;
 
     -- Slave port 13.
     bs13_wreq_valid             : in  std_logic := '0';
@@ -238,6 +289,9 @@ entity BusWriteArbiter is
     bs13_wdat_data              : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0) := (others => 'U');
     bs13_wdat_strobe            : in  std_logic_vector(BUS_STROBE_WIDTH-1 downto 0) := (others => 'U');
     bs13_wdat_last              : in  std_logic := 'U';
+    bs13_resp_valid             : out std_logic;
+    bs13_resp_ready             : in  std_logic := '1';
+    bs13_resp_ok                : out std_logic;
 
     -- Slave port 14.
     bs14_wreq_valid             : in  std_logic := '0';
@@ -249,6 +303,9 @@ entity BusWriteArbiter is
     bs14_wdat_data              : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0) := (others => 'U');
     bs14_wdat_strobe            : in  std_logic_vector(BUS_STROBE_WIDTH-1 downto 0) := (others => 'U');
     bs14_wdat_last              : in  std_logic := 'U';
+    bs14_resp_valid             : out std_logic;
+    bs14_resp_ready             : in  std_logic := '1';
+    bs14_resp_ok                : out std_logic;
 
     -- Slave port 15.
     bs15_wreq_valid             : in  std_logic := '0';
@@ -259,7 +316,10 @@ entity BusWriteArbiter is
     bs15_wdat_ready             : out std_logic := '1';
     bs15_wdat_data              : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0) := (others => 'U');
     bs15_wdat_strobe            : in  std_logic_vector(BUS_STROBE_WIDTH-1 downto 0) := (others => 'U');
-    bs15_wdat_last              : in  std_logic := 'U'
+    bs15_wdat_last              : in  std_logic := 'U';
+    bs15_resp_valid             : out std_logic;
+    bs15_resp_ready             : in  std_logic := '1';
+    bs15_resp_ok                : out std_logic
   );
 end BusWriteArbiter;
   
@@ -275,6 +335,9 @@ architecture Behavioral of BusWriteArbiter is
   signal bsv_wdat_data           : std_logic_vector(NUM_SLAVE_PORTS*BUS_DATA_WIDTH-1 downto 0);
   signal bsv_wdat_strobe         : std_logic_vector(NUM_SLAVE_PORTS*BUS_STROBE_WIDTH-1 downto 0);
   signal bsv_wdat_last           : std_logic_vector(NUM_SLAVE_PORTS-1 downto 0);
+  signal bsv_resp_valid          : std_logic_vector(NUM_SLAVE_PORTS-1 downto 0);
+  signal bsv_resp_ready          : std_logic_vector(NUM_SLAVE_PORTS-1 downto 0);
+  signal bsv_resp_ok             : std_logic_vector(NUM_SLAVE_PORTS-1 downto 0);
 begin
 
   -- Connect bus slave  0 to internal signal.                                                              
@@ -288,7 +351,10 @@ begin
     bs00_wdat_ready                                                   <= bsv_wdat_ready( 0);     
     bsv_wdat_data  ( 1*BUS_DATA_WIDTH-1 downto  0*BUS_DATA_WIDTH)     <= bs00_wdat_data;        
     bsv_wdat_strobe( 1*BUS_STROBE_WIDTH-1 downto  0*BUS_STROBE_WIDTH) <= bs00_wdat_strobe;      
-    bsv_wdat_last  ( 0)                                               <= bs00_wdat_last;         
+    bsv_wdat_last  ( 0)                                               <= bs00_wdat_last;
+    bs00_resp_valid                                                   <= bsv_resp_valid( 0);
+    bsv_resp_ready ( 0)                                               <= bs00_resp_ready;
+    bs00_resp_ok                                                      <= bsv_resp_ok   ( 0);
   end generate;                                                                                             
                                                                                                             
   -- Connect bus slave  1 to internal signal.                                                              
@@ -303,6 +369,9 @@ begin
     bsv_wdat_data  ( 2*BUS_DATA_WIDTH-1 downto  1*BUS_DATA_WIDTH)     <= bs01_wdat_data;        
     bsv_wdat_strobe( 2*BUS_STROBE_WIDTH-1 downto  1*BUS_STROBE_WIDTH) <= bs01_wdat_strobe;      
     bsv_wdat_last  ( 1)                                               <= bs01_wdat_last;         
+    bs01_resp_valid                                                   <= bsv_resp_valid( 1);
+    bsv_resp_ready ( 1)                                               <= bs01_resp_ready;
+    bs01_resp_ok                                                      <= bsv_resp_ok   ( 1);
   end generate;                                                                                             
                                                                                                             
   -- Connect bus slave  2 to internal signal.                                                              
@@ -317,6 +386,9 @@ begin
     bsv_wdat_data  ( 3*BUS_DATA_WIDTH-1 downto  2*BUS_DATA_WIDTH)     <= bs02_wdat_data;        
     bsv_wdat_strobe( 3*BUS_STROBE_WIDTH-1 downto  2*BUS_STROBE_WIDTH) <= bs02_wdat_strobe;      
     bsv_wdat_last  ( 2)                                               <= bs02_wdat_last;         
+    bs02_resp_valid                                                   <= bsv_resp_valid( 2);
+    bsv_resp_ready ( 2)                                               <= bs02_resp_ready;
+    bs02_resp_ok                                                      <= bsv_resp_ok   ( 2);
   end generate;                                                                                             
                                                                                                             
   -- Connect bus slave  3 to internal signal.                                                              
@@ -331,6 +403,9 @@ begin
     bsv_wdat_data  ( 4*BUS_DATA_WIDTH-1 downto  3*BUS_DATA_WIDTH)     <= bs03_wdat_data;        
     bsv_wdat_strobe( 4*BUS_STROBE_WIDTH-1 downto  3*BUS_STROBE_WIDTH) <= bs03_wdat_strobe;      
     bsv_wdat_last  ( 3)                                               <= bs03_wdat_last;         
+    bs03_resp_valid                                                   <= bsv_resp_valid( 3);
+    bsv_resp_ready ( 3)                                               <= bs03_resp_ready;
+    bs03_resp_ok                                                      <= bsv_resp_ok   ( 3);
   end generate;                                                                                             
                                                                                                             
   -- Connect bus slave  4 to internal signal.                                                              
@@ -345,6 +420,9 @@ begin
     bsv_wdat_data  ( 5*BUS_DATA_WIDTH-1 downto  4*BUS_DATA_WIDTH)     <= bs04_wdat_data;        
     bsv_wdat_strobe( 5*BUS_STROBE_WIDTH-1 downto  4*BUS_STROBE_WIDTH) <= bs04_wdat_strobe;      
     bsv_wdat_last  ( 4)                                               <= bs04_wdat_last;         
+    bs04_resp_valid                                                   <= bsv_resp_valid( 4);
+    bsv_resp_ready ( 4)                                               <= bs04_resp_ready;
+    bs04_resp_ok                                                      <= bsv_resp_ok   ( 4);
   end generate;                                                                                             
                                                                                                             
   -- Connect bus slave  5 to internal signal.                                                              
@@ -359,6 +437,9 @@ begin
     bsv_wdat_data  ( 6*BUS_DATA_WIDTH-1 downto  5*BUS_DATA_WIDTH)     <= bs05_wdat_data;        
     bsv_wdat_strobe( 6*BUS_STROBE_WIDTH-1 downto  5*BUS_STROBE_WIDTH) <= bs05_wdat_strobe;      
     bsv_wdat_last  ( 5)                                               <= bs05_wdat_last;         
+    bs05_resp_valid                                                   <= bsv_resp_valid( 5);
+    bsv_resp_ready ( 5)                                               <= bs05_resp_ready;
+    bs05_resp_ok                                                      <= bsv_resp_ok   ( 5);
   end generate;                                                                                             
                                                                                                             
   -- Connect bus slave  6 to internal signal.                                                              
@@ -373,6 +454,9 @@ begin
     bsv_wdat_data  ( 7*BUS_DATA_WIDTH-1 downto  6*BUS_DATA_WIDTH)     <= bs06_wdat_data;        
     bsv_wdat_strobe( 7*BUS_STROBE_WIDTH-1 downto  6*BUS_STROBE_WIDTH) <= bs06_wdat_strobe;      
     bsv_wdat_last  ( 6)                                               <= bs06_wdat_last;         
+    bs06_resp_valid                                                   <= bsv_resp_valid( 6);
+    bsv_resp_ready ( 6)                                               <= bs06_resp_ready;
+    bs06_resp_ok                                                      <= bsv_resp_ok   ( 6);
   end generate;                                                                                             
                                                                                                             
   -- Connect bus slave  7 to internal signal.                                                              
@@ -387,6 +471,9 @@ begin
     bsv_wdat_data  ( 8*BUS_DATA_WIDTH-1 downto  7*BUS_DATA_WIDTH)     <= bs07_wdat_data;        
     bsv_wdat_strobe( 8*BUS_STROBE_WIDTH-1 downto  7*BUS_STROBE_WIDTH) <= bs07_wdat_strobe;      
     bsv_wdat_last  ( 7)                                               <= bs07_wdat_last;         
+    bs07_resp_valid                                                   <= bsv_resp_valid( 7);
+    bsv_resp_ready ( 7)                                               <= bs07_resp_ready;
+    bs07_resp_ok                                                      <= bsv_resp_ok   ( 7);
   end generate;                                                                                             
                                                                                                             
   -- Connect bus slave  8 to internal signal.                                                              
@@ -401,6 +488,9 @@ begin
     bsv_wdat_data  ( 9*BUS_DATA_WIDTH-1 downto  8*BUS_DATA_WIDTH)     <= bs08_wdat_data;        
     bsv_wdat_strobe( 9*BUS_STROBE_WIDTH-1 downto  8*BUS_STROBE_WIDTH) <= bs08_wdat_strobe;      
     bsv_wdat_last  ( 8)                                               <= bs08_wdat_last;         
+    bs08_resp_valid                                                   <= bsv_resp_valid( 8);
+    bsv_resp_ready ( 8)                                               <= bs08_resp_ready;
+    bs08_resp_ok                                                      <= bsv_resp_ok   ( 8);
   end generate;                                                                                             
                                                                                                             
   -- Connect bus slave  9 to internal signal.                                                              
@@ -415,6 +505,9 @@ begin
     bsv_wdat_data  (10*BUS_DATA_WIDTH-1 downto  9*BUS_DATA_WIDTH)     <= bs09_wdat_data;        
     bsv_wdat_strobe(10*BUS_STROBE_WIDTH-1 downto  9*BUS_STROBE_WIDTH) <= bs09_wdat_strobe;      
     bsv_wdat_last  ( 9)                                               <= bs09_wdat_last;         
+    bs09_resp_valid                                                   <= bsv_resp_valid( 9);
+    bsv_resp_ready ( 9)                                               <= bs09_resp_ready;
+    bs09_resp_ok                                                      <= bsv_resp_ok   ( 9);
   end generate;                                                                                             
                                                                                                             
   -- Connect bus slave 10 to internal signal.                                                              
@@ -429,6 +522,9 @@ begin
     bsv_wdat_data  (11*BUS_DATA_WIDTH-1 downto 10*BUS_DATA_WIDTH)     <= bs10_wdat_data;        
     bsv_wdat_strobe(11*BUS_STROBE_WIDTH-1 downto 10*BUS_STROBE_WIDTH) <= bs10_wdat_strobe;      
     bsv_wdat_last  (10)                                               <= bs10_wdat_last;         
+    bs10_resp_valid                                                   <= bsv_resp_valid(10);
+    bsv_resp_ready (10)                                               <= bs10_resp_ready;
+    bs10_resp_ok                                                      <= bsv_resp_ok   (10);
   end generate;                                                                                             
                                                                                                             
   -- Connect bus slave 11 to internal signal.                                                              
@@ -443,6 +539,9 @@ begin
     bsv_wdat_data  (12*BUS_DATA_WIDTH-1 downto 11*BUS_DATA_WIDTH)     <= bs11_wdat_data;        
     bsv_wdat_strobe(12*BUS_STROBE_WIDTH-1 downto 11*BUS_STROBE_WIDTH) <= bs11_wdat_strobe;      
     bsv_wdat_last  (11)                                               <= bs11_wdat_last;         
+    bs11_resp_valid                                                   <= bsv_resp_valid(11);
+    bsv_resp_ready (11)                                               <= bs11_resp_ready;
+    bs11_resp_ok                                                      <= bsv_resp_ok   (11);
   end generate;                                                                                             
                                                                                                             
   -- Connect bus slave 12 to internal signal.                                                              
@@ -457,6 +556,9 @@ begin
     bsv_wdat_data  (13*BUS_DATA_WIDTH-1 downto 12*BUS_DATA_WIDTH)     <= bs12_wdat_data;        
     bsv_wdat_strobe(13*BUS_STROBE_WIDTH-1 downto 12*BUS_STROBE_WIDTH) <= bs12_wdat_strobe;      
     bsv_wdat_last  (12)                                               <= bs12_wdat_last;         
+    bs12_resp_valid                                                   <= bsv_resp_valid(12);
+    bsv_resp_ready (12)                                               <= bs12_resp_ready;
+    bs12_resp_ok                                                      <= bsv_resp_ok   (12);
   end generate;                                                                                             
                                                                                                             
   -- Connect bus slave 13 to internal signal.                                                              
@@ -471,6 +573,9 @@ begin
     bsv_wdat_data  (14*BUS_DATA_WIDTH-1 downto 13*BUS_DATA_WIDTH)     <= bs13_wdat_data;        
     bsv_wdat_strobe(14*BUS_STROBE_WIDTH-1 downto 13*BUS_STROBE_WIDTH) <= bs13_wdat_strobe;      
     bsv_wdat_last  (13)                                               <= bs13_wdat_last;         
+    bs13_resp_valid                                                   <= bsv_resp_valid(13);
+    bsv_resp_ready (13)                                               <= bs13_resp_ready;
+    bs13_resp_ok                                                      <= bsv_resp_ok   (13);
   end generate;                                                                                             
                                                                                                             
   -- Connect bus slave 14 to internal signal.                                                              
@@ -485,6 +590,9 @@ begin
     bsv_wdat_data  (15*BUS_DATA_WIDTH-1 downto 14*BUS_DATA_WIDTH)     <= bs14_wdat_data;        
     bsv_wdat_strobe(15*BUS_STROBE_WIDTH-1 downto 14*BUS_STROBE_WIDTH) <= bs14_wdat_strobe;      
     bsv_wdat_last  (14)                                               <= bs14_wdat_last;         
+    bs14_resp_valid                                                   <= bsv_resp_valid(14);
+    bsv_resp_ready (14)                                               <= bs14_resp_ready;
+    bs14_resp_ok                                                      <= bsv_resp_ok   (14);
   end generate;                                                                                             
                                                                                                             
   -- Connect bus slave 15 to internal signal.                                                              
@@ -499,6 +607,9 @@ begin
     bsv_wdat_data  (16*BUS_DATA_WIDTH-1 downto 15*BUS_DATA_WIDTH)     <= bs15_wdat_data;        
     bsv_wdat_strobe(16*BUS_STROBE_WIDTH-1 downto 15*BUS_STROBE_WIDTH) <= bs15_wdat_strobe;      
     bsv_wdat_last  (15)                                               <= bs15_wdat_last;         
+    bs15_resp_valid                                                   <= bsv_resp_valid(15);
+    bsv_resp_ready (15)                                               <= bs15_resp_ready;
+    bs15_resp_ok                                                      <= bsv_resp_ok   (15);
   end generate;
 
   -- Instantiate the vectorized version
@@ -515,7 +626,9 @@ begin
       SLV_REQ_SLICES            => SLV_REQ_SLICES,
       MST_REQ_SLICE             => MST_REQ_SLICE,
       MST_DAT_SLICE             => MST_DAT_SLICE,
-      SLV_DAT_SLICES            => SLV_DAT_SLICES
+      SLV_DAT_SLICES            => SLV_DAT_SLICES,
+      MST_RSP_SLICE             => MST_RSP_SLICE,
+      SLV_RSP_SLICES            => SLV_RSP_SLICES
     )
     port map (
       bus_clk                   => bus_clk,
@@ -530,6 +643,9 @@ begin
       mst_wdat_data             => mst_wdat_data,
       mst_wdat_strobe           => mst_wdat_strobe,
       mst_wdat_last             => mst_wdat_last,
+      mst_resp_valid            => mst_resp_valid,
+      mst_resp_ready            => mst_resp_ready,
+      mst_resp_ok               => mst_resp_ok,
 
       bsv_wreq_valid            => bsv_wreq_valid,
       bsv_wreq_ready            => bsv_wreq_ready,
@@ -539,7 +655,10 @@ begin
       bsv_wdat_ready            => bsv_wdat_ready,
       bsv_wdat_data             => bsv_wdat_data,
       bsv_wdat_strobe           => bsv_wdat_strobe,
-      bsv_wdat_last             => bsv_wdat_last
+      bsv_wdat_last             => bsv_wdat_last,
+      bsv_resp_valid            => bsv_resp_valid,
+      bsv_resp_ready            => bsv_resp_ready,
+      bsv_resp_ok               => bsv_resp_ok
     );
 
 end Behavioral;
