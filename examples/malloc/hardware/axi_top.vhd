@@ -328,7 +328,12 @@ begin
       SLAVE_DATA_WIDTH          => BUS_DATA_WIDTH,
       SLAVE_LEN_WIDTH           => BUS_LEN_WIDTH,
       SLAVE_MAX_BURST           => BUS_BURST_MAX_LEN,
-      ENABLE_FIFO               => false
+      ENABLE_FIFO               => false,
+      -- Slice depth on each channel
+      SLV_REQ_SLICE_DEPTH       => 0,
+      SLV_DAT_SLICE_DEPTH       => 0,
+      MST_REQ_SLICE_DEPTH       => 0,
+      MST_DAT_SLICE_DEPTH       => 0
     )
     port map (
       clk                       => bus_clk,
@@ -351,7 +356,7 @@ begin
       m_axi_rvalid              => m_axi_rvalid,
       m_axi_rready              => m_axi_rready
     );
-    
+
   -----------------------------------------------------------------------------
   -- AXI write converter
   -----------------------------------------------------------------------------
@@ -363,7 +368,14 @@ begin
       SLAVE_DATA_WIDTH          => BUS_DATA_WIDTH,
       SLAVE_LEN_WIDTH           => BUS_LEN_WIDTH,
       SLAVE_MAX_BURST           => BUS_BURST_MAX_LEN,
-      ENABLE_FIFO               => false
+      ENABLE_FIFO               => false,
+      -- Slice depth on each channel
+      SLV_REQ_SLICE_DEPTH       => 0,
+      SLV_DAT_SLICE_DEPTH       => 0,
+      SLV_RSP_SLICE_DEPTH       => 0,
+      MST_REQ_SLICE_DEPTH       => 0,
+      MST_DAT_SLICE_DEPTH       => 0,
+      MST_RSP_SLICE_DEPTH       => 0
     )
     port map (
       clk                       => bus_clk,

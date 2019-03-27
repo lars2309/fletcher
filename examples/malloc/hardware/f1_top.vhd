@@ -533,13 +533,15 @@ begin
   ml_axi_awsize <= ml_axi_awuser(s_axi_awsize'high downto 0);
   ml_axi_awid   <= ml_axi_awuser(s_axi_awuser'high downto s_axi_awsize'high + 1);
 
-
+  -- Arbiter for the address translation requests of AXI slave R/W channels.
   tr_req_arb_inst : BusReadArbiter
   generic map (
     BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
     BUS_LEN_WIDTH               => 1,
     BUS_DATA_WIDTH              => BUS_ADDR_WIDTH * 3,
     NUM_SLAVE_PORTS             => 2,
+    ARB_METHOD                  => "ROUND-ROBIN";
+    MAX_OUTSTANDING             => 2,
     SLV_REQ_SLICES              => false,
     MST_REQ_SLICE               => false,
     MST_DAT_SLICE               => false,

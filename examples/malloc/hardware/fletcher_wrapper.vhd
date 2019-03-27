@@ -87,11 +87,11 @@ entity fletcher_wrapper is
     regs_out                                   : out std_logic_vector(NUM_REGS*REG_WIDTH-1 downto 0);
     regs_out_en                                : out std_logic_vector(NUM_REGS-1 downto 0);
     ---------------------------------------------------------------------------
-    -- Translate request channel
+    -- Host translate request channel
     htr_req_valid                              : in  std_logic := '0';
     htr_req_ready                              : out std_logic;
     htr_req_addr                               : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0) := (others => '0');
-    -- Translate response channel
+    -- Host translate response channel
     htr_resp_valid                             : out std_logic;
     htr_resp_ready                             : in  std_logic := '1';
     htr_resp_virt                              : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
@@ -331,7 +331,13 @@ begin
       BUS_ADDR_WIDTH            => BUS_ADDR_WIDTH,
       BUS_LEN_WIDTH             => BUS_LEN_WIDTH,
       BUS_DATA_WIDTH            => BUS_DATA_WIDTH,
-      NUM_SLAVE_PORTS           => 2
+      NUM_SLAVE_PORTS           => 2,
+      ARB_METHOD                => "FIXED";
+      MAX_OUTSTANDING           => 4,
+      SLV_REQ_SLICES            => false,
+      MST_REQ_SLICE             => false,
+      MST_DAT_SLICE             => false,
+      SLV_DAT_SLICES            => false
     )
     port map (
       bus_clk                   => bus_clk,
@@ -346,23 +352,23 @@ begin
       mst_rdat_data             => mst_rdat_data,
       mst_rdat_last             => mst_rdat_last,
 
-      bs00_rreq_valid           => dir_r.req_valid,
-      bs00_rreq_ready           => dir_r.req_ready,
-      bs00_rreq_addr            => dir_r.req_addr,
-      bs00_rreq_len             => dir_r.req_len,
-      bs00_rdat_valid           => dir_r.dat_valid,
-      bs00_rdat_ready           => dir_r.dat_ready,
-      bs00_rdat_data            => dir_r.dat_data,
-      bs00_rdat_last            => dir_r.dat_last,
+      bs00_rreq_valid           => mmu_r.req_valid,
+      bs00_rreq_ready           => mmu_r.req_ready,
+      bs00_rreq_addr            => mmu_r.req_addr,
+      bs00_rreq_len             => mmu_r.req_len,
+      bs00_rdat_valid           => mmu_r.dat_valid,
+      bs00_rdat_ready           => mmu_r.dat_ready,
+      bs00_rdat_data            => mmu_r.dat_data,
+      bs00_rdat_last            => mmu_r.dat_last,
 
-      bs01_rreq_valid           => mmu_r.req_valid,
-      bs01_rreq_ready           => mmu_r.req_ready,
-      bs01_rreq_addr            => mmu_r.req_addr,
-      bs01_rreq_len             => mmu_r.req_len,
-      bs01_rdat_valid           => mmu_r.dat_valid,
-      bs01_rdat_ready           => mmu_r.dat_ready,
-      bs01_rdat_data            => mmu_r.dat_data,
-      bs01_rdat_last            => mmu_r.dat_last
+      bs01_rreq_valid           => dir_r.req_valid,
+      bs01_rreq_ready           => dir_r.req_ready,
+      bs01_rreq_addr            => dir_r.req_addr,
+      bs01_rreq_len             => dir_r.req_len,
+      bs01_rdat_valid           => dir_r.dat_valid,
+      bs01_rdat_ready           => dir_r.dat_ready,
+      bs01_rdat_data            => dir_r.dat_data,
+      bs01_rdat_last            => dir_r.dat_last
     );
 
 end architecture;
