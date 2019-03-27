@@ -333,7 +333,7 @@ begin
       BUS_DATA_WIDTH            => BUS_DATA_WIDTH,
       NUM_SLAVE_PORTS           => 2,
       ARB_METHOD                => "FIXED",
-      MAX_OUTSTANDING           => 4,
+      MAX_OUTSTANDING           => 8,
       SLV_REQ_SLICES            => false,
       MST_REQ_SLICE             => false,
       MST_DAT_SLICE             => false,
@@ -369,6 +369,54 @@ begin
       bs01_rdat_ready           => dir_r.dat_ready,
       bs01_rdat_data            => dir_r.dat_data,
       bs01_rdat_last            => dir_r.dat_last
+    );
+
+  bus_write_arb_inst : BusWriteArbiter
+    generic map (
+      BUS_ADDR_WIDTH            => BUS_ADDR_WIDTH,
+      BUS_LEN_WIDTH             => BUS_LEN_WIDTH,
+      BUS_DATA_WIDTH            => BUS_DATA_WIDTH,
+      BUS_STROBE_WIDTH          => BUS_STROBE_WIDTH,
+      NUM_SLAVE_PORTS           => 1,
+      ARB_METHOD                => "FIXED",
+      MAX_DATA_LAG              => 2,
+      MAX_OUTSTANDING           => 8,
+      SLV_REQ_SLICES            => false,
+      MST_REQ_SLICE             => false,
+      MST_DAT_SLICE             => false,
+      SLV_DAT_SLICES            => false,
+      MST_RSP_SLICE             => false,
+      SLV_RSP_SLICES            => false
+    )
+    port map (
+      bus_clk                   => bus_clk,
+      bus_reset                 => bus_reset,
+
+      mst_wreq_valid            => mst_wreq_valid,
+      mst_wreq_ready            => mst_wreq_ready,
+      mst_wreq_addr             => mst_wreq_addr,
+      mst_wreq_len              => mst_wreq_len,
+      mst_wdat_valid            => mst_wdat_valid,
+      mst_wdat_ready            => mst_wdat_ready,
+      mst_wdat_data             => mst_wdat_data,
+      mst_wdat_strobe           => mst_wdat_strobe,
+      mst_wdat_last             => mst_wdat_last,
+      mst_resp_valid            => mst_resp_valid,
+      mst_resp_ready            => mst_resp_ready,
+      mst_resp_ok               => mst_resp_ok,
+
+      bs00_wreq_valid           => dir_w.req_valid,
+      bs00_wreq_ready           => dir_w.req_ready,
+      bs00_wreq_addr            => dir_w.req_addr,
+      bs00_wreq_len             => dir_w.req_len,
+      bs00_wdat_valid           => dir_w.dat_valid,
+      bs00_wdat_ready           => dir_w.dat_ready,
+      bs00_wdat_data            => dir_w.dat_data,
+      bs00_wdat_strobe          => dir_w.dat_strobe,
+      bs00_wdat_last            => dir_w.dat_last,
+      bs00_resp_valid           => dir_w.resp_valid,
+      bs00_resp_ready           => dir_w.resp_ready,
+      bs00_resp_ok              => dir_w.resp_ok
     );
 
 end architecture;
