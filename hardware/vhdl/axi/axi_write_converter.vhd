@@ -253,15 +253,15 @@ begin
     int_m_axi_wstrb             <= int_slv_bus_wdat_strobe;
     int_m_axi_wlast             <= int_slv_bus_wdat_last;
     int_m_axi_wvalid            <= int_slv_bus_wdat_valid;
-
-    int_m_axi_bready            <= int_slv_bus_resp_ready;
-    int_slv_bus_resp_ok         <= not int_m_axi_bresp(1);
-    int_slv_bus_resp_valid      <= int_m_axi_bvalid;
   end generate;
+  
+  -- Connect the write response channel
+  int_m_axi_bready            <= int_slv_bus_resp_ready;
+  int_slv_bus_resp_ok         <= not int_m_axi_bresp(1);
+  int_slv_bus_resp_valid      <= int_m_axi_bvalid;
 
   -- If the ratio is larger than 1, instantiate the serializer, etc..
   serialize_gen: if RATIO > 1 generate
-    -- TODO connect response channel for RATIO > 1
     -----------------------------------------------------------------------------
     -- Write Request channels
     -----------------------------------------------------------------------------
