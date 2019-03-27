@@ -540,7 +540,7 @@ begin
     BUS_LEN_WIDTH               => 1,
     BUS_DATA_WIDTH              => BUS_ADDR_WIDTH * 3,
     NUM_SLAVE_PORTS             => 2,
-    ARB_METHOD                  => "ROUND-ROBIN";
+    ARB_METHOD                  => "ROUND-ROBIN",
     MAX_OUTSTANDING             => 2,
     SLV_REQ_SLICES              => false,
     MST_REQ_SLICE               => false,
