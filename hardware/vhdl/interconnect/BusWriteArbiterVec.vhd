@@ -555,7 +555,9 @@ begin
       out_valid(0)                      => bms_wdat_valid,
       out_valid(1)                      => idxC_valid,
       out_ready(0)                      => bms_wdat_ready,
-      out_ready(1)                      => idxC_ready
+      out_ready(1)                      => idxC_ready,
+      out_enable(0)                     => '1',
+      out_enable(1)                     => mux_wdat_last
     );
   
   bms_wdat_strobe                       <= mux_wdat_strobe;  
