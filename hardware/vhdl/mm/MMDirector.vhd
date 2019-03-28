@@ -1068,9 +1068,9 @@ begin
       -- The number of beats in the burst
       v.beat         := to_unsigned(
                         work.Utils.min(
-                          BUS_BURST_MAX_LEN - 1,
+                          BUS_BURST_MAX_LEN,
                           int(div_ceil(
-                            to_unsigned(PT_SIZE, log2ceil(PT_SIZE+1)) - PT_OFFSET(v.addr) - 1,
+                            to_unsigned(PT_SIZE, log2ceil(PT_SIZE+1)) - PT_OFFSET(v.addr),
                             BUS_DATA_BYTES))
                         ),
                         v.beat'length);
@@ -1084,13 +1084,13 @@ begin
       bus_wdat_valid  <= '1';
       bus_wdat_data   <= (others => '0');
       bus_wdat_strobe <= (others => '1');
-      if v.beat = 0 then
+      if v.beat = 1 then
         bus_wdat_last <= '1';
       else
         bus_wdat_last <= '0';
       end if;
       if bus_wdat_ready = '1' then
-        if v.beat = 0 then
+        if v.beat = 1 then
           -- This is the last beat
           if PT_OFFSET(v.addr) = 0 then
             -- Set return and restore addr
