@@ -97,9 +97,9 @@ int main(int argc, char ** argv) {
   malloc_sizes.push_back(1024L*1024*1024* 32-1); // 32 GB, full L2 page table, one less
   malloc_sizes.push_back(1024L*1024*1024* 32);   // 32 GB, full L2 page table, exact
   malloc_sizes.push_back(1024L*1024*1024* 32+1); // 32 GB, full L2 page table, one more
-//  malloc_sizes.push_back(1024L*1024*1024* 64);
-//  malloc_sizes.push_back(1024L*1024*1024* 128);
-//  malloc_sizes.push_back(1024L*1024*1024* 256);
+  malloc_sizes.push_back(1024L*1024*1024* 64);
+  malloc_sizes.push_back(1024L*1024*1024* 128);
+  malloc_sizes.push_back(1024L*1024*1024* 256);
 //  malloc_sizes.push_back(1024L*1024*1024* 512);
 //  malloc_sizes.push_back(1024L*1024*1024* 1024); //  1 TB
   int n_mallocs = malloc_sizes.size();
