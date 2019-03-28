@@ -124,6 +124,9 @@ int main(int argc, char ** argv) {
     maddr[i] = fmalloc(platform, malloc_sizes[i]);
     t.stop();
     t_alloc[i] = t.seconds();
+    int throughput = malloc_sizes[i] / t.seconds() / 1024/1024/1024;
+    std::cout << "Alloc[" << i << "]: " << throughput << " GB/s";
+    std::cout << " (" << malloc_sizes[i] << " B)" << std::endl;
   }
   for (int i = 0; i < n_mallocs; i++) {
     std::cout << "device malloc of " << std::setw(12) << std::hex << malloc_sizes[i] << " bytes at " << maddr[i] << " " << std::dec;
@@ -154,6 +157,9 @@ int main(int argc, char ** argv) {
         t.stop();
         t_write[i] = t.seconds();
         std::cerr << "done" << std::endl;
+        int throughput = malloc_sizes[i] / t.seconds() / 1024/1024;
+        std::cout << "H2D[" << i << "]: " << throughput << " MB/s";
+        std::cout << " (" << malloc_sizes[i] << " B)" << std::endl;
       }
     } else {
       source_buffers.push_back((unsigned char*) nullptr);
@@ -178,6 +184,9 @@ int main(int argc, char ** argv) {
         t.stop();
         t_read[i] = t.seconds();
         std::cerr << "done" << std::endl;
+        int throughput = malloc_sizes[i] / t.seconds() / 1024/1024;
+        std::cout << "D2H[" << i << "]: " << throughput << " MB/s";
+        std::cout << " (" << malloc_sizes[i] << " B)" << std::endl;
         if (memcmp(check_buffers.back(), source_buffers.at(i), malloc_sizes[i])) {
           std::cerr << "ERROR: Data does not match for buffer " << i << "." << std::endl;
           status = EXIT_FAILURE;
