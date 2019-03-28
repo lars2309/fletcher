@@ -232,22 +232,6 @@ begin
       bus_resp_ok                 => dir_w.resp_ok
     );
 
-  -- Only one writer, no arbiter needed for write channel.
-  mst_wreq_valid   <= dir_w.req_valid;
-  dir_w.req_ready  <= mst_wreq_ready;
-  mst_wreq_addr    <= dir_w.req_addr;
-  mst_wreq_len     <= dir_w.req_len;
-
-  mst_wdat_valid   <= dir_w.dat_valid;
-  dir_w.dat_ready  <= mst_wdat_ready;
-  mst_wdat_data    <= dir_w.dat_data;
-  mst_wdat_strobe  <= dir_w.dat_strobe;
-  mst_wdat_last    <= dir_w.dat_last;
-
-  dir_w.resp_valid <= mst_resp_valid;
-  mst_resp_ready   <= dir_w.resp_ready;
-  dir_w.resp_ok    <= mst_resp_ok;
-
   mm_hif_inst : MMHostInterface
     generic map (
       MEM_REGIONS                 => MEM_REGIONS
