@@ -38,13 +38,13 @@ entity MMTranslator is
     slv_req_ready               : out std_logic;
     slv_req_addr                : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
     slv_req_len                 : in  std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
-    slv_req_user                : in  std_logic_vector(USER_WIDTH-1 downto 0);
+    slv_req_user                : in  std_logic_vector(USER_WIDTH-1 downto 0) := (others => '0');
     -- Master request channel
     mst_req_valid               : out std_logic;
     mst_req_ready               : in  std_logic;
     mst_req_addr                : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
     mst_req_len                 : out std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
-    mst_req_user                : out std_logic_vector(USER_WIDTH-1 downto 0) := (others => '0');
+    mst_req_user                : out std_logic_vector(USER_WIDTH-1 downto 0);
 
     -- Translate request channel
     req_valid                   : out std_logic;
@@ -73,10 +73,11 @@ architecture Behavioral of MMTranslator is
   end record;
 
   type reg_type is record
-    req_cur  : std_logic;
-    req_next : std_logic;
-    map_cur  : map_type;
-    map_next : map_type;
+    req_cur     : std_logic;
+    req_next    : std_logic;
+    do_req_next : std_logic;
+    map_cur     : map_type;
+    map_next    : map_type;
   end record;
 
   signal r : reg_type;
@@ -117,6 +118,7 @@ begin
 
     resp_ready           <= '1';
 
+    -- Handle lookup responses.
     if resp_valid = '1' then
       if v.req_cur = '1' then
         v.req_cur        := '0';
@@ -126,6 +128,9 @@ begin
         v.map_cur.phys   := resp_phys;
         v.map_cur.mask   := resp_mask;
       else
+        v.req_next       := '0';
+        v.do_req_next    := '0';
+
         v.map_next.valid := '1';
         v.map_next.virt  := resp_virt;
         v.map_next.phys  := resp_phys;
@@ -133,6 +138,16 @@ begin
       end if;
     end if;
 
+    -- Preemptively request table walk for next page.
+    if v.do_req_next = '1' and v.req_next = '0' then
+      req_valid          <= '1';
+      req_addr           <= slv(u(v.map_cur.virt) + LOG2_TO_UNSIGNED(PAGE_SIZE_LOG2));
+      if req_ready = '1' then
+        v.req_next       := '1';
+      end if;
+    end if;
+
+    -- Translate bus requests.
     if slv_req_valid = '1' then
       if u(slv_req_addr and VM_MASK) /= VM_BASE then
         -- Pass through address not within virtual address space.
@@ -146,6 +161,18 @@ begin
         mst_req_addr     <= v.map_cur.phys or (slv_req_addr and not v.map_cur.mask);
         mst_req_valid    <= '1';
         slv_req_ready    <= mst_req_ready;
+
+        -- Close to edge of current map? -> Look up next page.
+        -- When current translation is the highest page in the current mapping.
+        -- Create new mask with '1' bits indicating the address bits that have
+        -- to be '1' for the address to be in the highest page of the current
+        -- mapping. Then check whether these bits are indeed '1' (inverted check).
+        if v.map_next.valid = '0'
+          and ( 0 = (
+            align_beq(u(not v.map_cur.mask), PAGE_SIZE_LOG2) and u(not slv_req_addr) ) )
+        then
+          v.do_req_next  := '1';
+        end if;
 
       elsif v.map_next.valid = '1'
         and (slv_req_addr and v.map_cur.mask) = v.map_cur.virt
