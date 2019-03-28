@@ -71,6 +71,8 @@ file copy -force $FLETCHER_HARDWARE_DIR/vhdl/interconnect/Interconnect.vhd      
 file copy -force $FLETCHER_HARDWARE_DIR/vhdl/interconnect/BusReadArbiter.vhd         $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/vhdl/interconnect/BusReadArbiterVec.vhd      $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/vhdl/interconnect/BusReadBuffer.vhd          $TARGET_DIR
+file copy -force $FLETCHER_HARDWARE_DIR/vhdl/interconnect/BusWriteArbiter.vhd        $TARGET_DIR
+file copy -force $FLETCHER_HARDWARE_DIR/vhdl/interconnect/BusWriteArbiterVec.vhd     $TARGET_DIR
 
 file copy -force $FLETCHER_HARDWARE_DIR/vhdl/columns/ColumnReaderArb.vhd             $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/vhdl/columns/ColumnReaderLevel.vhd           $TARGET_DIR
