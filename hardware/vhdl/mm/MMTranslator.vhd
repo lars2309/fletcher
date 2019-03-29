@@ -25,6 +25,7 @@ entity MMTranslator is
     VM_BASE                     : unsigned(ADDR_WIDTH_LIMIT-1 downto 0) := (others => '0');
     PT_ENTRIES_LOG2             : natural := 64/2;
     PAGE_SIZE_LOG2              : natural := 0;
+    PREFETCH_LOG2               : natural := 22;
     BUS_ADDR_WIDTH              : natural := 64;
     BUS_LEN_WIDTH               : natural := 8;
     USER_WIDTH                  : natural := 1
@@ -93,6 +94,7 @@ begin
       if reset = '1' then
         r.req_cur        <= '0';
         r.req_next       <= '0';
+        r.do_req_next    <= '0';
         r.map_cur.valid  <= '0';
         r.map_next.valid <= '0';
       end if;
@@ -141,7 +143,7 @@ begin
     -- Preemptively request table walk for next page.
     if v.do_req_next = '1' and v.req_next = '0' then
       req_valid          <= '1';
-      req_addr           <= slv(u(v.map_cur.virt) + LOG2_TO_UNSIGNED(PAGE_SIZE_LOG2));
+      req_addr           <= slv(u(v.map_cur.virt) + u(not v.map_cur.mask) + 1);
       if req_ready = '1' then
         v.req_next       := '1';
       end if;
@@ -169,13 +171,13 @@ begin
         -- mapping. Then check whether these bits are indeed '1' (inverted check).
         if v.map_next.valid = '0'
           and ( 0 = (
-            align_beq(u(not v.map_cur.mask), PAGE_SIZE_LOG2) and u(not slv_req_addr) ) )
+            align_beq(u(not v.map_cur.mask), PREFETCH_LOG2) and u(not slv_req_addr) ) )
         then
           v.do_req_next  := '1';
         end if;
 
       elsif v.map_next.valid = '1'
-        and (slv_req_addr and v.map_cur.mask) = v.map_cur.virt
+        and (slv_req_addr and v.map_next.mask) = v.map_next.virt
       then
         -- Match on next stored map, move to current map.
         v.map_cur        := v.map_next;
@@ -184,7 +186,7 @@ begin
         mst_req_valid    <= '1';
         slv_req_ready    <= mst_req_ready;
 
-      elsif v.req_cur = '0' then
+      elsif v.req_cur = '0' and v.req_next = '0' then
         -- No match, request table walk.
         req_valid        <= '1';
         req_addr         <= slv_req_addr;

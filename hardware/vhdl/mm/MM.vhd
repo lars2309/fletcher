@@ -234,6 +234,7 @@ package MM is
       VM_BASE                     : unsigned(ADDR_WIDTH_LIMIT-1 downto 0) := (others => '0');
       PT_ENTRIES_LOG2             : natural := 64/2;
       PAGE_SIZE_LOG2              : natural := 0;
+      PREFETCH_LOG2               : natural := 22;
       BUS_ADDR_WIDTH              : natural := 64;
       BUS_LEN_WIDTH               : natural := 8;
       USER_WIDTH                  : natural := 1
