@@ -45,7 +45,7 @@ module test_malloc();
 
 import tb_type_defines_pkg::*;
 
-int num_buf_bytes = 192;
+int num_buf_bytes = 1024 * 4 * 10;
 
 int         error_count;
 int         timeout_count;
@@ -83,7 +83,7 @@ initial begin
   tb.nsec_delay(27000);
 
   // Host data
-  `include "intlist.sv"
+  `include "data.sv"
 
   $display("[%t] : Starting tests", $realtime);
 
