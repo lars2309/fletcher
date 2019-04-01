@@ -543,8 +543,8 @@ begin
     ARB_METHOD                  => "ROUND-ROBIN",
     MAX_OUTSTANDING             => 2,
     SLV_REQ_SLICES              => false,
-    MST_REQ_SLICE               => false,
-    MST_DAT_SLICE               => false,
+    MST_REQ_SLICE               => true,
+    MST_DAT_SLICE               => true,
     SLV_DAT_SLICES              => false
   )
   port map (
