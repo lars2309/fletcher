@@ -349,6 +349,11 @@ begin
   bus_reset <= '1' when bus_reset_n = '0' else '0';
 
   axi_top_inst : axi_top
+  generic map (
+    NUM_ARROW_BUFFERS           => 0,
+    NUM_USER_REGS               => 0,
+    NUM_REGS                    => 26 + 0
+  )
   port map (
     acc_clk                     => acc_clk,
     acc_reset                   => acc_reset,

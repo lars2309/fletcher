@@ -253,9 +253,9 @@ begin
       resp_valid                  => resp_valid,
       resp_ready                  => resp_ready,
 
-      regs_in                     => regs_in (9*REG_WIDTH-1 downto 0),
-      regs_out                    => regs_out(9*REG_WIDTH-1 downto 0),
-      regs_out_en                 => regs_out_en(9-1 downto 0)
+      regs_in                     => regs_in ((MM_H2D_REG_OFFSET+9)*REG_WIDTH-1 downto MM_H2D_REG_OFFSET*REG_WIDTH),
+      regs_out                    => regs_out((MM_H2D_REG_OFFSET+9)*REG_WIDTH-1 downto MM_H2D_REG_OFFSET*REG_WIDTH),
+      regs_out_en                 => regs_out_en(MM_H2D_REG_OFFSET+9-1 downto MM_H2D_REG_OFFSET)
     );
 
   mmu_inst : MMWalker

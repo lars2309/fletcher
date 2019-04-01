@@ -36,7 +36,18 @@
 `define REG_FIRST_IDX       4+0
 `define REG_LAST_IDX        4+1
 
-`define NUM_REGISTERS       10
+// Memory management interface (H2D, request and answer)
+`define FLETCHER_REG_MM_HDR_ADDR_LO  6
+`define FLETCHER_REG_MM_HDR_ADDR_HI  7
+`define FLETCHER_REG_MM_HDR_SIZE_LO  8
+`define FLETCHER_REG_MM_HDR_SIZE_HI  9
+`define FLETCHER_REG_MM_HDR_REGION  10
+`define FLETCHER_REG_MM_HDR_CMD     11
+`define FLETCHER_REG_MM_HDA_ADDR_LO 12
+`define FLETCHER_REG_MM_HDA_ADDR_HI 13
+`define FLETCHER_REG_MM_HDA_STATUS  14
+
+`define NUM_REGISTERS       25
 
 // Offset buffer address in host memory
 `define HOST_ADDR           64'h0000000000000000
@@ -88,35 +99,35 @@ initial begin
   $display("[%t] : Starting tests", $realtime);
 
   // Set region to 1
-  tb.poke_bar1(.addr(4 * 4), .data(32'h0000_0001));
+  tb.poke_bar1(.addr(4 * `FLETCHER_REG_MM_HDR_REGION), .data(32'h0000_0001));
 
   // Set size to 12 MB
-  tb.poke_bar1(.addr(4 * 2), .data(32'h00c0_0000));
-  tb.poke_bar1(.addr(4 * 3), .data(32'h0000_0000));
+  tb.poke_bar1(.addr(4 * `FLETCHER_REG_MM_HDR_SIZE_LO), .data(32'h00c0_0000));
+  tb.poke_bar1(.addr(4 * `FLETCHER_REG_MM_HDR_SIZE_HI), .data(32'h0000_0000));
 
   // Allocate
-  tb.poke_bar1(.addr(4 * 5), .data(32'h0000_0003));
+  tb.poke_bar1(.addr(4 * `FLETCHER_REG_MM_HDR_CMD), .data(32'h0000_0003));
 
   // Wait for completion
 
-  // Poll status at an interval of 2000 nsec
+  // Poll status at an interval of 1000 nsec
   // For the real thing, you should probably increase this to put 
   // less stress on the PCI interface
   do
     begin
-      tb.nsec_delay(2000);
-      tb.peek_bar1(.addr(4 * 8), .data(read_data));
+      tb.nsec_delay(1000);
+      tb.peek_bar1(.addr(4 * `FLETCHER_REG_MM_HDA_STATUS), .data(read_data));
       $display("[%t] : Status: %H", $realtime, read_data);
     end
   while(read_data[0] !== 1);
 
   // Get address
-  tb.peek_bar1(.addr(4 * 6), .data(read_data_lo));
-  tb.peek_bar1(.addr(4 * 7), .data(read_data_hi));
+  tb.peek_bar1(.addr(4 * `FLETCHER_REG_MM_HDA_ADDR_LO), .data(read_data_lo));
+  tb.peek_bar1(.addr(4 * `FLETCHER_REG_MM_HDA_ADDR_HI), .data(read_data_hi));
   $display("[%t] : malloc of size 12MB at %H_%H", $realtime, read_data_hi, read_data_lo);
 
   // Reset response
-  tb.poke_bar1(.addr(4 * 8), .data(32'h0000_0000));
+  tb.poke_bar1(.addr(4 * `FLETCHER_REG_MM_HDA_STATUS), .data(32'h0000_0000));
 
 
 
@@ -220,35 +231,35 @@ initial begin
 // Skip large allocation
 if (0 == 1) begin
   // Set region to 1
-  tb.poke_bar1(.addr(4 * 4), .data(32'h0000_0001));
+  tb.poke_bar1(.addr(4 * `FLETCHER_REG_MM_HDR_REGION), .data(32'h0000_0001));
 
   // Set size to 34 GB
-  tb.poke_bar1(.addr(4 * 2), .data(32'h8000_0000));
-  tb.poke_bar1(.addr(4 * 3), .data(32'h0000_0008));
+  tb.poke_bar1(.addr(4 * `FLETCHER_REG_MM_HDR_ADDR_LO), .data(32'h8000_0000));
+  tb.poke_bar1(.addr(4 * `FLETCHER_REG_MM_HDR_ADDR_LO), .data(32'h0000_0008));
 
   // Allocate
-  tb.poke_bar1(.addr(4 * 5), .data(32'h0000_0003));
+  tb.poke_bar1(.addr(4 * `FLETCHER_REG_MM_HDR_CMD), .data(32'h0000_0003));
 
   // Wait for completion
 
-  // Poll status at an interval of 2000 nsec
+  // Poll status at an interval of 1000 nsec
   // For the real thing, you should probably increase this to put 
   // less stress on the PCI interface
   do
     begin
-      tb.nsec_delay(2000);
-      tb.peek_bar1(.addr(4 * 8), .data(read_data));
+      tb.nsec_delay(1000);
+      tb.peek_bar1(.addr(4 * `FLETCHER_REG_MM_HDA_STATUS), .data(read_data));
       $display("[%t] : Status: %H", $realtime, read_data);
     end
   while(read_data[0] !== 1);
 
   // Get address
-  tb.peek_bar1(.addr(4 * 6), .data(read_data_lo));
-  tb.peek_bar1(.addr(4 * 7), .data(read_data_hi));
+  tb.peek_bar1(.addr(4 * `FLETCHER_REG_MM_HDA_ADDR_LO), .data(read_data_lo));
+  tb.peek_bar1(.addr(4 * `FLETCHER_REG_MM_HDA_ADDR_HI), .data(read_data_hi));
   $display("[%t] : malloc of size 34GB at %H_%H", $realtime, read_data_hi, read_data_lo);
 
   // Reset response
-  tb.poke_bar1(.addr(4 * 8), .data(32'h0000_0000));
+  tb.poke_bar1(.addr(4 * `FLETCHER_REG_MM_HDA_STATUS), .data(32'h0000_0000));
 end
 
   // Report pass/fail status

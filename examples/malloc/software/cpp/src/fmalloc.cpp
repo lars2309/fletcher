@@ -46,33 +46,6 @@
 
 using fletcher::Timer;
 
-
-uint64_t fmalloc(std::shared_ptr<fletcher::Platform> platform, uint64_t size) {
-  // Set region to 1
-  platform->writeMMIO(4, 1);
-
-  // Set size
-  uint32_t rv = size;
-  platform->writeMMIO(2, rv);
-  rv = size >> 32;
-  platform->writeMMIO(3, rv);
-
-  // Allocate
-  platform->writeMMIO(5, 3);
-
-  // Wait for completion
-  do {
-//    usleep(1);
-    platform->readMMIO(8, &rv);
-  } while ((rv & 1) != 1);
-
-  uint64_t address;
-  platform->readMMIO64(6, &address);
-  rv = 0;
-  platform->writeMMIO(8, rv);
-  return address;
-}
-
 double calc_sum(const std::vector<double> &values) {
   return accumulate(values.begin(), values.end(), 0.0);
 }
@@ -122,15 +95,18 @@ int main(int argc, char ** argv) {
   std::vector<double> t_read(n_mallocs);
   std::vector<uint64_t> maddr(n_mallocs);
 
+  // Allocate memory on device
   for (int i = 0; i < n_mallocs; i++) {
     t.start();
-    maddr[i] = fmalloc(platform, malloc_sizes[i]);
+    platform->deviceMalloc(&maddr[i], malloc_sizes[i]);
     t.stop();
     t_alloc[i] = t.seconds();
     int throughput = malloc_sizes[i] / t.seconds() / 1024/1024/1024;
     std::cout << "Alloc[" << i << "]: " << throughput << " GB/s";
     std::cout << " (" << malloc_sizes[i] << " B)" << std::endl;
   }
+
+  // Check allocations
   for (int i = 0; i < n_mallocs; i++) {
     std::cout << "device malloc of " << std::setw(12) << std::hex << malloc_sizes[i] << " bytes at " << maddr[i] << " " << std::dec;
     PRINT_TIME(t_alloc[i], "");

@@ -14,6 +14,8 @@ package MM is
   constant PTE_BOUNDARY     : natural := 2;
   constant PTE_SEGMENT      : natural := 3;
 
+  constant MM_H2D_REG_OFFSET : natural := 6;
+
   function LOG2_TO_UNSIGNED (v : natural)
                              return unsigned;
 
