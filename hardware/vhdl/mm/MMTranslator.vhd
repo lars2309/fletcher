@@ -186,8 +186,10 @@ begin
         mst_req_valid    <= '1';
         slv_req_ready    <= mst_req_ready;
 
-      elsif v.req_cur = '0' and v.req_next = '0' then
+      elsif v.req_cur = '0' and v.do_req_next = '0' then
         -- No match, request table walk.
+        -- Check on do_req_next is required to prevent this from changing
+        -- an ongoing request.
         req_valid        <= '1';
         req_addr         <= slv_req_addr;
         if req_ready = '1' then
