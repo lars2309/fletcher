@@ -209,7 +209,6 @@ begin
             ),
             PT_SIZE_LOG2
           );
-        bus_rreq_valid     <= '1';
         bus_rreq_len       <= slv(to_unsigned(1, bus_rreq_len'length));
         bus_rreq_addr      <= slv(
             ADDR_BUS_ALIGN(
@@ -217,9 +216,28 @@ begin
                 v.addr_pt,
                 v.addr,
                 2)));
-        if bus_rreq_ready = '1' then
-          v.state          := LOOKUP_L2_DATA;
+        if EXTRACT(
+              unsigned(bus_rdat_data),
+              BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr, 2))) + PTE_PRESENT,
+              1
+            ) = "1"
+        then
+          bus_rreq_valid   <= '1';
+          if bus_rreq_ready = '1' then
+            v.state        := LOOKUP_L2_DATA;
+            bus_rdat_ready <= '1';
+          end if;
+
+        else
+          -- L1 entry is not present.
+          -- TODO: handle mapped, but not present L1 entry. Should not occur in current implementation.
           bus_rdat_ready   <= '1';
+          -- Page is not mapped, return some default mapping.
+          resp_valid       <= '1';
+          resp_virt        <= slv(v.addr);
+          resp_phys        <= (others => '0');
+          -- Create mask for single page
+          resp_mask        <= std_logic_vector(shift_left(to_signed(-1, BUS_ADDR_WIDTH), PAGE_SIZE_LOG2));
         end if;
       end if;
 
@@ -248,14 +266,27 @@ begin
             bus_rdat_ready <= '1';
           end if;
 
-        else
-          -- Page is not present
+        elsif EXTRACT(
+              unsigned(bus_rdat_data),
+              BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr, 2))) + PTE_MAPPED,
+              1
+            ) = "1"
+        then
+          -- Page is not present, but is mapped
           dir_req_valid    <= '1';
           dir_req_addr     <= slv(v.addr);
           if dir_req_ready = '1' then
             v.state        := REQUEST_MAPPING;
             bus_rdat_ready <= '1';
           end if;
+
+        else
+          -- Page is not mapped, return some default mapping.
+          resp_valid       <= '1';
+          resp_virt        <= slv(v.addr);
+          resp_phys        <= (others => '0');
+          -- Create mask for single page
+          resp_mask        <= std_logic_vector(shift_left(to_signed(-1, BUS_ADDR_WIDTH), PAGE_SIZE_LOG2));
         end if;
       end if;
 
