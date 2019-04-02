@@ -218,7 +218,7 @@ begin
                 2)));
         if EXTRACT(
               unsigned(bus_rdat_data),
-              BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr, 2))) + PTE_PRESENT,
+              BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, v.addr, 1))) + PTE_PRESENT,
               1
             ) = "1"
         then
@@ -231,13 +231,16 @@ begin
         else
           -- L1 entry is not present.
           -- TODO: handle mapped, but not present L1 entry. Should not occur in current implementation.
-          bus_rdat_ready   <= '1';
           -- Page is not mapped, return some default mapping.
           resp_valid       <= '1';
           resp_virt        <= slv(v.addr);
           resp_phys        <= (others => '0');
           -- Create mask for single page
           resp_mask        <= std_logic_vector(shift_left(to_signed(-1, BUS_ADDR_WIDTH), PAGE_SIZE_LOG2));
+          if resp_ready= '1' then
+            v.state        := IDLE;
+            bus_rdat_ready <= '1';
+          end if;
         end if;
       end if;
 
@@ -287,6 +290,10 @@ begin
           resp_phys        <= (others => '0');
           -- Create mask for single page
           resp_mask        <= std_logic_vector(shift_left(to_signed(-1, BUS_ADDR_WIDTH), PAGE_SIZE_LOG2));
+          if resp_ready= '1' then
+            v.state        := IDLE;
+            bus_rdat_ready <= '1';
+          end if;
         end if;
       end if;
 
