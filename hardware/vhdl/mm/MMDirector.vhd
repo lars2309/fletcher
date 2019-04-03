@@ -995,14 +995,14 @@ begin
       -- Find a free spot for a PT
       -- Use addr_pt to store addr
       v.addr_pt      := v.addr;
-      v.addr         := PT_ADDR;
-      bus_rreq_addr  <= slv(PAGE_BASE(v.addr));
+      bus_rreq_addr  <= slv(PAGE_BASE(PT_ADDR));
       bus_rreq_len   <= slv(to_unsigned(1, bus_rreq_len'length));
       -- TODO implement finding empty spots past BUS_DATA_WIDTH entries
       if int_bus_dirty = '0' then
         bus_rreq_valid <= '1';
         if bus_rreq_ready = '1' then
           v.state_stack(0) := PT_NEW_CHECK_BM;
+          v.addr           := PT_ADDR;
         end if;
       end if;
 
