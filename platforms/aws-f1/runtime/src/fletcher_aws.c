@@ -353,9 +353,9 @@ fstatus_t platformDeviceMalloc(da_t *device_address, int64_t size) {
 
   } else {
     // Get address from FPGA
-    platformReadMMIO(FLETCHER_REG_MM_HDA_ADDR_LO, regval);
+    platformReadMMIO(FLETCHER_REG_MM_HDA_ADDR_LO, &regval);
     *device_address = regval;
-    platformReadMMIO(FLETCHER_REG_MM_HDA_ADDR_HI, regval);
+    platformReadMMIO(FLETCHER_REG_MM_HDA_ADDR_HI, &regval);
     *device_address = (*device_address << 32) | regval;
 
     // Acknowledge that response was read
