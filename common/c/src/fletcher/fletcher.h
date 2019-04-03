@@ -83,6 +83,8 @@ typedef union {
 #define FLETCHER_REG_STATUS_BUSY    1
 #define FLETCHER_REG_STATUS_DONE    2
 
+#define FLETCHER_REG_MM_DEFAULT_REGION 1
+
 #define FLETCHER_REG_MM_CMD_ALLOC   (1|(1<<1))
 #define FLETCHER_REG_MM_CMD_FREE    (1|(1<<2))
 #define FLETCHER_REG_MM_CMD_REALLOC (1|(1<<3))
