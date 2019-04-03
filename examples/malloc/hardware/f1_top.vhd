@@ -547,10 +547,10 @@ begin
     NUM_SLAVE_PORTS             => 2,
     ARB_METHOD                  => "ROUND-ROBIN",
     MAX_OUTSTANDING             => 2,
-    SLV_REQ_SLICES              => false,
+    SLV_REQ_SLICES              => true,
     MST_REQ_SLICE               => true,
     MST_DAT_SLICE               => true,
-    SLV_DAT_SLICES              => false
+    SLV_DAT_SLICES              => true
   )
   port map (
     bus_clk                     => bus_clk,
