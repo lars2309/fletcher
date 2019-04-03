@@ -329,26 +329,26 @@ fstatus_t platformTerminate(void *arg) {
 
 fstatus_t platformDeviceMalloc(da_t *device_address, int64_t size) {
   // Set default region
-  platform->writeMMIO(FLETCHER_REG_MM_HDR_REGION, FLETCHER_REG_MM_DEFAULT_REGION);
+  writeMMIO(FLETCHER_REG_MM_HDR_REGION, FLETCHER_REG_MM_DEFAULT_REGION);
 
   // Set size
   uint32_t regval = size;
-  platform->writeMMIO(FLETCHER_REG_MM_HDR_SIZE_LO, regval);
+  writeMMIO(FLETCHER_REG_MM_HDR_SIZE_LO, regval);
   regval = size >> 32;
-  platform->writeMMIO(FLETCHER_REG_MM_HDR_SIZE_HI, regval);
+  writeMMIO(FLETCHER_REG_MM_HDR_SIZE_HI, regval);
 
   // Allocate
-  platform->writeMMIO(FLETCHER_REG_MM_HDR_CMD, FLETCHER_REG_MM_CMD_ALLOC);
+  writeMMIO(FLETCHER_REG_MM_HDR_CMD, FLETCHER_REG_MM_CMD_ALLOC);
 
   // Wait for completion
   do {
 //    usleep(1);
-    platform->readMMIO(FLETCHER_REG_MM_HDA_STATUS, &regval);
+    readMMIO(FLETCHER_REG_MM_HDA_STATUS, &regval);
   } while ((regval & FLETCHER_REG_MM_STATUS_DONE) == 0);
 
-  platform->readMMIO64(FLETCHER_REG_MM_HDA_ADDR_LO, device_address);
+  readMMIO64(FLETCHER_REG_MM_HDA_ADDR_LO, device_address);
   // Acknowledge that response was read
-  platform->writeMMIO(FLETCHER_REG_MM_HDA_STATUS, FLETCHER_REG_MM_HDA_STATUS_ACK);
+  writeMMIO(FLETCHER_REG_MM_HDA_STATUS, FLETCHER_REG_MM_HDA_STATUS_ACK);
 
   debug_print("[FLETCHER_AWS] Allocating device memory.    [device] 0x%016lX (%10lu bytes).\n",
               (uint64_t) aws_state.buffer_ptr,
