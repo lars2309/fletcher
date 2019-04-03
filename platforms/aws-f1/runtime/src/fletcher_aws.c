@@ -329,36 +329,42 @@ fstatus_t platformTerminate(void *arg) {
 
 fstatus_t platformDeviceMalloc(da_t *device_address, int64_t size) {
   // Set default region
-  writeMMIO(FLETCHER_REG_MM_HDR_REGION, FLETCHER_REG_MM_DEFAULT_REGION);
+  platformWriteMMIO(FLETCHER_REG_MM_HDR_REGION, FLETCHER_REG_MM_DEFAULT_REGION);
 
   // Set size
   uint32_t regval = size;
-  writeMMIO(FLETCHER_REG_MM_HDR_SIZE_LO, regval);
+  platformWriteMMIO(FLETCHER_REG_MM_HDR_SIZE_LO, regval);
   regval = size >> 32;
-  writeMMIO(FLETCHER_REG_MM_HDR_SIZE_HI, regval);
+  platformWriteMMIO(FLETCHER_REG_MM_HDR_SIZE_HI, regval);
 
   // Allocate
-  writeMMIO(FLETCHER_REG_MM_HDR_CMD, FLETCHER_REG_MM_CMD_ALLOC);
+  platformWriteMMIO(FLETCHER_REG_MM_HDR_CMD, FLETCHER_REG_MM_CMD_ALLOC);
 
   // Wait for completion
   do {
 //    usleep(1);
-    readMMIO(FLETCHER_REG_MM_HDA_STATUS, &regval);
+    platformReadMMIO(FLETCHER_REG_MM_HDA_STATUS, &regval);
   } while ((regval & FLETCHER_REG_MM_STATUS_DONE) == 0);
-
-  readMMIO64(FLETCHER_REG_MM_HDA_ADDR_LO, device_address);
-  // Acknowledge that response was read
-  writeMMIO(FLETCHER_REG_MM_HDA_STATUS, FLETCHER_REG_MM_HDA_STATUS_ACK);
-
-  debug_print("[FLETCHER_AWS] Allocating device memory.    [device] 0x%016lX (%10lu bytes).\n",
-              (uint64_t) aws_state.buffer_ptr,
-              size);
 
   // Check status of returned allocation
   if ((regval & FLETCHER_REG_MM_STATUS_OK) == 0) {
     *device_address = D_NULLPTR;
     return FLETCHER_STATUS_ERROR;
+
   } else {
+    // Get address from FPGA
+    platformReadMMIO(FLETCHER_REG_MM_HDA_ADDR_LO, regval);
+    *device_address = regval;
+    platformReadMMIO(FLETCHER_REG_MM_HDA_ADDR_HI, regval);
+    *device_address = (*device_address << 32) | regval;
+
+    // Acknowledge that response was read
+    platformWriteMMIO(FLETCHER_REG_MM_HDA_STATUS, FLETCHER_REG_MM_HDA_STATUS_ACK);
+
+    debug_print("[FLETCHER_AWS] Allocating device memory.    [device] 0x%016lX (%10lu bytes).\n",
+                (uint64_t) aws_state.buffer_ptr,
+                size);
+
     return FLETCHER_STATUS_OK;
   }
 }
