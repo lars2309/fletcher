@@ -145,19 +145,20 @@ initial begin
     .len(num_buf_bytes)
   );
 
-  // Also write into second and third page
+  // Also write into second and third page. Use an offset into the data,
+  // so that the data is not identical for each page.
   tb.que_buffer_to_cl(
     .chan(0),
-    .src_addr(host_buffer_address),
+    .src_addr(host_buffer_address+64),
     .cl_addr(cl_buffer_address + 1024*1024*4),
-    .len(num_buf_bytes)
+    .len(num_buf_bytes-64)
   );
 
   tb.que_buffer_to_cl(
     .chan(0),
-    .src_addr(host_buffer_address),
+    .src_addr(host_buffer_address+128),
     .cl_addr(cl_buffer_address + 1024*1024*8),
-    .len(num_buf_bytes)
+    .len(num_buf_bytes-128)
   );
 
   // Start transfers of data to CL DDR
@@ -190,21 +191,21 @@ initial begin
   // Queue the data movement
   tb.que_cl_to_buffer(
     .chan(0),
-    .dst_addr(host_buffer_address),
+    .dst_addr(host_buffer_address + 1024*1024*4),
     .cl_addr(cl_buffer_address),
     .len(num_buf_bytes)
   );
   tb.que_cl_to_buffer(
     .chan(0),
-    .dst_addr(host_buffer_address),
+    .dst_addr(host_buffer_address + 1024*1024*8),
     .cl_addr(cl_buffer_address + 1024*1024*4),
-    .len(num_buf_bytes)
+    .len(num_buf_bytes-64)
   );
   tb.que_cl_to_buffer(
     .chan(0),
-    .dst_addr(host_buffer_address),
+    .dst_addr(host_buffer_address + 1024*1024*12),
     .cl_addr(cl_buffer_address + 1024*1024*8),
-    .len(num_buf_bytes)
+    .len(num_buf_bytes-128)
   );
 
   // Start transfers of data from CL DDR
@@ -227,6 +228,18 @@ initial begin
     error_count++;
   end
   $display("[%t] : Read complete", $realtime);
+
+  for (int i=0; i<num_buf_bytes; i++) begin
+    if (tb.hm_get_byte(i    ) != tb.hm_get_byte(i + 1024*1024*4)) begin
+      error_count++;
+    end
+    if (tb.hm_get_byte(i+ 64) != tb.hm_get_byte(i + 1024*1024*8)) begin
+      error_count++;
+    end
+    if (tb.hm_get_byte(i+128) != tb.hm_get_byte(i + 1024*1024*12)) begin
+      error_count++;
+    end
+  end
 
 // Skip large allocation
 if (0 == 1) begin
