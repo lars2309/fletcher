@@ -239,7 +239,9 @@ package MM is
       PREFETCH_LOG2               : natural := 22;
       BUS_ADDR_WIDTH              : natural := 64;
       BUS_LEN_WIDTH               : natural := 8;
-      USER_WIDTH                  : natural := 1
+      USER_WIDTH                  : natural := 1;
+      SLV_SLICE                   : boolean := false;
+      MST_SLICE                   : boolean := false
     );
     port (
       clk                         : in  std_logic;

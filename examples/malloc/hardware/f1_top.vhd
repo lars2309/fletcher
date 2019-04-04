@@ -469,7 +469,9 @@ begin
     USER_WIDTH                  => s_axi_aruser'length,
     VM_BASE                     => X"4000_0000_0000_0000",
     PT_ENTRIES_LOG2             => 13, -- TODO: bring constants outside
-    PAGE_SIZE_LOG2              => 22
+    PAGE_SIZE_LOG2              => 22,
+    SLV_SLICE                   => true,
+    MST_SLICE                   => true
   )
   port map (
     clk                         => bus_clk,
@@ -510,7 +512,9 @@ begin
     USER_WIDTH                  => s_axi_awuser'length,
     VM_BASE                     => X"4000_0000_0000_0000",
     PT_ENTRIES_LOG2             => 13, -- TODO: bring constants outside
-    PAGE_SIZE_LOG2              => 22
+    PAGE_SIZE_LOG2              => 22,
+    SLV_SLICE                   => true,
+    MST_SLICE                   => true
   )
   port map (
     clk                         => bus_clk,
