@@ -466,7 +466,10 @@ begin
   generic map (
     BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
     BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
-    USER_WIDTH                  => s_axi_aruser'length
+    USER_WIDTH                  => s_axi_aruser'length,
+    VM_BASE                     => X"4000_0000_0000_0000",
+    PT_ENTRIES_LOG2             => 13, -- TODO: bring constants outside
+    PAGE_SIZE_LOG2              => 22
   )
   port map (
     clk                         => bus_clk,
@@ -504,7 +507,10 @@ begin
   generic map (
     BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
     BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
-    USER_WIDTH                  => s_axi_awuser'length
+    USER_WIDTH                  => s_axi_awuser'length,
+    VM_BASE                     => X"4000_0000_0000_0000",
+    PT_ENTRIES_LOG2             => 13, -- TODO: bring constants outside
+    PAGE_SIZE_LOG2              => 22
   )
   port map (
     clk                         => bus_clk,
