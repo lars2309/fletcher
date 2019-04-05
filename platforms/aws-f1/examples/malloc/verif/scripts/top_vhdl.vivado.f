@@ -77,6 +77,7 @@ ${FLETCHER_HARDWARE_DIR}/vhdl/mm/MM.vhd
 ${FLETCHER_HARDWARE_DIR}/vhdl/mm/MMBarrier.vhd
 ${FLETCHER_HARDWARE_DIR}/vhdl/mm/MMDirector.vhd
 ${FLETCHER_HARDWARE_DIR}/vhdl/mm/MMFrames.vhd
+${FLETCHER_HARDWARE_DIR}/vhdl/mm/MMGapFinder.vhd
 ${FLETCHER_HARDWARE_DIR}/vhdl/mm/MMHostInterface.vhd
 ${FLETCHER_HARDWARE_DIR}/vhdl/mm/MMTranslator.vhd
 ${FLETCHER_HARDWARE_DIR}/vhdl/mm/MMWalker.vhd

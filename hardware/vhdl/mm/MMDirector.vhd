@@ -167,44 +167,6 @@ architecture Behavioral of MMDirector is
     return ret;
   end TAKE_EVERY;
 
-  function FIND_GAP (mask  : unsigned;
-                     rsize : unsigned)
-    return unsigned is
-    variable csize : unsigned(rsize'length-1 downto 0);
-    variable start : unsigned(rsize'length-1 downto 0);
-  begin
-    csize := (others => '0');
-    start := (others => '0');
-    for N in 0 to mask'length-1 loop
-      if mask(N) = '0' then
-        csize := csize + 1;
-      else
-        csize := (others => '0');
-        start := to_unsigned(N + 1, start'length);
-      end if;
-      exit when csize = rsize;
-    end loop;
-    return start & csize;
-  end FIND_GAP;
-
-  function FIND_GAP_SIZE (mask  : unsigned;
-                          rsize : unsigned)
-    return unsigned is
-    variable ret : unsigned(rsize'length*2-1 downto 0);
-  begin
-    ret := FIND_GAP(mask, rsize);
-    return ret(rsize'length-1 downto 0);
-  end FIND_GAP_SIZE;
-
-  function FIND_GAP_START (mask  : unsigned;
-                           rsize : unsigned)
-    return unsigned is
-    variable ret : unsigned(rsize'length*2-1 downto 0);
-  begin
-    ret := FIND_GAP(mask, rsize);
-    return ret(rsize'length*2-1 downto rsize'length);
-  end FIND_GAP_START;
-
   function PAGE_OFFSET (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
     return unsigned is
   begin
@@ -330,6 +292,15 @@ architecture Behavioral of MMDirector is
   signal frames_resp_valid      : std_logic;
   signal frames_resp_ready      : std_logic;
 
+  signal gap_q_valid            : std_logic;
+  signal gap_q_ready            : std_logic;
+  signal gap_q_holes            : std_logic_vector(BUS_DATA_WIDTH / PTE_WIDTH - 1 downto 0);
+  signal gap_q_size             : std_logic_vector(log2ceil(BUS_DATA_WIDTH / PTE_WIDTH + 1) - 1 downto 0);
+  signal gap_a_valid            : std_logic;
+  signal gap_a_ready            : std_logic;
+  signal gap_a_offset           : std_logic_vector(log2ceil(BUS_DATA_WIDTH / PTE_WIDTH) - 1 downto 0);
+  signal gap_a_size             : std_logic_vector(log2ceil(BUS_DATA_WIDTH / PTE_WIDTH + 1) - 1 downto 0);
+
   type state_type is (RESET_ST, IDLE, FAIL, CLEAR_FRAMES, CLEAR_FRAMES_CHECK,
                       RESERVE_PT, RESERVE_PT_CHECK, PT0_INIT,
 
@@ -438,6 +409,7 @@ begin
            cmd_region, cmd_addr, cmd_free, cmd_alloc, cmd_realloc, cmd_valid, cmd_size,
            resp_ready,
            frames_cmd_ready, frames_resp_addr, frames_resp_success, frames_resp_valid,
+           gap_a_valid, gap_a_size, gap_a_offset, gap_q_ready,
            int_bus_wreq_ready, bus_wdat_ready, int_bus_dirty,
            bus_rreq_ready, bus_rdat_data, bus_rdat_last, bus_rdat_valid,
            mmu_req_valid, mmu_req_addr, mmu_resp_ready) is
@@ -458,6 +430,11 @@ begin
     frames_cmd_find   <= '0';
     frames_cmd_clear  <= '0';
     frames_resp_ready <= '0';
+
+    gap_q_valid       <= '0';
+    gap_q_holes       <= (others => 'U');
+    gap_q_size        <= (others => 'U');
+    gap_a_ready       <= '0';
 
     int_bus_wreq_valid   <= '0';
     int_bus_wreq_addr    <= (others => 'U'); --slv(addr);
@@ -733,21 +710,17 @@ begin
     when VMALLOC_CHECK_PT0_DATA =>
       -- Check the returned PTEs for allocation gaps.
       -- v.size tracks the remaining gap size to be found, rounded up to L1 PTE coverage.
-      bus_rdat_ready <= '1';
-      if bus_rdat_valid = '1' then
-        -- needed size: CLAMP_PTES_PER_BUS(shift_right(v.size, VM_SIZE_L1_LOG2))
-        if
-          -- Not a continuation
-          FIND_GAP_START(
-              TAKE_EVERY(u(bus_rdat_data), PTE_WIDTH, PTE_MAPPED),
-              CLAMP_PTES_PER_BUS(shift_right(v.size, VM_SIZE_L1_LOG2))
-          ) /= 0
-        then
+      gap_q_valid    <= bus_rdat_valid;
+      bus_rdat_ready <= gap_q_ready;
+      gap_q_holes    <= slv(TAKE_EVERY(u(bus_rdat_data), PTE_WIDTH, PTE_MAPPED));
+      gap_q_size     <= slv(CLAMP_PTES_PER_BUS(shift_right(v.size, VM_SIZE_L1_LOG2)));
+      gap_a_ready    <= '1';
+
+      if gap_a_valid = '1' then
+        if u(gap_a_offset) /= 0 then
           -- New gap was started
           v.addr_vm := PTE_TO_VA(
-              PT_INDEX(v.addr) + FIND_GAP_START(
-                    TAKE_EVERY(u(bus_rdat_data), PTE_WIDTH, PTE_MAPPED),
-                    CLAMP_PTES_PER_BUS(shift_right(v.size, VM_SIZE_L1_LOG2))),
+              PT_INDEX(v.addr) + u(gap_a_offset),
               1);
           -- Subtract the gap size from requested size.
           v.size := resize(
@@ -755,10 +728,7 @@ begin
                 shift_right_round_up(
                   resize(unsigned(cmd_size), VM_SIZE_L0_LOG2),
                   VM_SIZE_L1_LOG2
-                ) - FIND_GAP_SIZE(
-                  TAKE_EVERY(u(bus_rdat_data), PTE_WIDTH, PTE_MAPPED),
-                  CLAMP_PTES_PER_BUS(shift_right(v.size, VM_SIZE_L1_LOG2))
-                ),
+                ) - u(gap_a_size),
                 VM_SIZE_L1_LOG2),
               v.size'length);
         else
@@ -770,10 +740,7 @@ begin
                 shift_right(
                   resize(v.size, VM_SIZE_L0_LOG2),
                   VM_SIZE_L1_LOG2
-                ) - FIND_GAP_SIZE(
-                  TAKE_EVERY(u(bus_rdat_data), PTE_WIDTH, PTE_MAPPED),
-                  CLAMP_PTES_PER_BUS(shift_right(v.size, VM_SIZE_L1_LOG2))
-                ),
+                ) - u(gap_a_size),
                 VM_SIZE_L1_LOG2),
               v.size'length);
         end if;
@@ -1113,6 +1080,27 @@ begin
 
     d <= v;
   end process;
+
+  gapfinder : MMGapFinder
+    generic map (
+      MASK_WIDTH                  => BUS_DATA_WIDTH / PTE_WIDTH,
+      SLV_SLICE                   => false,
+      MST_SLICE                   => true
+    )
+    port map (
+      clk                         => clk,
+      reset                       => reset,
+
+      req_valid                   => gap_q_valid,
+      req_ready                   => gap_q_ready,
+      req_holes                   => gap_q_holes,
+      req_size                    => gap_q_size,
+
+      gap_valid                   => gap_a_valid,
+      gap_ready                   => gap_a_ready,
+      gap_offset                  => gap_a_offset,
+      gap_size                    => gap_a_size
+    );
 
   framestore : MMFrames
     generic map (
