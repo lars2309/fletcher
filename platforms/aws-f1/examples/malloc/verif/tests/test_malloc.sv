@@ -241,6 +241,40 @@ initial begin
     end
   end
 
+
+  // Direct read
+  $display("[%t] : Starting direct device memory read ", $realtime);
+
+  // Queue the data movement
+  tb.que_cl_to_buffer(
+    .chan(0),
+    .dst_addr(host_buffer_address + 1024*1024*16),
+    .cl_addr(0),
+    .len(4096 * 10)
+  );
+
+  // Start transfers of data from CL DDR
+  tb.start_que_to_buffer(.chan(0));
+
+  // Wait for dma transfers to complete,
+  // increase the timeout if you have to transfer a lot of data
+  timeout_count = 0;
+  do begin
+    status[0] = tb.is_dma_to_buffer_done(.chan(0));
+    #10ns;
+    timeout_count++;
+  end while ((status != 4'hf) && (timeout_count < 4000));
+
+  if (timeout_count >= 4000) begin
+    $display(
+      "[%t] : *** ERROR *** Timeout waiting for dma transfers from cl",
+      $realtime
+    );
+    error_count++;
+  end
+  $display("[%t] : Read complete", $realtime);
+
+
 // Skip large allocation
 if (0 == 1) begin
   // Set region to 1
