@@ -34,11 +34,7 @@
 #include <arrow/api.h>
 
 // Fletcher
-#include <fletcher/fletcher.h>
-#include <fletcher/platform.h>
-#include <fletcher/context.h>
-#include <fletcher/usercore.h>
-#include <fletcher/common/timer.h>
+#include "fletcher/api.h"
 
 
 #define PRINT_TIME(X, S) std::cout << std::setprecision(10) << (X) << " " << (S) << std::endl << std::flush
