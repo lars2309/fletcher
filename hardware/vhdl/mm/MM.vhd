@@ -354,7 +354,7 @@ package MM is
 
       gap_valid                   : out std_logic;
       gap_ready                   : in  std_logic;
-      gap_offset                  : out std_logic_vector(log2ceil(MASK_WIDTH)-1 downto 0);
+      gap_offset                  : out std_logic_vector(log2ceil(MASK_WIDTH+1)-1 downto 0);
       gap_size                    : out std_logic_vector(log2ceil(MASK_WIDTH+1)-1 downto 0)
     );
   end component;

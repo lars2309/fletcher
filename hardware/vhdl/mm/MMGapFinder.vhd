@@ -37,7 +37,7 @@ entity MMGapFinder is
 
     gap_valid                   : out std_logic;
     gap_ready                   : in  std_logic;
-    gap_offset                  : out std_logic_vector(log2ceil(MASK_WIDTH)-1 downto 0);
+    gap_offset                  : out std_logic_vector(log2ceil(MASK_WIDTH+1)-1 downto 0);
     gap_size                    : out std_logic_vector(log2ceil(MASK_WIDTH+1)-1 downto 0)
   );
 end MMGapFinder;
@@ -49,7 +49,7 @@ architecture Behavioral of MMGapFinder is
   ));
   constant GAI : nat_array := cumulative((
     1 => log2ceil(MASK_WIDTH+1),
-    0 => log2ceil(MASK_WIDTH)
+    0 => log2ceil(MASK_WIDTH+1)
   ));
 
   signal int_req_valid           : std_logic;
@@ -61,7 +61,7 @@ architecture Behavioral of MMGapFinder is
 
   signal int_gap_valid           : std_logic;
   signal int_gap_ready           : std_logic;
-  signal int_gap_offset          : std_logic_vector(log2ceil(MASK_WIDTH)-1 downto 0);
+  signal int_gap_offset          : std_logic_vector(log2ceil(MASK_WIDTH+1)-1 downto 0);
   signal int_gap_size            : std_logic_vector(log2ceil(MASK_WIDTH+1)-1 downto 0);
   signal int_gap_data            : std_logic_vector(GAI(GAI'high)-1 downto 0);
   signal gap_data                : std_logic_vector(GAI(GAI'high)-1 downto 0);
@@ -131,7 +131,7 @@ begin
 
   comb_proc: process(int_req_holes, int_req_size) is
     variable csize : unsigned(log2ceil(MASK_WIDTH+1)-1 downto 0);
-    variable start : unsigned(log2ceil(MASK_WIDTH)-1 downto 0);
+    variable start : unsigned(log2ceil(MASK_WIDTH+1)-1 downto 0);
   begin
     csize := (others => '0');
     start := (others => '0');

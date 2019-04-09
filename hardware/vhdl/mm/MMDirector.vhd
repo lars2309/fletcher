@@ -298,7 +298,7 @@ architecture Behavioral of MMDirector is
   signal gap_q_size             : std_logic_vector(log2ceil(BUS_DATA_WIDTH / PTE_WIDTH + 1) - 1 downto 0);
   signal gap_a_valid            : std_logic;
   signal gap_a_ready            : std_logic;
-  signal gap_a_offset           : std_logic_vector(log2ceil(BUS_DATA_WIDTH / PTE_WIDTH) - 1 downto 0);
+  signal gap_a_offset           : std_logic_vector(log2ceil(BUS_DATA_WIDTH / PTE_WIDTH + 1) - 1 downto 0);
   signal gap_a_size             : std_logic_vector(log2ceil(BUS_DATA_WIDTH / PTE_WIDTH + 1) - 1 downto 0);
 
   type state_type is (RESET_ST, IDLE, FAIL, CLEAR_FRAMES, CLEAR_FRAMES_CHECK,
