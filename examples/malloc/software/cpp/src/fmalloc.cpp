@@ -120,7 +120,11 @@ int main(int argc, char ** argv) {
   std::vector<uint8_t*> source_buffers;
   for (int i = 0; i < n_mallocs; i++) {
     if (malloc_sizes[i] <= max_data_size) {
-      source_buffers.push_back((unsigned char *) aligned_alloc(FLETCHER_ALIGNMENT, malloc_sizes[i]));
+      void* map = mmap(NULL,
+          malloc_sizes[i],
+          PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS|MAP_POPULATE|MAP_HUGETLB,
+          -1, 0);
+      source_buffers.push_back((unsigned char *) map);
       if (source_buffers.back() == nullptr) {
         std::cerr << "Could not allocate " << malloc_sizes[i] << " bytes" << std::endl;
         status = EXIT_FAILURE;
@@ -148,7 +152,14 @@ int main(int argc, char ** argv) {
   std::vector<uint8_t*> check_buffers;
   for (int i = 0; i < n_mallocs; i++) {
     if (malloc_sizes[i] <= max_data_size) {
-      check_buffers.push_back((unsigned char *) aligned_alloc(FLETCHER_ALIGNMENT, malloc_sizes[i]));
+      t.start();
+      void* map = mmap(NULL,
+          malloc_sizes[i],
+          PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS|MAP_POPULATE|MAP_HUGETLB,
+          -1, 0);
+      t.stop();
+      PRINT_TIME(t.seconds(), "mmap");
+      check_buffers.push_back((unsigned char *) map);
       if (check_buffers.back() == nullptr) {
         std::cerr << "Could not allocate " << malloc_sizes[i] << " bytes." << std::endl;
         status = EXIT_FAILURE;
