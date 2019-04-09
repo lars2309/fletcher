@@ -261,7 +261,7 @@ begin
           and ( 0 = (
             align_beq(u(not v.map_cur.mask), PREFETCH_LOG2) and u(not int_slv_req_addr) ) )
         then
-          v.do_req_next  := '1';
+          --v.do_req_next  := '1';
         end if;
 
       elsif v.map_next.valid = '1'
