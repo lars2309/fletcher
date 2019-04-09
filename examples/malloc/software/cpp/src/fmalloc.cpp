@@ -40,6 +40,8 @@
 #define PRINT_TIME(X, S) std::cout << std::setprecision(10) << (X) << " " << (S) << std::endl << std::flush
 #define PRINT_INT(X, S) std::cout << std::dec << (X) << " " << (S) << std::endl << std::flush
 
+#define FLETCHER_ALIGNMENT 4096
+
 using fletcher::Timer;
 
 double calc_sum(const std::vector<double> &values) {
@@ -118,7 +120,7 @@ int main(int argc, char ** argv) {
   std::vector<uint8_t*> source_buffers;
   for (int i = 0; i < n_mallocs; i++) {
     if (malloc_sizes[i] <= max_data_size) {
-      source_buffers.push_back((unsigned char *) malloc(malloc_sizes[i]));
+      source_buffers.push_back((unsigned char *) aligned_alloc(FLETCHER_ALIGNMENT, malloc_sizes[i]));
       if (source_buffers.back() == nullptr) {
         std::cerr << "Could not allocate " << malloc_sizes[i] << " bytes" << std::endl;
         status = EXIT_FAILURE;
@@ -146,7 +148,7 @@ int main(int argc, char ** argv) {
   std::vector<uint8_t*> check_buffers;
   for (int i = 0; i < n_mallocs; i++) {
     if (malloc_sizes[i] <= max_data_size) {
-      check_buffers.push_back((unsigned char *) malloc(malloc_sizes[i]));
+      check_buffers.push_back((unsigned char *) aligned_alloc(FLETCHER_ALIGNMENT, malloc_sizes[i]));
       if (check_buffers.back() == nullptr) {
         std::cerr << "Could not allocate " << malloc_sizes[i] << " bytes." << std::endl;
         status = EXIT_FAILURE;
