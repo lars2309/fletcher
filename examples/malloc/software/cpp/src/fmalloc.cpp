@@ -29,6 +29,7 @@
 #include <iomanip>
 #include <fstream>
 #include <random>
+#include <sys/mman.h>
 
 // Apache Arrow
 #include <arrow/api.h>
