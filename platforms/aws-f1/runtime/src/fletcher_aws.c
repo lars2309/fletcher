@@ -205,6 +205,9 @@ fstatus_t platformCopyHostToDevice(const uint8_t *host_source, da_t device_desti
   }
   size_t qbytes = (size_t)(size / queues);
 
+  bool error;
+
+  #pragma omp parallel for num_threads(FLETCHER_AWS_NUM_QUEUES), default(shared), schedule(static, 1)
   for (int q = 0; q < queues; q++) {
     ssize_t rc = 0;
     // Determine number of bytes for the whole transfer
@@ -229,16 +232,18 @@ fstatus_t platformCopyHostToDevice(const uint8_t *host_source, da_t device_desti
         int errsv = errno;
         fprintf(stderr, "[FLETCHER_AWS] Copy host to device failed. Queue: %d. Error: %s\n", q, strerror(errsv));
         aws_state.error = 1;
-        return FLETCHER_STATUS_ERROR;
+        error = true;
       }
       written[q] += rc;
     }
+    fsync(aws_state.xdma_wr_fd[q]);
   }
+  if (error) {
+    return FLETCHER_STATUS_ERROR;
+  }
+
   for (int q = 0; q < queues; q++) {
     total += written[q];
-
-    // Synchronize the files
-    fsync(aws_state.xdma_wr_fd[q]);
   }
 
 #ifdef DEBUG
@@ -272,7 +277,7 @@ fstatus_t platformCopyDeviceToHost(da_t device_source, uint8_t *host_destination
 
   bool error = false;
 
-  #pragma omp parallel for numthreads(FLETCHER_AWS_NUM_QUEUES), default(shared), schedule(static, 1)
+  #pragma omp parallel for num_threads(FLETCHER_AWS_NUM_QUEUES), default(shared), schedule(static, 1)
   for (int q = 0; q < queues; q++) {
     ssize_t rc = 0;
     // Determine number of bytes for the whole transfer
