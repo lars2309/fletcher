@@ -359,6 +359,31 @@ package MM is
     );
   end component;
 
+  component MMRolodex is
+    generic (
+      MAX_ENTRIES                 : natural;
+      ENTRY_WIDTH                 : natural
+    );
+    port (
+      clk                         : in  std_logic;
+      reset                       : in  std_logic;
+
+      entry_valid                 : out std_logic;
+      entry_ready                 : in  std_logic;
+      entry_mark                  : in  std_logic;
+      entry                       : out std_logic_vector(ENTRY_WIDTH-1 downto 0);
+      entry_marked                : out std_logic;
+
+      insert_valid                : in  std_logic;
+      insert_ready                : out std_logic;
+      insert_entry                : in  std_logic_vector(ENTRY_WIDTH-1 downto 0);
+
+      delete_valid                : in  std_logic;
+      delete_ready                : out std_logic;
+      delete_entry                : in  std_logic_vector(ENTRY_WIDTH-1 downto 0)
+    );
+  end component;
+
 end package;
 
 package body MM is

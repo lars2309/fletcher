@@ -195,6 +195,7 @@ begin
 
         elsif cmd_free = '1' then
           state_next  <= FREE;
+          frame_next  <= PAGE_TO_FRAME(cmd_addr);
 
         elsif cmd_clear = '1' then
           state_next  <= CLEAR;

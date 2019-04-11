@@ -122,6 +122,7 @@ architecture Behavioral of MMDirector is
   constant PT_SIZE              : natural := 2**PT_SIZE_LOG2;
   -- Offset of the first usable PT into the frame (first space is taken by bitmap)
   constant PT_FIRST_NR          : natural := 1;
+  constant PT_MAX_AMOUNT        : natural := 2**PT_ENTRIES_LOG2 + 1;
   constant PT_PER_FRAME         : natural := 2**(PAGE_SIZE_LOG2 - PT_ENTRIES_LOG2 - log2ceil( DIV_CEIL(PTE_BITS, BYTE_SIZE) )) - PT_FIRST_NR;
   constant PTE_SIZE             : natural := 2**log2ceil(DIV_CEIL(PTE_BITS, BYTE_SIZE));
   constant PTE_WIDTH            : natural := PTE_SIZE * BYTE_SIZE;
@@ -271,6 +272,18 @@ architecture Behavioral of MMDirector is
     return beats & to_unsigned(0, log2ceil(BUS_DATA_BYTES));
   end function;
 
+  function ADDR_TO_ROLODEX (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
+    return std_logic_vector is
+  begin
+    return slv(EXTRACT(addr, PT_SIZE_LOG2, MEM_MAP_SIZE_LOG2 * MEM_REGIONS - PT_SIZE_LOG2));
+  end ADDR_TO_ROLODEX;
+
+  function ROLODEX_TO_ADDR (dex : std_logic_vector)
+    return unsigned is
+  begin
+    return OVERLAY(u(dex), MEM_MAP_BASE, PT_SIZE_LOG2);
+  end ROLODEX_TO_ADDR;
+
   signal int_bus_wreq_valid     : std_logic;
   signal int_bus_wreq_ready     : std_logic;
   signal int_bus_wreq_addr      : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
@@ -301,6 +314,20 @@ architecture Behavioral of MMDirector is
   signal gap_a_offset           : std_logic_vector(log2ceil(BUS_DATA_WIDTH / PTE_WIDTH + 1) - 1 downto 0);
   signal gap_a_size             : std_logic_vector(log2ceil(BUS_DATA_WIDTH / PTE_WIDTH + 1) - 1 downto 0);
 
+  signal rolodex_entry_valid    : std_logic;
+  signal rolodex_entry_ready    : std_logic;
+  signal rolodex_entry_mark     : std_logic;
+  signal rolodex_entry          : std_logic_vector(log2ceil(DIV_CEIL(PT_MAX_AMOUNT, PT_PER_FRAME)) downto 0);
+  signal rolodex_entry_marked   : std_logic;
+
+  signal rolodex_insert_valid   : std_logic;
+  signal rolodex_insert_ready   : std_logic;
+  signal rolodex_insert_entry   : std_logic_vector(log2ceil(DIV_CEIL(PT_MAX_AMOUNT, PT_PER_FRAME)) downto 0);
+
+  signal rolodex_delete_valid   : std_logic;
+  signal rolodex_delete_ready   : std_logic;
+  signal rolodex_delete_entry   : std_logic_vector(log2ceil(DIV_CEIL(PT_MAX_AMOUNT, PT_PER_FRAME)) downto 0);
+
   type state_type is (RESET_ST, IDLE, FAIL, CLEAR_FRAMES, CLEAR_FRAMES_CHECK,
                       RESERVE_PT, RESERVE_PT_CHECK, PT0_INIT,
 
@@ -315,10 +342,11 @@ architecture Behavioral of MMDirector is
                       SET_PTE_RANGE_L1_UPDATE_ADDR, SET_PTE_RANGE_L1_UPDATE_DAT,
                       SET_PTE_RANGE_L2_UPDATE_ADDR, SET_PTE_RANGE_L2_UPDATE_DAT,
 
-                      PT_NEW, PT_NEW_CHECK_BM, PT_NEW_MARK_BM_ADDR,
+                      PT_NEW, PT_NEW_REQ_BM, PT_NEW_CHECK_BM, PT_NEW_MARK_BM_ADDR,
+                      PT_NEW_FRAME, PT_NEW_FRAME_CHECK,
                       PT_NEW_MARK_BM_DATA, PT_NEW_CLEAR_ADDR, PT_NEW_CLEAR_DATA,
 
-                      PT_FRAME_INIT_ADDR, PT_FRAME_INIT_DATA );
+                      PT_FRAME_INIT_ADDR, PT_FRAME_INIT_DATA, PT_FRAME_INIT_ROLODEX );
   constant STATE_STACK_DEPTH : natural := 4;
   type state_stack_type is array (STATE_STACK_DEPTH-1 downto 0) of state_type;
 
@@ -410,6 +438,8 @@ begin
            resp_ready,
            frames_cmd_ready, frames_resp_addr, frames_resp_success, frames_resp_valid,
            gap_a_valid, gap_a_size, gap_a_offset, gap_q_ready,
+           rolodex_entry_valid, rolodex_entry_marked, rolodex_entry,
+           rolodex_insert_ready, rolodex_delete_ready,
            int_bus_wreq_ready, bus_wdat_ready, int_bus_dirty,
            bus_rreq_ready, bus_rdat_data, bus_rdat_last, bus_rdat_valid,
            mmu_req_valid, mmu_req_addr, mmu_resp_ready) is
@@ -435,6 +465,13 @@ begin
     gap_q_holes       <= (others => 'U');
     gap_q_size        <= (others => 'U');
     gap_a_ready       <= '0';
+
+    rolodex_entry_ready  <= '0';
+    rolodex_entry_mark   <= '0';
+    rolodex_insert_valid <= '0';
+    rolodex_insert_entry <= (others => 'U');
+    rolodex_delete_valid <= '0';
+    rolodex_delete_entry <= (others => 'U');
 
     int_bus_wreq_valid   <= '0';
     int_bus_wreq_addr    <= (others => 'U'); --slv(addr);
@@ -956,13 +993,20 @@ begin
       bus_wdat_strobe <= (others => '1');
       bus_wdat_last   <= '1';
       if bus_wdat_ready = '1' then
-        if (PT_PER_FRAME =< BUS_DATA_WIDTH) or (PAGE_OFFSET(v.addr) * BYTE_SIZE > PT_PER_FRAME) then
+        if (PT_PER_FRAME <= BUS_DATA_WIDTH) or (PAGE_OFFSET(v.addr) * BYTE_SIZE > PT_PER_FRAME) then
           -- Entire bitmap has been initialized
-          v.state_stack := pop_state(v.state_stack);
+          v.state_stack(0) := PT_FRAME_INIT_ROLODEX;
         else
           -- Need another write
           v.state_stack(0) := PT_FRAME_INIT_ADDR;
         end if;
+      end if;
+
+    when PT_FRAME_INIT_ROLODEX =>
+      rolodex_insert_entry <= ADDR_TO_ROLODEX(v.addr);
+      rolodex_insert_valid <= '1';
+      if rolodex_insert_ready = '1' then
+        v.state_stack := pop_state(v.state_stack);
       end if;
 
     -- === START OF PT_NEW ROUTINE ===
@@ -972,17 +1016,54 @@ begin
     -- `addr` remains unchanged.
 
     when PT_NEW =>
-      -- Find a free spot for a PT
       -- Use addr_pt to store addr
-      v.addr_pt      := v.addr;
-      bus_rreq_addr  <= slv(PAGE_BASE(PT_ADDR));
+      v.addr_pt          := v.addr;
+      -- Mark current rolodex entry, to detect wrap around
+      rolodex_entry_mark <= '1';
+      if rolodex_entry_valid = '1' and int_bus_dirty = '0' then
+        v.state_stack(0) := PT_NEW_REQ_BM;
+      end if;
+
+    when PT_NEW_REQ_BM =>
+      -- Find a free spot for a PT
+      v.addr         := ROLODEX_TO_ADDR(rolodex_entry);
+      bus_rreq_addr  <= slv(v.addr);
       bus_rreq_len   <= slv(to_unsigned(1, bus_rreq_len'length));
       -- TODO implement finding empty spots past BUS_DATA_WIDTH entries
-      if int_bus_dirty = '0' then
-        bus_rreq_valid <= '1';
-        if bus_rreq_ready = '1' then
-          v.state_stack(0) := PT_NEW_CHECK_BM;
-          v.addr           := PT_ADDR;
+      if rolodex_entry_valid = '1' then
+        if rolodex_entry_marked = '1' then
+          -- Tried all existing PT frames.
+          -- TODO allocate new frame
+          v.state_stack(0) := FAIL;
+        else
+          bus_rreq_valid <= '1';
+          if bus_rreq_ready = '1' then
+            v.state_stack(0) := PT_NEW_CHECK_BM;
+            v.addr           := PT_ADDR;
+          end if;
+        end if;
+      end if;
+
+    when PT_NEW_FRAME =>
+      frames_cmd_valid   <= '1';
+      frames_cmd_find    <= '1';
+      frames_cmd_addr    <= slv(PAGE_BASE(PT_ADDR));
+      if frames_cmd_ready = '1' then
+        v.state_stack(0) := PT_NEW_FRAME_CHECK;
+      end if;
+
+    when PT_NEW_FRAME_CHECK =>
+      -- Execute the `frame initialize' routine to set bitmap.
+      rolodex_insert_valid <= frames_resp_valid and frames_resp_success;
+      rolodex_insert_entry <= ADDR_TO_ROLODEX(u(frames_resp_addr));
+      if frames_resp_valid = '1' and (rolodex_insert_ready = '1' or frames_resp_success = '0') then
+        frames_resp_ready  <= '1';
+        if frames_resp_success = '1' then
+          v.state_stack(0) := PT_NEW_REQ_BM;
+          v.state_stack    := push_state(v.state_stack, PT_FRAME_INIT_ADDR);
+          v.addr           := PAGE_BASE(u(frames_resp_addr));
+        else
+          v.state_stack(0) := FAIL;
         end if;
       end if;
 
@@ -993,15 +1074,19 @@ begin
       if bus_rdat_valid = '1' then
         for i in 0 to work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH) loop
           if i = work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH) then
-            v.state_stack(0) := FAIL; -- TODO: try more bits or other frame
+            -- All checked places are occupied in this frame
+            -- Try next entry in rolodex
+            rolodex_entry_ready <= '1';
+            v.state_stack(0) := PT_NEW_REQ_BM;
             exit;
           end if;
           if bus_rdat_data(i) = '0' then
-            -- Bit 0 refers to the first possible page table in this frame,
-            -- which exists on the first aligned location after the bitmap.
+            -- Bit 0 refers to the first possible page table in this frame.
             v.state_stack(0) := PT_NEW_MARK_BM_ADDR;
             v.addr           := OVERLAY(
-                                    shift_left(to_unsigned(i+1, PAGE_SIZE_LOG2), PT_SIZE_LOG2),
+                                    shift_left(
+                                        to_unsigned(i+PT_FIRST_NR, PAGE_SIZE_LOG2),
+                                        PT_SIZE_LOG2),
                                     PAGE_BASE(v.addr));
             -- Save the byte that needs to be written
             v.byte_buffer    := EXTRACT(
@@ -1093,6 +1178,30 @@ begin
 
     d <= v;
   end process;
+
+  ptframes : MMRolodex
+    generic map (
+      MAX_ENTRIES                 => DIV_CEIL(PT_MAX_AMOUNT, PT_PER_FRAME),
+      ENTRY_WIDTH                 => MEM_MAP_SIZE_LOG2 * MEM_REGIONS - PT_SIZE_LOG2
+    )
+    port map (
+      clk                         => clk,
+      reset                       => reset,
+
+      entry_valid                 => rolodex_entry_valid,
+      entry_ready                 => rolodex_entry_ready,
+      entry_mark                  => rolodex_entry_mark,
+      entry                       => rolodex_entry,
+      entry_marked                => rolodex_entry_marked,
+
+      insert_valid                => rolodex_insert_valid,
+      insert_ready                => rolodex_insert_ready,
+      insert_entry                => rolodex_insert_entry,
+
+      delete_valid                => rolodex_delete_valid,
+      delete_ready                => rolodex_delete_ready,
+      delete_entry                => rolodex_delete_entry
+    );
 
   gapfinder : MMGapFinder
     generic map (
