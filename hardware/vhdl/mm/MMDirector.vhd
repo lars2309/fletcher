@@ -544,6 +544,7 @@ begin
       -- Get the L1 PTE
       bus_rreq_addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(PT_ADDR, v.addr_vm, 1)));
       bus_rreq_len   <= slv(to_unsigned(1, bus_rreq_len'length));
+      -- Wait for any outstanding writes to be completed.
       if int_bus_dirty = '0' then
         bus_rreq_valid <= '1';
         if bus_rreq_ready = '1' then
@@ -637,17 +638,9 @@ begin
             );
           if frames_cmd_ready = '1' then
             bus_rdat_ready   <= '1';
-            v.state_stack(0) := MMU_SET_L2_ADDR;
+            v.state_stack(0) := MMU_RESP;
           end if;
         end if;
-      end if;
-
-    when MMU_SET_L2_ADDR =>
-      int_bus_wreq_valid <= '1';
-      int_bus_wreq_addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(v.addr_pt, v.addr_vm, 2)));
-      int_bus_wreq_len   <= slv(to_unsigned(1, int_bus_wreq_len'length));
-      if int_bus_wreq_ready = '1' then
-        v.state_stack(0) := MMU_RESP;
       end if;
 
     when MMU_RESP =>
@@ -655,6 +648,15 @@ begin
       mmu_resp_valid <= frames_resp_valid;
       mmu_resp_addr  <= frames_resp_addr;
       if mmu_resp_ready = '1' then
+        v.state_stack(0) := MMU_SET_L2_ADDR;
+      end if;
+
+    when MMU_SET_L2_ADDR =>
+      -- Update the PTE.
+      int_bus_wreq_valid <= '1';
+      int_bus_wreq_addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(v.addr_pt, v.addr_vm, 2)));
+      int_bus_wreq_len   <= slv(to_unsigned(1, int_bus_wreq_len'length));
+      if int_bus_wreq_ready = '1' then
         v.state_stack(0) := MMU_SET_L2_DAT;
       end if;
 
@@ -690,10 +692,16 @@ begin
       -- Request the L0 page table to find a high-level gap.
       -- TODO: find gaps in lower level page tables.
       v.addr           := PT_ADDR;
-      v.size           := shift_left(
-                              shift_right_round_up(unsigned(cmd_size), VM_SIZE_L1_LOG2),
-                              VM_SIZE_L1_LOG2
-                            );
+      -- Ignore bits that are used for indexing with this page level,
+      -- and bits for unsupported sizes.
+      v.size           := resize(
+                            shift_left(
+                              shift_right_round_up(
+                                resize(unsigned(cmd_size), VM_SIZE_L0_LOG2),
+                                VM_SIZE_L1_LOG2
+                              ),
+                              VM_SIZE_L1_LOG2),
+                            v.size'length);
       v.addr_vm        := PTE_TO_VA(PT_INDEX(v.addr), 1);
       v.state_stack(0) := VMALLOC_CHECK_PT0;
 
@@ -723,6 +731,8 @@ begin
               PT_INDEX(v.addr) + u(gap_a_offset),
               1);
           -- Subtract the gap size from requested size.
+          -- Ignore bits that are used for indexing with this page level,
+          -- and bits for unsupported sizes.
           v.size := resize(
               shift_left(
                 shift_right_round_up(
@@ -790,6 +800,7 @@ begin
     -- Set mapping for a range of virtual addresses, create page tables as needed.
     -- `addr_vm` contains address to start mapping at.
     -- `size`    contains length of mapping.
+    -- `region`  regions is recorded in the page tables, and used for allocation.
     -- `addr`    must be initialized to `addr_vm`. (Is used to keep track of progress)
     -- arg(0) = '1' -> Take first frame from frame allocator.
     -- arg(1) = '1' -> Conditional allocation: stop when already mapped. TODO
@@ -798,6 +809,7 @@ begin
       -- Get the L1 PTE
       bus_rreq_addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(PT_ADDR, v.addr, 1)));
       bus_rreq_len   <= slv(to_unsigned(1, bus_rreq_len'length));
+      -- Wait for any outstanding writes to be completed.
       if int_bus_dirty = '0' then
         bus_rreq_valid <= '1';
         if bus_rreq_ready = '1' then
@@ -889,6 +901,7 @@ begin
           bus_wdat_data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= (others => '0');
           bus_wdat_data(PTE_WIDTH * i + PTE_MAPPED)  <= '1';
         end if;
+        -- TODO: write region
         if PAGE_BASE(v.addr) + LOG2_TO_UNSIGNED(VM_SIZE_L2_LOG2)
           = PAGE_BASE(v.addr_vm) + shift_left(PAGE_COUNT(v.size), PAGE_SIZE_LOG2)
         then
@@ -943,7 +956,7 @@ begin
       bus_wdat_strobe <= (others => '1');
       bus_wdat_last   <= '1';
       if bus_wdat_ready = '1' then
-        if (PT_PER_FRAME < BUS_DATA_WIDTH) or (PAGE_OFFSET(v.addr) > PT_PER_FRAME / BYTE_SIZE) then
+        if (PT_PER_FRAME =< BUS_DATA_WIDTH) or (PAGE_OFFSET(v.addr) * BYTE_SIZE > PT_PER_FRAME) then
           -- Entire bitmap has been initialized
           v.state_stack := pop_state(v.state_stack);
         else

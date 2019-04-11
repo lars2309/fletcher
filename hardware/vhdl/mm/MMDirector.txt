@@ -1,0 +1,60 @@
+RESET_ST
+CLEAR_FRAMES
+CLEAR_FRAMES_CHECK
+RESERVE_PT
+RESERVE_PT_CHECK
+  -> PT_FRAME_INIT_ADDR
+PT0_INIT
+  -> PT_NEW
+IDLE
+  ~> MMU_GET_L1_ADDR
+  ~> VMALLOC
+
+# Allocate frame on behalf of MMU
+# in  : addr_vm
+# uses: addr, addr_pt, frames_
+MMU_GET_L1_ADDR
+MMU_GET_L1_DAT
+MMU_GET_L2_ADDR
+MMU_GET_L2_DAT
+  MMU_RESP
+  MMU_SET_L2_ADDR
+  MMU_SET_L2_DAT
+
+# Find free space in VM for allocation
+# in  : cmd_,
+# uses: addr, addr_vm, size, (arg), frames_
+# out : resp_
+VMALLOC
+VMALLOC_CHECK_PT0
+VMALLOC_CHECK_PT0_DATA
+VMALLOC_RESERVE_FRAME
+ -> SET_PTE_RANGE
+VMALLOC_FINISH
+
+# Set mapping for a range of virtual addresses
+# in  : addr_vm, size, arg, region, (addr)
+# uses: addr, addr_pt, arg
+SET_PTE_RANGE
+SET_PTE_RANGE_L1_CHECK
+  ~> PT_NEW
+  SET_PTE_RANGE_L1_UPDATE_ADDR
+  SET_PTE_RANGE_L1_UPDATE_DAT
+SET_PTE_RANGE_L2_UPDATE_ADDR
+SET_PTE_RANGE_L2_UPDATE_DAT
+
+# Clear the PT usage bitmap of a frame
+# in  : addr
+# uses: addr
+PT_FRAME_INIT_ADDR
+PT_FRAME_INIT_DATA
+
+# Find and prepare a new PT
+# uses: beat, byte_buffer
+# out : addr_pt
+PT_NEW
+PT_NEW_CHECK_BM
+PT_NEW_MARK_BM_ADDR
+PT_NEW_MARK_BM_DATA
+PT_NEW_CLEAR_ADDR
+PT_NEW_CLEAR_DATA
