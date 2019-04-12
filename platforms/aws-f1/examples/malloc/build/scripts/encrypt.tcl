@@ -99,6 +99,7 @@ file copy -force $FLETCHER_HARDWARE_DIR/vhdl/mm/MMDirector.vhd                  
 file copy -force $FLETCHER_HARDWARE_DIR/vhdl/mm/MMFrames.vhd                         $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/vhdl/mm/MMGapFinder.vhd                      $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/vhdl/mm/MMHostInterface.vhd                  $TARGET_DIR
+file copy -force $FLETCHER_HARDWARE_DIR/vhdl/mm/MMRolodex.vhd                        $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/vhdl/mm/MMTranslator.vhd                     $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/vhdl/mm/MMWalker.vhd                         $TARGET_DIR
 

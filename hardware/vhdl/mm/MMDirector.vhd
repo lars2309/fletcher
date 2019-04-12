@@ -131,6 +131,8 @@ architecture Behavioral of MMDirector is
   constant PTE_PRESENT          : natural := 1;
   constant PTE_BOUNDARY         : natural := 2;
 
+  constant FRAME_IDX_WIDTH      : natural := MEM_MAP_SIZE_LOG2 * MEM_REGIONS - PT_SIZE_LOG2;
+
   constant VM_SIZE_L2_LOG2      : natural := PAGE_SIZE_LOG2;
   constant VM_SIZE_L1_LOG2      : natural := VM_SIZE_L2_LOG2 + PT_ENTRIES_LOG2;
   constant VM_SIZE_L0_LOG2      : natural := VM_SIZE_L1_LOG2 + PT_ENTRIES_LOG2;
@@ -275,10 +277,10 @@ architecture Behavioral of MMDirector is
   function ADDR_TO_ROLODEX (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
     return std_logic_vector is
   begin
-    return slv(EXTRACT(addr, PT_SIZE_LOG2, MEM_MAP_SIZE_LOG2 * MEM_REGIONS - PT_SIZE_LOG2));
+    return slv(EXTRACT(addr, PT_SIZE_LOG2, FRAME_IDX_WIDTH));
   end ADDR_TO_ROLODEX;
 
-  function ROLODEX_TO_ADDR (dex : std_logic_vector)
+  function ROLODEX_TO_ADDR (dex : std_logic_vector(FRAME_IDX_WIDTH-1 downto 0))
     return unsigned is
   begin
     return OVERLAY(u(dex), MEM_MAP_BASE, PT_SIZE_LOG2);
@@ -317,16 +319,16 @@ architecture Behavioral of MMDirector is
   signal rolodex_entry_valid    : std_logic;
   signal rolodex_entry_ready    : std_logic;
   signal rolodex_entry_mark     : std_logic;
-  signal rolodex_entry          : std_logic_vector(log2ceil(DIV_CEIL(PT_MAX_AMOUNT, PT_PER_FRAME)) downto 0);
+  signal rolodex_entry          : std_logic_vector(FRAME_IDX_WIDTH-1 downto 0);
   signal rolodex_entry_marked   : std_logic;
 
   signal rolodex_insert_valid   : std_logic;
   signal rolodex_insert_ready   : std_logic;
-  signal rolodex_insert_entry   : std_logic_vector(log2ceil(DIV_CEIL(PT_MAX_AMOUNT, PT_PER_FRAME)) downto 0);
+  signal rolodex_insert_entry   : std_logic_vector(FRAME_IDX_WIDTH-1 downto 0);
 
   signal rolodex_delete_valid   : std_logic;
   signal rolodex_delete_ready   : std_logic;
-  signal rolodex_delete_entry   : std_logic_vector(log2ceil(DIV_CEIL(PT_MAX_AMOUNT, PT_PER_FRAME)) downto 0);
+  signal rolodex_delete_entry   : std_logic_vector(FRAME_IDX_WIDTH-1 downto 0);
 
   type state_type is (RESET_ST, IDLE, FAIL, CLEAR_FRAMES, CLEAR_FRAMES_CHECK,
                       RESERVE_PT, RESERVE_PT_CHECK, PT0_INIT,
