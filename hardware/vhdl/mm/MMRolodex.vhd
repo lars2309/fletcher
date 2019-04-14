@@ -101,7 +101,11 @@ begin
       v.state       := IDLE;
 
     when IDLE =>
-      entry_valid    <= '1';
+      if v.entries /= 0 then
+        entry_valid  <= '1';
+      else
+        entry_valid  <= '0';
+      end if;
       insert_ready   <= '1';
       delete_ready   <= '1';
       w_addr         <= slv(resize(v.entries, w_addr'length));
