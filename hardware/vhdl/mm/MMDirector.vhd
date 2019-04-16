@@ -350,7 +350,7 @@ architecture Behavioral of MMDirector is
                       PT_NEW_MARK_BM_DATA, PT_NEW_CLEAR_ADDR, PT_NEW_CLEAR_DATA,
 
                       PT_FRAME_INIT_ADDR, PT_FRAME_INIT_DATA, PT_FRAME_INIT_ROLODEX );
-  constant STATE_STACK_DEPTH : natural := 4;
+  constant STATE_STACK_DEPTH : natural := 5;
   type state_stack_type is array (STATE_STACK_DEPTH-1 downto 0) of state_type;
 
   function pop_state(stack : state_stack_type) return state_stack_type is
@@ -388,7 +388,7 @@ begin
     report "page table does not fit in a single page"
     severity failure;
 
-  assert PT_PER_FRAME /= 1
+  assert PAGE_SIZE_LOG2 /= PT_ENTRIES_LOG2 + log2ceil( DIV_CEIL(PTE_BITS, BYTE_SIZE))
     report "page table size equal to page size is not implemented (requires omission of bitmap)"
     severity failure;
 
@@ -1021,7 +1021,7 @@ begin
       end if;
 
     -- === START OF FRAME_INIT ROUTINE ===
-    -- Clear the usage bitmap of the frame at `addr'.
+    -- Clear the usage bitmap of the frame at `addr' and add it to the rolodex.
     -- `addr' is not preserved, but will continue to point into the same frame.
     -- Does not preserve contents of the frame.
 
@@ -1085,13 +1085,11 @@ begin
       if rolodex_entry_valid = '1' then
         if rolodex_entry_marked = '1' then
           -- Tried all existing PT frames.
-          -- TODO allocate new frame
-          v.state_stack(0) := FAIL;
+          v.state_stack(0) := PT_NEW_FRAME;
         else
           bus_rreq_valid <= '1';
           if bus_rreq_ready = '1' then
             v.state_stack(0) := PT_NEW_CHECK_BM;
-            v.addr           := PT_ADDR;
           end if;
         end if;
       end if;
@@ -1106,9 +1104,7 @@ begin
 
     when PT_NEW_FRAME_CHECK =>
       -- Execute the `frame initialize' routine to set bitmap.
-      rolodex_insert_valid <= frames_resp_valid and frames_resp_success;
-      rolodex_insert_entry <= ADDR_TO_ROLODEX(u(frames_resp_addr));
-      if frames_resp_valid = '1' and (rolodex_insert_ready = '1' or frames_resp_success = '0') then
+      if frames_resp_valid = '1' then
         frames_resp_ready  <= '1';
         if frames_resp_success = '1' then
           v.state_stack(0) := PT_NEW_REQ_BM;

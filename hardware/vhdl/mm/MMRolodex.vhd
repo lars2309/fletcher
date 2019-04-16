@@ -56,6 +56,7 @@ architecture Behavioral of MMRolodex is
     marked                      : std_logic;
     entries                     : unsigned(log2ceil(MAX_ENTRIES+1)-1 downto 0);
     needle                      : std_logic_vector(ENTRY_WIDTH-1 downto 0);
+    r_valid                     : std_logic;
   end record;
 
   signal w_addr, r_addr         : std_logic_vector(log2ceil(MAX_ENTRIES)-1 downto 0);
@@ -73,6 +74,7 @@ begin
         r.idx            <= (others => '0');
         r.entries        <= (others => '0');
         r.marked         <= '0';
+        r.r_valid        <= '0';
       else
         r <= d;
       end if;
@@ -102,10 +104,11 @@ begin
 
     when IDLE =>
       if v.entries /= 0 then
-        entry_valid  <= '1';
+        entry_valid  <= v.r_valid;
       else
         entry_valid  <= '0';
       end if;
+      v.r_valid      := '1';
       insert_ready   <= '1';
       delete_ready   <= '1';
       w_addr         <= slv(resize(v.entries, w_addr'length));
@@ -115,10 +118,16 @@ begin
       end if;
       if insert_valid = '1' then
         w_en         <= '1';
+        v.r_valid    := '0';
+        v.marked     := '0';
+        v.idx        := v.entries;
         v.entries    := v.entries + 1;
       end if;
       if entry_ready = '1' then
         v.idx        := v.idx + 1;
+        if v.idx = v.entries then
+          v.idx      := (others => '0');
+        end if;
         if v.idx = v.mark then
           v.marked   := '1';
         end if;
@@ -128,15 +137,12 @@ begin
         v.idx        := (others => '0');
         v.state      := DEL_SEARCH;
       end if;
-      if v.idx = v.entries then
-        v.idx        := (others => '0');
-      end if;
 
     when DEL_SEARCH =>
       if r_data = v.needle then
         v.state      := DEL_SHIFT;
       end if;
-      v.idx        := v.idx + 1;
+      v.idx          := v.idx + 1;
       if v.idx = v.entries then
         v.idx        := (others => '0');
         v.entries    := v.entries - 1;
@@ -147,6 +153,7 @@ begin
       w_addr         <= slv(v.idx - 1);
       w_data         <= r_data;
       w_en           <= '1';
+      v.r_valid      := '0';
       v.idx          := v.idx + 1;
       if v.idx = v.entries then
         v.idx        := (others => '0');
