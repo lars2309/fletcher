@@ -13,7 +13,7 @@ IDLE
 # Allocate frame on behalf of MMU
 # in  : addr_vm
 # uses: addr, addr_pt, frames_
-MMU_GET_L1_ADDR
+MMU_GET_L1_ADDR                ###  barrier
 MMU_GET_L1_DAT
 MMU_GET_L2_ADDR
 MMU_GET_L2_DAT
@@ -26,16 +26,16 @@ MMU_GET_L2_DAT
 # uses: addr, addr_vm, size, (arg), frames_
 # out : resp_
 VMALLOC
-VMALLOC_CHECK_PT0
+VMALLOC_CHECK_PT0              ###  barrier
 VMALLOC_CHECK_PT0_DATA
 VMALLOC_RESERVE_FRAME
  -> SET_PTE_RANGE
-VMALLOC_FINISH
+VMALLOC_FINISH                 ###  barrier
 
 # Set mapping for a range of virtual addresses
 # in  : addr_vm, size, arg, region, (addr)
-# uses: addr, addr_pt, arg
-SET_PTE_RANGE
+# uses: addr, addr_pt, arg, pages
+SET_PTE_RANGE                  ###  barrier
 SET_PTE_RANGE_L1_CHECK
   ~> PT_NEW
   SET_PTE_RANGE_L1_UPDATE_ADDR
@@ -54,7 +54,7 @@ PT_FRAME_INIT_ROLODEX
 # Find and prepare a new PT
 # uses: beat, byte_buffer
 # out : addr_pt
-PT_NEW
+PT_NEW                         ###  barrier
 PT_NEW_REQ_BM
   PT_NEW_FRAME
   PT_NEW_FRAME_CHECK

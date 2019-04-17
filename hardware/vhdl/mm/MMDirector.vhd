@@ -145,8 +145,11 @@ architecture Behavioral of MMDirector is
     if val > clamp then
       ret := to_unsigned(clamp, ret'length);
     else
-      ret := val(ret'length-1 downto 0);
+      ret := val;
     end if;
+    -- Make it easier for synthesis tools to deduce these will always be zero.
+    -- Shortening the returned vector does not work with Vivado.
+    ret(ret'length-1 downto log2ceil(clamp+1)) := (others => '0');
     return ret;
   end CLAMP;
 
@@ -191,14 +194,10 @@ architecture Behavioral of MMDirector is
   -- Convert a size to a number of pages, rounding up.
   function PAGE_COUNT (size : unsigned)
     return unsigned is
-    variable ret : unsigned(BUS_ADDR_WIDTH-1 downto 0);
+    variable ret : unsigned(VM_SIZE_L0_LOG2 - PAGE_SIZE_LOG2 - 1 downto 0);
   begin
-    ret := resize(size, ret'length);
-    -- Set bits that cannot be used in our address space to '0'.
-    ret(ret'high downto VM_SIZE_L0_LOG2) := (others => '0');
-    -- Round up to pages.
-    ret := shift_right_round_up(size, PAGE_SIZE_LOG2);
-    return ret;
+    ret := resize(shift_right_round_up(size, PAGE_SIZE_LOG2), ret'length);
+    return ret(VM_SIZE_L0_LOG2 - PAGE_SIZE_LOG2 - 1 downto 0);
   end PAGE_COUNT;
 
   function PT_INDEX (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
@@ -371,9 +370,10 @@ architecture Behavioral of MMDirector is
   type reg_type is record
     state_stack                 : state_stack_type;
     addr                        : unsigned(BUS_ADDR_WIDTH-1 downto 0);
-    addr_vm                     : unsigned(BUS_ADDR_WIDTH-1 downto 0);
+    addr_vm                     : unsigned(BUS_ADDR_WIDTH-1 downto 0); --TODO: reduce width to VA space
     addr_pt                     : unsigned(BUS_ADDR_WIDTH-1 downto 0);
     size                        : unsigned(BUS_ADDR_WIDTH-1 downto 0);
+    pages                       : unsigned(VM_SIZE_L0_LOG2 - PAGE_SIZE_LOG2 - 1 downto 0);
     region                      : unsigned(log2ceil(MEM_REGIONS+1)-1 downto 0);
     arg                         : unsigned(1 downto 0);
     byte_buffer                 : unsigned(BYTE_SIZE-1 downto 0);
@@ -822,6 +822,7 @@ begin
         v.state_stack    := push_state(v.state_stack, SET_PTE_RANGE);
         v.state_stack(1) := VMALLOC_FINISH;
         v.size           := unsigned(cmd_size);
+        v.pages          := PAGE_COUNT(unsigned(cmd_size));
         v.region         := unsigned(cmd_region);
         -- Take first page mapping from frame allocator
         v.arg            := to_unsigned(1, v.arg'length);
@@ -841,9 +842,10 @@ begin
     -- === START OF SET_PTE_RANGE ROUTINE ===
     -- Set mapping for a range of virtual addresses, create page tables as needed.
     -- `addr_vm` contains address to start mapping at.
-    -- `size`    contains length of mapping.
-    -- `region`  regions is recorded in the page tables, and used for allocation.
+    -- `size`    contains length of mapping, rounded up to whole pages.
+    -- `region`  region is recorded in the page tables, and used for allocation.
     -- `addr`    must be initialized to `addr_vm`. (Is used to keep track of progress)
+    -- `pages`   must be initialized to the number of pages in the mapping.
     -- arg(0) = '1' -> Take first frame from frame allocator.
     -- arg(1) = '1' -> Conditional allocation: stop when already mapped. TODO
 
@@ -863,7 +865,7 @@ begin
       bus_rdat_ready <= '1';
       if bus_rdat_valid = '1' then
         -- Check PRESENT bit of PTE referred to by addr.
-        -- We ignore any present entries without checking the L2 table for simplicity of implementation.
+        -- Ignore (overwrite) any present entries in the L2 table for simplicity of implementation.
         if bus_rdat_data(
              PTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, v.addr, 1)))
              + PTE_PRESENT
@@ -940,16 +942,20 @@ begin
 
     when SET_PTE_RANGE_L2_UPDATE_DAT =>
       if v.arg(0) = '1' then
+        -- Use allocated frame in mapping.
         frames_resp_ready <= bus_wdat_ready;
-      end if;
-      if frames_resp_valid = '1' or v.arg(0) = '0' then
-        bus_wdat_valid  <= '1';
+        bus_wdat_valid    <= frames_resp_valid;
+      else
+        -- Create mapping without allocation.
+        bus_wdat_valid    <= '1';
       end if;
       bus_wdat_last   <= '1';
+
       -- Duplicate the address over the data bus.
       for i in 0 to BUS_DATA_BYTES/PTE_SIZE-1 loop
         if v.arg(0) = '1' and
-          PAGE_BASE(v.addr) + i * LOG2_TO_UNSIGNED(VM_SIZE_L2_LOG2) = PAGE_BASE(v.addr_vm)
+          -- This offset is the first entry for the mapping.
+          PAGE_BASE(v.addr) + shift_left(to_unsigned(i, v.addr_vm'length), VM_SIZE_L2_LOG2) = PAGE_BASE(v.addr_vm)
         then
           -- Map to the allocated frame.
           bus_wdat_data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= frames_resp_addr;
@@ -961,10 +967,12 @@ begin
           bus_wdat_data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= (others => '0');
           bus_wdat_data(PTE_WIDTH * i + PTE_MAPPED)  <= '1';
         end if;
+
         -- Write region
         bus_wdat_data(PTE_WIDTH * i + PTE_SEGMENT + v.region'length - 1 downto PTE_WIDTH * i + PTE_SEGMENT) <= slv(v.region);
-        if PAGE_BASE(v.addr) + i * LOG2_TO_UNSIGNED(VM_SIZE_L2_LOG2)
-          = PAGE_BASE(v.addr_vm) + shift_left(PAGE_COUNT(v.size)-1, PAGE_SIZE_LOG2)
+
+        if PAGE_BASE(v.addr) + shift_left(to_unsigned(i, v.addr_vm'length), VM_SIZE_L2_LOG2)
+          = PAGE_BASE(v.addr_vm) + shift_left(v.size-1, PAGE_SIZE_LOG2)
         then
           -- Last entry of mapping
           bus_wdat_data(PTE_WIDTH * i + PTE_BOUNDARY) <= '1';
@@ -975,43 +983,55 @@ begin
       -- start   = v.addr_vm
       -- target  = v.addr_vm + v.size
       -- todo    = target - current
-      -- todo = (PAGE_BASE(v.addr_vm) + shift_left(PAGE_COUNT(v.size), PAGE_SIZE_LOG2)) - PAGE_BASE(v.addr)
+      -- todo = (PAGE_BASE(v.addr_vm) + shift_left(v.size, PAGE_SIZE_LOG2)) - PAGE_BASE(v.addr)
+      -- todo = pages
 
       -- Use strobe to write the correct entries.
       if 0 = ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr, 2)) then
         -- First PTE is aligned to start of bus word.
+        -- Shift a vector of ones to the right to get the correct strobe.
         bus_wdat_strobe <= slv(
             shift_right(
               not to_unsigned(0, bus_wdat_strobe'length),
               PTE_SIZE * ((BUS_DATA_BYTES / PTE_SIZE) -
                 -- Amount of PTEs in this bus word
-                work.Utils.min(
-                  (BUS_DATA_BYTES / PTE_SIZE),
+                int(CLAMP(
                   -- Amount of PTEs left
-                  int(shift_right(
-                    -- Amount of bytes left, rounded up to pages
-                    (PAGE_BASE(v.addr_vm) + shift_left(PAGE_COUNT(v.size), PAGE_SIZE_LOG2)) - PAGE_BASE(v.addr),
-                    VM_SIZE_L2_LOG2))))));
+                  v.pages,
+                  BUS_DATA_BYTES / PTE_SIZE)))));
       else
         -- First PTE is not aligned to bus word. This should not currently happen.
         -- TODO: allow these unaligned allocations.
         v.state_stack(0)   := FAIL;
       end if;
+
+      -- Check for handshake
       if bus_wdat_ready = '1' and (frames_resp_valid = '1' or v.arg(0) = '0') then
         -- Do not try to use allocated frame on next iteration.
         v.arg(0) := '0';
+
         -- Next address is increased by the size addressable by the written entries.
-        v.addr := PAGE_BASE(v.addr) + LOG2_TO_UNSIGNED(VM_SIZE_L2_LOG2) * work.Utils.min(
-                (BUS_DATA_BYTES / PTE_SIZE),
+        v.addr := PAGE_BASE(v.addr) +
+            shift_left(
+              -- Amount of PTEs in this bus word
+              CLAMP(
                 -- Amount of PTEs left
-                int(shift_right(
-                  -- Amount of bytes left, rounded up to pages
-                  (PAGE_BASE(v.addr_vm) + shift_left(PAGE_COUNT(v.size), PAGE_SIZE_LOG2)) - PAGE_BASE(v.addr),
-                  VM_SIZE_L2_LOG2)));
-        if PAGE_BASE(v.addr) = PAGE_BASE(v.addr_vm) + shift_left(PAGE_COUNT(v.size), PAGE_SIZE_LOG2) then
+                v.pages,
+                BUS_DATA_BYTES / PTE_SIZE),
+              VM_SIZE_L2_LOG2);
+
+        -- Update pages left to process.
+        v.pages  := v.pages -
+            -- Amount of PTEs in this bus word
+            CLAMP(
+              -- Amount of PTEs left
+              v.pages,
+              BUS_DATA_BYTES / PTE_SIZE);
+
+        if v.pages = 0 then
           -- Allocated enough space
           v.state_stack := pop_state(v.state_stack);
-        elsif (EXTRACT(v.addr, PAGE_SIZE_LOG2, PT_ENTRIES_LOG2)) = 0 then
+        elsif EXTRACT(v.addr, PAGE_SIZE_LOG2, PT_ENTRIES_LOG2) = 0 then
           -- At end of L2 page table, go to next table through L1.
           v.state_stack(0) := SET_PTE_RANGE;
         else
