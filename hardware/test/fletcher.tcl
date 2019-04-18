@@ -129,6 +129,7 @@ proc add_mm {{source_dir ""}} {
   add_source $source_dir/mm/MMBarrier.vhd
   add_source $source_dir/mm/MMDirector.vhd
   add_source $source_dir/mm/MMFrames.vhd
+  add_source $source_dir/mm/MMGapFinder.vhd
   add_source $source_dir/mm/MMHostInterface.vhd
   add_source $source_dir/mm/MMRolodex.vhd
   add_source $source_dir/mm/MMTranslator.vhd
