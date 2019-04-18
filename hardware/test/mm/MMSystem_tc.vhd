@@ -127,6 +127,7 @@ begin
   wait until rising_edge(TbClock);
 
   -- Allocate 3 GB (buffer A)
+  report "Allocating A"  severity note;
   cmd_alloc  <= '1';
   cmd_size   <= slv(shift_left(to_unsigned(3, cmd_size'length), 30));
   cmd_region <= slv(to_unsigned(1, cmd_region'length));
@@ -143,6 +144,7 @@ begin
   resp_ready <= '0';
 
   -- Allocate 34 GB (buffer B)
+  report "Allocating B"  severity note;
   cmd_alloc  <= '1';
   cmd_size   <= slv(shift_left(to_unsigned(34, cmd_size'length), 30));
   cmd_region <= slv(to_unsigned(1, cmd_region'length));
@@ -158,6 +160,8 @@ begin
   wait for 0 ns;
   resp_ready <= '0';
 
+
+  report "Reading"  severity note;
 
   -- Try reading from buffer A
   bufl_r.req_addr  <= addr_a;
@@ -180,15 +184,16 @@ begin
 
 
   -- Purge pipelines
-  for n in 0 to 20 loop
-    wait until rising_edge(TbClock);
-  end loop;
+  wait for TbPeriod * 20;
 
   -- Free the first allocation
---    cmd_free <= '1';
---    cmd_addr <= addr;
---    handshake_out(TbClock, cmd_ready, cmd_valid);
+  report "Freeing"  severity note;
+  cmd_free <= '1';
+  cmd_addr <= addr_a;
+  handshake_out(TbClock, cmd_ready, cmd_valid);
+  handshake_in(TbClock, resp_ready, resp_valid);
 
+  wait for TbPeriod * 500;
 
   TbSimEnded                  <= '0';
 

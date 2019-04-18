@@ -131,7 +131,7 @@ architecture Behavioral of MMDirector is
   constant PTE_PRESENT          : natural := 1;
   constant PTE_BOUNDARY         : natural := 2;
 
-  constant FRAME_IDX_WIDTH      : natural := MEM_MAP_SIZE_LOG2 * MEM_REGIONS - PT_SIZE_LOG2;
+  constant FRAME_IDX_WIDTH      : natural := MEM_MAP_SIZE_LOG2 + MEM_REGIONS - PAGE_SIZE_LOG2;
 
   constant VM_SIZE_L2_LOG2      : natural := PAGE_SIZE_LOG2;
   constant VM_SIZE_L1_LOG2      : natural := VM_SIZE_L2_LOG2 + PT_ENTRIES_LOG2;
@@ -332,16 +332,18 @@ architecture Behavioral of MMDirector is
   type state_type is (RESET_ST, IDLE, FAIL, CLEAR_FRAMES, CLEAR_FRAMES_CHECK,
                       RESERVE_PT, RESERVE_PT_CHECK, PT0_INIT,
 
-                      VMALLOC, VMALLOC_CHECK_PT0, VMALLOC_CHECK_PT0_DATA,
-                      VMALLOC_RESERVE_FRAME, VMALLOC_FINISH,
-
                       MMU_GET_L1_ADDR, MMU_GET_L1_DAT,
                       MMU_GET_L2_ADDR, MMU_GET_L2_DAT, MMU_RESP,
                       MMU_SET_L2_ADDR, MMU_SET_L2_DAT,
 
+                      VMALLOC, VMALLOC_CHECK_PT0, VMALLOC_CHECK_PT0_DATA,
+                      VMALLOC_RESERVE_FRAME, VMALLOC_FINISH,
+
+                      VFREE,
+
                       SET_PTE_RANGE, SET_PTE_RANGE_L1_CHECK,
                       SET_PTE_RANGE_L1_UPDATE_ADDR, SET_PTE_RANGE_L1_UPDATE_DAT,
-                      SET_PTE_RANGE_FRAME,
+                      SET_PTE_RANGE_FRAME, SET_PTE_RANGE_L2_CHECK_ADDR,
                       SET_PTE_RANGE_L2_UPDATE_ADDR, SET_PTE_RANGE_L2_UPDATE_DAT,
 
                       PT_NEW, PT_NEW_REQ_BM, PT_NEW_CHECK_BM, PT_NEW_MARK_BM_ADDR,
@@ -568,8 +570,7 @@ begin
           end if;
 
         elsif cmd_free = '1' then
-          -- TODO
-          v.state_stack(0) := FAIL;
+          v.state_stack   := push_state(v.state_stack, VFREE);
 
         elsif cmd_realloc = '1' then
           -- TODO
@@ -662,11 +663,14 @@ begin
           frames_cmd_valid  <= '1';
           frames_cmd_find   <= '1';
           if log2ceil(MEM_REGIONS) > 0 then
-            frames_cmd_region <= slv(EXTRACT(
-                  unsigned(bus_rdat_data),
-                  BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2))) + PTE_SEGMENT,
-                  log2ceil(MEM_REGIONS)
-                ));
+            frames_cmd_region <= slv(
+                resize(
+                  EXTRACT(
+                    unsigned(bus_rdat_data),
+                    BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2))) + PTE_SEGMENT,
+                    log2ceil(MEM_REGIONS+1)
+                  ) - 1,
+                  log2ceil(MEM_REGIONS)));
           end if;
           -- Store all flags of the mapping (skip the address itself)
           v.addr            := resize(
@@ -839,20 +843,36 @@ begin
         end if;
       end if;
 
+
+    -- === START OF VFREE ROUTINE ===
+
+    when VFREE =>
+      v.state_stack(0) := SET_PTE_RANGE;
+      v.addr_vm        := PAGE_BASE(unsigned(cmd_addr));
+      v.addr           := v.addr_vm;
+      v.arg            := (others => '0');
+      v.arg(1)         := '1'; -- deallocate
+      cmd_ready        <= '1';
+
+
     -- === START OF SET_PTE_RANGE ROUTINE ===
     -- Set mapping for a range of virtual addresses, create page tables as needed.
     -- `addr_vm` contains address to start mapping at.
-    -- `size`    contains length of mapping, rounded up to whole pages.
     -- `region`  region is recorded in the page tables, and used for allocation.
     -- `addr`    must be initialized to `addr_vm`. (Is used to keep track of progress)
     -- `pages`   must be initialized to the number of pages in the mapping.
     -- arg(0) = '1' -> Take first frame from frame allocator.
-    -- arg(1) = '1' -> Conditional allocation: stop when already mapped. TODO
+    -- arg(1) = '1' -> Deallocate
+    -- arg(2) = '1' -> Conditional allocation: stop when already mapped. TODO
 
     when SET_PTE_RANGE =>
       -- Get the L1 PTE
       bus_rreq_addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(PT_ADDR, v.addr, 1)));
       bus_rreq_len   <= slv(to_unsigned(1, bus_rreq_len'length));
+      -- Set pages argument for unknown lengths
+      if v.arg(1) = '1' then
+        v.pages      := not to_unsigned(0, v.pages'length);
+      end if;
       -- Wait for any outstanding writes to be completed.
       if int_bus_dirty = '0' then
         bus_rreq_valid <= '1';
@@ -867,7 +887,7 @@ begin
         -- Check PRESENT bit of PTE referred to by addr.
         -- Ignore (overwrite) any present entries in the L2 table for simplicity of implementation.
         if bus_rdat_data(
-             PTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, v.addr, 1)))
+             BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, v.addr, 1)))
              + PTE_PRESENT
            ) = '1'
         then
@@ -879,7 +899,10 @@ begin
                 BYTE_SIZE * PTE_SIZE
               ),
               PT_SIZE_LOG2);
-          if v.arg(0) = '1' then
+          if v.arg(1) = '1' then
+            -- Deallocate; request the mapping to do so.
+            v.state_stack(0) := SET_PTE_RANGE_L2_CHECK_ADDR;
+          elsif v.arg(0) = '1' then
             v.state_stack(0) := SET_PTE_RANGE_FRAME;
           else
             v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_ADDR;
@@ -917,14 +940,20 @@ begin
           to_unsigned(0, bus_wdat_strobe'length),
           int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, v.addr, 1)))));
       if bus_wdat_ready = '1' then
-        if v.arg(0) = '1' then
+        if v.arg(1) = '1' then
+          -- Deallocate; request the mapping to do so.
+          v.state_stack(0) := SET_PTE_RANGE_L2_CHECK_ADDR;
+        elsif v.arg(0) = '1' then
+          -- Allocate the first frame for the new mapping.
           v.state_stack(0) := SET_PTE_RANGE_FRAME;
         else
+          -- Continue to create mapping.
           v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_ADDR;
         end if;
       end if;
 
     when SET_PTE_RANGE_FRAME =>
+      -- Allocate a single frame for the mapping.
       frames_cmd_valid   <= '1';
       frames_cmd_find    <= '1';
       frames_cmd_region  <= slv(resize(v.region - 1, frames_cmd_region'length));
@@ -932,8 +961,23 @@ begin
         v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_ADDR;
       end if;
 
+    when SET_PTE_RANGE_L2_CHECK_ADDR =>
+      -- Request the existing mapping, to do stuff with it later on.
+      bus_rreq_valid     <= '1';
+      bus_rreq_addr      <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(v.addr_pt, v.addr, 2)));
+      bus_rreq_len       <= slv(to_unsigned(1, int_bus_wreq_len'length));
+      if bus_rreq_ready = '1' then
+        v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_ADDR;
+      end if;
+
     when SET_PTE_RANGE_L2_UPDATE_ADDR =>
-      int_bus_wreq_valid <= '1';
+      -- L2 page table entry address
+      if v.arg(1) = '1' then
+        -- Wait until read is done to prevent deadlock
+        int_bus_wreq_valid <= bus_rdat_valid;
+      else
+        int_bus_wreq_valid <= '1';
+      end if;
       int_bus_wreq_addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(v.addr_pt, v.addr, 2)));
       int_bus_wreq_len   <= slv(to_unsigned(1, int_bus_wreq_len'length));
       if int_bus_wreq_ready = '1' then
@@ -941,7 +985,12 @@ begin
       end if;
 
     when SET_PTE_RANGE_L2_UPDATE_DAT =>
-      if v.arg(0) = '1' then
+      -- Update the L2 page table entries (whole bus word)
+      if v.arg(1) = '1' then
+        -- Deallocate
+        bus_rdat_ready    <= bus_wdat_ready;
+        bus_wdat_valid    <= bus_rdat_valid;
+      elsif v.arg(0) = '1' then
         -- Use allocated frame in mapping.
         frames_resp_ready <= bus_wdat_ready;
         bus_wdat_valid    <= frames_resp_valid;
@@ -953,38 +1002,47 @@ begin
 
       -- Duplicate the address over the data bus.
       for i in 0 to BUS_DATA_BYTES/PTE_SIZE-1 loop
-        if v.arg(0) = '1' and
-          -- This offset is the first entry for the mapping.
-          PAGE_BASE(v.addr) + shift_left(to_unsigned(i, v.addr_vm'length), VM_SIZE_L2_LOG2) = PAGE_BASE(v.addr_vm)
-        then
-          -- Map to the allocated frame.
-          bus_wdat_data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= frames_resp_addr;
-          -- Mark the entry as mapped and present.
-          bus_wdat_data(PTE_WIDTH * i + PTE_MAPPED)  <= '1';
-          bus_wdat_data(PTE_WIDTH * i + PTE_PRESENT) <= '1';
+
+        -- Default to a zero'd entry
+        bus_wdat_data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= (others => '0');
+
+        if v.arg(1) = '1' then
+          -- Deallocate
+          if bus_rdat_data(PTE_WIDTH * i + PTE_BOUNDARY) = '1' then
+            -- Last entry of the mapping, number of pages now known.
+            v.pages := to_unsigned(i+1, v.pages'length);
+          end if;
+
         else
-          -- Mark as mapped, but do not allocate frames.
-          bus_wdat_data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= (others => '0');
+
+          -- First entry
+          if v.arg(0) = '1' and -- Allocate first entry.
+            -- This offset is the first entry for the mapping.
+            PAGE_BASE(v.addr) + shift_left(to_unsigned(i, v.addr_vm'length), VM_SIZE_L2_LOG2) = PAGE_BASE(v.addr_vm)
+          then
+            -- Map to the allocated frame.
+            bus_wdat_data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= frames_resp_addr;
+            -- Mark the entry as present.
+            bus_wdat_data(PTE_WIDTH * i + PTE_PRESENT) <= '1';
+          end if;
+
+          -- Last entry
+          if r.pages - i - 1 = 0 then
+            bus_wdat_data(PTE_WIDTH * i + PTE_BOUNDARY) <= '1';
+          end if;
+
+          -- Mark as mapped
           bus_wdat_data(PTE_WIDTH * i + PTE_MAPPED)  <= '1';
         end if;
 
         -- Write region
         bus_wdat_data(PTE_WIDTH * i + PTE_SEGMENT + v.region'length - 1 downto PTE_WIDTH * i + PTE_SEGMENT) <= slv(v.region);
-
-        if PAGE_BASE(v.addr) + shift_left(to_unsigned(i, v.addr_vm'length), VM_SIZE_L2_LOG2)
-          = PAGE_BASE(v.addr_vm) + shift_left(v.size-1, PAGE_SIZE_LOG2)
-        then
-          -- Last entry of mapping
-          bus_wdat_data(PTE_WIDTH * i + PTE_BOUNDARY) <= '1';
-        end if;
       end loop;
 
       -- current = v.addr
       -- start   = v.addr_vm
       -- target  = v.addr_vm + v.size
-      -- todo    = target - current
-      -- todo = (PAGE_BASE(v.addr_vm) + shift_left(v.size, PAGE_SIZE_LOG2)) - PAGE_BASE(v.addr)
-      -- todo = pages
+      -- todo    = pages
 
       -- Use strobe to write the correct entries.
       if 0 = ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr, 2)) then
@@ -1006,7 +1064,10 @@ begin
       end if;
 
       -- Check for handshake
-      if bus_wdat_ready = '1' and (frames_resp_valid = '1' or v.arg(0) = '0') then
+      if bus_wdat_ready = '1'
+        and (v.arg(0) = '0' or frames_resp_valid = '1')
+        and (v.arg(1) = '0' or bus_rdat_valid = '1')
+      then
         -- Do not try to use allocated frame on next iteration.
         v.arg(0) := '0';
 
@@ -1036,7 +1097,11 @@ begin
           v.state_stack(0) := SET_PTE_RANGE;
         else
           -- Continue with next PTE.
-          v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_ADDR;
+          if v.arg(1) = '1' then
+            v.state_stack(0) := SET_PTE_RANGE_L2_CHECK_ADDR;
+          else
+            v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_ADDR;
+          end if;
         end if;
       end if;
 
@@ -1250,7 +1315,7 @@ begin
   ptframes : MMRolodex
     generic map (
       MAX_ENTRIES                 => DIV_CEIL(PT_MAX_AMOUNT, PT_PER_FRAME),
-      ENTRY_WIDTH                 => MEM_MAP_SIZE_LOG2 * MEM_REGIONS - PT_SIZE_LOG2
+      ENTRY_WIDTH                 => FRAME_IDX_WIDTH
     )
     port map (
       clk                         => clk,

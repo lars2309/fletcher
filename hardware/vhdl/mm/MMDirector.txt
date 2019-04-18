@@ -32,9 +32,15 @@ VMALLOC_RESERVE_FRAME
  -> SET_PTE_RANGE
 VMALLOC_FINISH                 ###  barrier
 
+# Frees a mapping
+# in  : cmd_
+# uses: addr, addr_vm, pages, arg, (addr_pt)
+VFREE
+  -> SET_PTE_RANGE
+
 # Set mapping for a range of virtual addresses
-# in  : addr_vm, size, arg, region, (addr)
-# uses: addr, addr_pt, arg, pages
+# in  : addr_vm, pages, arg, region, (addr)
+# uses: addr, pages, addr_pt, arg
 SET_PTE_RANGE                  ###  barrier
 SET_PTE_RANGE_L1_CHECK
   ~> PT_NEW
