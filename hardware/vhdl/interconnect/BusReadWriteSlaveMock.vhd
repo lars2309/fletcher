@@ -259,9 +259,8 @@ begin
 
         -- Stop accepting data
         wdat_ready <= '0';
-      end if; -- wreq_valid = '1'
 
-      if rreq_int_valid = '1' then
+      elsif rreq_int_valid = '1' then
         addr := resize(unsigned(rreq_addr), 64);
         len := to_integer(unsigned(rreq_len));
 
