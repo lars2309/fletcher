@@ -200,6 +200,15 @@ architecture Behavioral of MMDirector is
     return ret(VM_SIZE_L0_LOG2 - PAGE_SIZE_LOG2 - 1 downto 0);
   end PAGE_COUNT;
 
+  function PT_BITMAP_IDX (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
+    return unsigned is
+  begin
+    return shift_right_cut(
+          resize(addr, PAGE_SIZE_LOG2),
+          PT_SIZE_LOG2
+        ) - PT_FIRST_NR;
+  end PT_BITMAP_IDX;
+
   function PT_INDEX (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
     return unsigned is
   begin
@@ -341,10 +350,14 @@ architecture Behavioral of MMDirector is
 
                       VFREE,
 
-                      SET_PTE_RANGE, SET_PTE_RANGE_L1_CHECK,
+                      SET_PTE_RANGE,
+                      SET_PTE_RANGE_L1_ADDR, SET_PTE_RANGE_L1_CHECK,
                       SET_PTE_RANGE_L1_UPDATE_ADDR, SET_PTE_RANGE_L1_UPDATE_DAT,
                       SET_PTE_RANGE_FRAME, SET_PTE_RANGE_L2_CHECK_ADDR,
                       SET_PTE_RANGE_L2_UPDATE_ADDR, SET_PTE_RANGE_L2_UPDATE_DAT,
+
+                      PT_DEL, PT_DEL_MARK_BM_ADDR, PT_DEL_MARK_BM_DATA,
+                      PT_DEL_ROLODEX, PT_DEL_FRAME,
 
                       PT_NEW, PT_NEW_REQ_BM, PT_NEW_CHECK_BM, PT_NEW_MARK_BM_ADDR,
                       PT_NEW_FRAME, PT_NEW_FRAME_CHECK,
@@ -378,6 +391,8 @@ architecture Behavioral of MMDirector is
     pages                       : unsigned(VM_SIZE_L0_LOG2 - PAGE_SIZE_LOG2 - 1 downto 0);
     region                      : unsigned(log2ceil(MEM_REGIONS+1)-1 downto 0);
     arg                         : unsigned(1 downto 0);
+    pt_empty                    : std_logic;
+    in_mapping                  : std_logic;
     byte_buffer                 : unsigned(BYTE_SIZE-1 downto 0);
     beat                        : unsigned(log2ceil(BUS_BURST_MAX_LEN+1)-1 downto 0);
   end record;
@@ -425,14 +440,6 @@ begin
       if reset = '1' then
         r.state_stack    <= (others => FAIL);
         r.state_stack(0) <= RESET_ST;
-        r.addr           <= (others => '0');
-        r.addr_vm        <= (others => '0');
-        r.addr_pt        <= (others => '0');
-        r.arg            <= (others => '0');
-        r.byte_buffer    <= (others => '0');
-        r.size           <= (others => '0');
-        r.region         <= (others => '0');
-        r.beat           <= (others => '0');
       else
         r <= d;
       end if;
@@ -830,7 +837,6 @@ begin
         v.region         := unsigned(cmd_region);
         -- Take first page mapping from frame allocator
         v.arg            := to_unsigned(1, v.arg'length);
-        v.addr           := v.addr_vm;
 --      end if;
 
     when VMALLOC_FINISH =>
@@ -849,7 +855,6 @@ begin
     when VFREE =>
       v.state_stack(0) := SET_PTE_RANGE;
       v.addr_vm        := PAGE_BASE(unsigned(cmd_addr));
-      v.addr           := v.addr_vm;
       v.arg            := (others => '0');
       v.arg(1)         := '1'; -- deallocate
       cmd_ready        <= '1';
@@ -859,20 +864,31 @@ begin
     -- Set mapping for a range of virtual addresses, create page tables as needed.
     -- `addr_vm` contains address to start mapping at.
     -- `region`  region is recorded in the page tables, and used for allocation.
-    -- `addr`    must be initialized to `addr_vm`. (Is used to keep track of progress)
     -- `pages`   must be initialized to the number of pages in the mapping.
     -- arg(0) = '1' -> Take first frame from frame allocator.
     -- arg(1) = '1' -> Deallocate
     -- arg(2) = '1' -> Conditional allocation: stop when already mapped. TODO
 
     when SET_PTE_RANGE =>
-      -- Get the L1 PTE
-      bus_rreq_addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(PT_ADDR, v.addr, 1)));
-      bus_rreq_len   <= slv(to_unsigned(1, bus_rreq_len'length));
-      -- Set pages argument for unknown lengths
+      v.addr           := v.addr_vm;
       if v.arg(1) = '1' then
-        v.pages      := not to_unsigned(0, v.pages'length);
+        -- Length for deallocation is not known in advance, set it to maximum.
+        v.pages        := not to_unsigned(0, v.pages'length);
+        -- Start at beginning of L2 page table,
+        -- to check whether it is in use by another allocation.
+        v.addr         := align_beq(v.addr_vm, VM_SIZE_L1_LOG2);
       end if;
+      v.state_stack(0) := SET_PTE_RANGE_L1_ADDR;
+
+    when SET_PTE_RANGE_L1_ADDR =>
+      -- Get the L1 PTE
+      bus_rreq_addr    <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(PT_ADDR, v.addr, 1)));
+      bus_rreq_len     <= slv(to_unsigned(1, bus_rreq_len'length));
+
+      -- Start off by assuming the L2 page table is unused.
+      v.pt_empty       := '1';
+      v.in_mapping     := '0';
+
       -- Wait for any outstanding writes to be completed.
       if int_bus_dirty = '0' then
         bus_rreq_valid <= '1';
@@ -972,21 +988,40 @@ begin
 
     when SET_PTE_RANGE_L2_UPDATE_ADDR =>
       -- L2 page table entry address
-      if v.arg(1) = '1' then
-        -- Wait until read is done to prevent deadlock
-        int_bus_wreq_valid <= bus_rdat_valid;
-      else
-        int_bus_wreq_valid <= '1';
-      end if;
       int_bus_wreq_addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(v.addr_pt, v.addr, 2)));
       int_bus_wreq_len   <= slv(to_unsigned(1, int_bus_wreq_len'length));
-      if int_bus_wreq_ready = '1' then
+
+      if  shift_right(v.addr,    VM_SIZE_L2_LOG2 + log2ceil(BUS_DATA_BYTES / PTE_SIZE))
+        = shift_right(v.addr_vm, VM_SIZE_L2_LOG2 + log2ceil(BUS_DATA_BYTES / PTE_SIZE))
+      then
+        -- Current address is in the mapping of interest.
+        v.in_mapping  := '1';
+      end if;
+
+      if v.in_mapping = '0' then
+        -- Skip write if before the start address, or after the end address.
         v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
+      else
+        if int_bus_wreq_ready = '1' then
+          v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
+        end if;
+        if v.arg(1) = '1' then
+          -- Wait until read is done to prevent deadlock
+          int_bus_wreq_valid <= bus_rdat_valid;
+        else
+          int_bus_wreq_valid <= '1';
+        end if;
       end if;
 
     when SET_PTE_RANGE_L2_UPDATE_DAT =>
       -- Update the L2 page table entries (whole bus word)
-      if v.arg(1) = '1' then
+      -- TODO: skip write if before the start address, or when pages=0
+      if v.in_mapping = '0' then
+        -- Not inside of mapping. This only happens with deallocation.
+        -- Consume requested data, do not write.
+        bus_rdat_ready    <= '1';
+        bus_wdat_valid    <= '0';
+      elsif v.arg(1) = '1' then
         -- Deallocate
         bus_rdat_ready    <= bus_wdat_ready;
         bus_wdat_valid    <= bus_rdat_valid;
@@ -1000,7 +1035,7 @@ begin
       end if;
       bus_wdat_last   <= '1';
 
-      -- Duplicate the address over the data bus.
+      -- Loop over the PTEs on the data bus.
       for i in 0 to BUS_DATA_BYTES/PTE_SIZE-1 loop
 
         -- Default to a zero'd entry
@@ -1011,29 +1046,34 @@ begin
           if bus_rdat_data(PTE_WIDTH * i + PTE_BOUNDARY) = '1' then
             -- Last entry of the mapping, number of pages now known.
             v.pages := to_unsigned(i+1, v.pages'length);
+            v.in_mapping := '0';
           end if;
-
-        else
-
-          -- First entry
-          if v.arg(0) = '1' and -- Allocate first entry.
-            -- This offset is the first entry for the mapping.
-            PAGE_BASE(v.addr) + shift_left(to_unsigned(i, v.addr_vm'length), VM_SIZE_L2_LOG2) = PAGE_BASE(v.addr_vm)
+          if v.in_mapping = '0' and
+            bus_rdat_data(PTE_WIDTH * i + PTE_MAPPED) = '1'
           then
-            -- Map to the allocated frame.
-            bus_wdat_data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= frames_resp_addr;
-            -- Mark the entry as present.
-            bus_wdat_data(PTE_WIDTH * i + PTE_PRESENT) <= '1';
+            -- An entry is mapped outside of the deleted mapping.
+            v.pt_empty   := '0';
           end if;
-
-          -- Last entry
-          if r.pages - i - 1 = 0 then
-            bus_wdat_data(PTE_WIDTH * i + PTE_BOUNDARY) <= '1';
-          end if;
-
-          -- Mark as mapped
-          bus_wdat_data(PTE_WIDTH * i + PTE_MAPPED)  <= '1';
         end if;
+
+        -- First entry
+        if v.arg(0) = '1' and -- Allocate first entry.
+          -- This offset is the first entry for the mapping.
+          PAGE_BASE(v.addr) + shift_left(to_unsigned(i, v.addr_vm'length), VM_SIZE_L2_LOG2) = PAGE_BASE(v.addr_vm)
+        then
+          -- Map to the allocated frame.
+          bus_wdat_data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= frames_resp_addr;
+          -- Mark the entry as present.
+          bus_wdat_data(PTE_WIDTH * i + PTE_PRESENT) <= '1';
+        end if;
+
+        -- Last entry
+        if r.pages - i - 1 = 0 then
+          bus_wdat_data(PTE_WIDTH * i + PTE_BOUNDARY) <= '1';
+        end if;
+
+        -- Mark as mapped / not mapped
+        bus_wdat_data(PTE_WIDTH * i + PTE_MAPPED)  <= not v.arg(1);
 
         -- Write region
         bus_wdat_data(PTE_WIDTH * i + PTE_SEGMENT + v.region'length - 1 downto PTE_WIDTH * i + PTE_SEGMENT) <= slv(v.region);
@@ -1064,9 +1104,11 @@ begin
       end if;
 
       -- Check for handshake
-      if bus_wdat_ready = '1'
-        and (v.arg(0) = '0' or frames_resp_valid = '1')
-        and (v.arg(1) = '0' or bus_rdat_valid = '1')
+      if r.in_mapping = '0' or
+        ( bus_wdat_ready = '1'
+          and (v.arg(0) = '0' or frames_resp_valid = '1')
+          and (v.arg(1) = '0' or bus_rdat_valid = '1')
+        )
       then
         -- Do not try to use allocated frame on next iteration.
         v.arg(0) := '0';
@@ -1074,11 +1116,7 @@ begin
         -- Next address is increased by the size addressable by the written entries.
         v.addr := PAGE_BASE(v.addr) +
             shift_left(
-              -- Amount of PTEs in this bus word
-              CLAMP(
-                -- Amount of PTEs left
-                v.pages,
-                BUS_DATA_BYTES / PTE_SIZE),
+              to_unsigned(BUS_DATA_BYTES / PTE_SIZE, v.addr'length),
               VM_SIZE_L2_LOG2);
 
         -- Update pages left to process.
@@ -1089,20 +1127,27 @@ begin
               v.pages,
               BUS_DATA_BYTES / PTE_SIZE);
 
-        if v.pages = 0 then
+        if v.arg(1) = '0' and v.pages = 0 then
           -- Allocated enough space
-          v.state_stack := pop_state(v.state_stack);
+          v.state_stack    := pop_state(v.state_stack);
         elsif EXTRACT(v.addr, PAGE_SIZE_LOG2, PT_ENTRIES_LOG2) = 0 then
           -- At end of L2 page table, go to next table through L1.
-          v.state_stack(0) := SET_PTE_RANGE;
+          v.state_stack(0) := SET_PTE_RANGE_L1_ADDR;
+          if v.arg(1) = '1' and v.pt_empty = '1' then
+            -- Deallocation and PT is empty, delete it.
+            v.state_stack  := push_state(v.state_stack, PT_DEL);
+          end if;
+        elsif v.arg(1) = '1' then
+          -- Continue with next PTE, check for end of mapping.
+          v.state_stack(0) := SET_PTE_RANGE_L2_CHECK_ADDR;
         else
           -- Continue with next PTE.
-          if v.arg(1) = '1' then
-            v.state_stack(0) := SET_PTE_RANGE_L2_CHECK_ADDR;
-          else
-            v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_ADDR;
-          end if;
+          v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_ADDR;
         end if;
+
+      else
+        -- No handshake, do not update in_mapping just yet.
+        v.in_mapping := r.in_mapping;
       end if;
 
     -- === START OF FRAME_INIT ROUTINE ===
@@ -1145,6 +1190,71 @@ begin
       if rolodex_insert_ready = '1' then
         v.state_stack := pop_state(v.state_stack);
       end if;
+
+    -- === START OF PT_DEL ROUTINE ===
+    -- Mark the page table at `addr_pt` as unused and remove the frame from
+    -- the PT pool if the frame contains no more page tables.
+
+    when PT_DEL =>
+      bus_rreq_addr  <= slv(PAGE_BASE(v.addr_pt) + PT_BITMAP_IDX(v.addr_pt) / BUS_DATA_WIDTH);
+      bus_rreq_len   <= slv(to_unsigned(1, bus_rreq_len'length));
+      bus_rreq_valid <= '1';
+      if bus_rreq_ready = '1' then
+        v.state_stack(0) := PT_DEL_MARK_BM_ADDR;
+      end if;
+
+    when PT_DEL_MARK_BM_ADDR =>
+      -- Set address for marking bit in bitmap
+      int_bus_wreq_valid <= bus_rdat_valid;
+      bus_rdat_ready     <= int_bus_wreq_ready;
+      int_bus_wreq_addr  <= slv(PAGE_BASE(v.addr_pt) + PT_BITMAP_IDX(v.addr_pt) / BUS_DATA_WIDTH);
+      int_bus_wreq_len   <= slv(to_unsigned(1, int_bus_wreq_len'length));
+      v.byte_buffer      := EXTRACT(
+          u(bus_rdat_data),
+          int(align_beq(PT_BITMAP_IDX(v.addr_pt), BYTE_SIZE) mod BUS_DATA_WIDTH),
+          BYTE_SIZE);
+      if int_bus_wreq_ready = '1' then
+        -- TODO: make this work for bitmaps > BUS_DATA_WIDTH
+        if BIT_COUNT(bus_rdat_data(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH) downto 0)) = 1 then
+          -- This was the last page table in the frame, delete it.
+          v.state_stack(0) := PT_DEL_ROLODEX;
+        else
+          v.state_stack(0) := PT_DEL_MARK_BM_DATA;
+        end if;
+      end if;
+
+    when PT_DEL_ROLODEX =>
+      rolodex_delete_entry <= ADDR_TO_ROLODEX(v.addr_pt);
+      rolodex_delete_valid <= '1';
+      if rolodex_delete_ready = '1' then
+        v.state_stack(0) := PT_DEL_FRAME;
+      end if;
+
+    when PT_DEL_FRAME =>
+      frames_cmd_valid <= '1';
+      frames_cmd_free  <= '1';
+      frames_cmd_addr  <= slv(PAGE_BASE(v.addr_pt));
+      if frames_cmd_ready = '1' then
+        v.state_stack(0) := PT_DEL_MARK_BM_DATA;
+      end if;
+
+    when PT_DEL_MARK_BM_DATA =>
+      bus_wdat_valid  <= '1';
+      for i in 0 to BUS_DATA_BYTES-1 loop
+        bus_wdat_data(BYTE_SIZE*(i+1)-1 downto BYTE_SIZE*i) <= slv(v.byte_buffer);
+      end loop;
+      bus_wdat_strobe <= (others => '0');
+      -- Get page table number referenced by addr and figure out which byte of the bitmap it is in.
+      bus_wdat_strobe(int(
+        div_floor(
+          PT_BITMAP_IDX(v.addr_pt) mod BUS_DATA_WIDTH,
+          BYTE_SIZE)
+        )) <= '0';
+      bus_wdat_last <= '1';
+      if bus_wdat_ready = '1' then
+        v.state_stack := pop_state(v.state_stack);
+      end if;
+
 
     -- === START OF PT_NEW ROUTINE ===
     -- Find a free spot for a page table.
@@ -1252,7 +1362,7 @@ begin
       -- Get page table number referenced by addr and figure out which byte of the bitmap it is in.
       bus_wdat_strobe(int(
         div_floor(
-          shift_right_cut(PAGE_OFFSET(v.addr), PT_SIZE_LOG2) - PT_FIRST_NR,
+          PT_BITMAP_IDX(v.addr),
           BYTE_SIZE)
         )) <= '1';
       bus_wdat_last <= '1';

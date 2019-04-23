@@ -22,6 +22,9 @@ package MM is
   function XOR_REDUCT(arg : in std_logic_vector)
                       return std_logic;
 
+  function BIT_COUNT(arg : in std_logic_vector)
+                     return unsigned;
+
   function DIV_CEIL (numerator   : natural;
                      denominator : natural)
     return natural;
@@ -404,6 +407,16 @@ package body MM is
     end loop;
     return ret;
   end XOR_REDUCT;
+
+  function BIT_COUNT(arg : in std_logic_vector)
+                     return unsigned is
+    variable ret : unsigned(log2ceil(arg'length+1)-1 downto 0) := (others => '0');
+  begin
+    for i in arg'range loop
+      ret := ret + u(arg(i));
+    end loop;
+    return ret;
+  end BIT_COUNT;
 
   function DIV_CEIL (numerator   : natural;
                      denominator : natural)
