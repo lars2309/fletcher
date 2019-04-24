@@ -1016,14 +1016,17 @@ begin
         -- Skip write if before the start address, or after the end address.
         v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
       else
-        if int_bus_wreq_ready = '1' then
-          v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
-        end if;
         if v.arg(1) = '1' then
           -- Wait until read is done to prevent deadlock
           int_bus_wreq_valid <= bus_rdat_valid;
+          if int_bus_wreq_ready = '1' and bus_rdat_valid = '1' then
+            v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
+          end if;
         else
           int_bus_wreq_valid <= '1';
+          if int_bus_wreq_ready = '1' then
+            v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
+          end if;
         end if;
       end if;
 
