@@ -126,10 +126,10 @@ begin
   TbReset                     <= '0';
   wait until rising_edge(TbClock);
 
-  -- Allocate 3 GB (buffer A)
+  -- Allocate medium buffer (buffer A)
   report "Allocating A"  severity note;
   cmd_alloc  <= '1';
-  cmd_size   <= slv(shift_left(to_unsigned(3, cmd_size'length), 30));
+  cmd_size   <= slv(shift_left(to_unsigned(3, cmd_size'length), PT_ENTRIES_LOG2+PAGE_SIZE_LOG2 - 5));
   cmd_region <= slv(to_unsigned(1, cmd_region'length));
   handshake_out(TbClock, cmd_ready, cmd_valid);
   cmd_alloc  <= '0';
@@ -143,10 +143,10 @@ begin
   wait for 0 ns;
   resp_ready <= '0';
 
-  -- Allocate 34 GB (buffer B)
+  -- Allocate large buffer (buffer B)
   report "Allocating B"  severity note;
   cmd_alloc  <= '1';
-  cmd_size   <= slv(shift_left(to_unsigned(34, cmd_size'length), 30));
+  cmd_size   <= slv(shift_left(to_unsigned(34, cmd_size'length), PT_ENTRIES_LOG2+PAGE_SIZE_LOG2 - 5));
   cmd_region <= slv(to_unsigned(1, cmd_region'length));
   handshake_out(TbClock, cmd_ready, cmd_valid);
   cmd_alloc  <= '0';
@@ -187,9 +187,16 @@ begin
   wait for TbPeriod * 20;
 
   -- Free the first allocation
-  report "Freeing"  severity note;
+  report "Freeing A"  severity note;
   cmd_free <= '1';
   cmd_addr <= addr_a;
+  handshake_out(TbClock, cmd_ready, cmd_valid);
+  handshake_in(TbClock, resp_ready, resp_valid);
+
+  -- Free the second allocation
+  report "Freeing B"  severity note;
+  cmd_free <= '1';
+  cmd_addr <= addr_b;
   handshake_out(TbClock, cmd_ready, cmd_valid);
   handshake_in(TbClock, resp_ready, resp_valid);
 
