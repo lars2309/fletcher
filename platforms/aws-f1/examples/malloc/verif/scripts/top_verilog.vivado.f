@@ -29,7 +29,7 @@
 --include ${SH_LIB_DIR}
 --include ${SH_INF_DIR}
 --include ${HDK_COMMON_DIR}/verif/include
---include ${SH_LIB_DIR}/../ip/cl_axi_interconnect/ipshared/7e3a/hdl
+--include ${HDK_SHELL_DESIGN_DIR}/ip/cl_axi_interconnect/ipshared/7e3a/hdl
 --include ${HDK_SHELL_DESIGN_DIR}/sh_ddr/sim
 --include ${HDK_SHELL_DESIGN_DIR}/ip/axi_register_slice_light/hdl
 
