@@ -18,8 +18,6 @@ use ieee.std_logic_misc.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.Arrow.all;
-use work.Columns.all;
 use work.Interconnect.all;
 use work.Wrapper.all;
 use work.Utils.all;
