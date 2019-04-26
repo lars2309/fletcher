@@ -243,8 +243,8 @@ package MM is
       BUS_ADDR_WIDTH              : natural := 64;
       BUS_LEN_WIDTH               : natural := 8;
       USER_WIDTH                  : natural := 1;
-      SLV_SLICE                   : boolean := false;
-      MST_SLICE                   : boolean := false
+      SLV_SLICES                  : natural := 0;
+      MST_SLICES                  : natural := 0
     );
     port (
       clk                         : in  std_logic;

@@ -30,8 +30,8 @@ entity MMTranslator is
     BUS_ADDR_WIDTH              : natural := 64;
     BUS_LEN_WIDTH               : natural := 8;
     USER_WIDTH                  : natural := 1;
-    SLV_SLICE                   : boolean := false;
-    MST_SLICE                   : boolean := false
+    SLV_SLICES                  : natural := 0;
+    MST_SLICES                  : natural := 0
   );
   port (
     clk                         : in  std_logic;
@@ -125,69 +125,49 @@ begin
     end if;
   end process;
 
-  input_slice_gen: if SLV_SLICE generate
-  begin
-    slice_inst: StreamSlice
-      generic map (
-        DATA_WIDTH              => int_slv_data'length
-      )
-      port map (
-        clk                     => clk,
-        reset                   => reset,
-        in_valid                => slv_req_valid,
-        in_ready                => slv_req_ready,
-        in_data                 => slv_data,
-        out_valid               => int_slv_req_valid,
-        out_ready               => int_slv_req_ready,
-        out_data                => int_slv_data
-      );
-    slv_data(ABI(1)-1 downto ABI(0)) <= slv_req_addr;
-    slv_data(ABI(2)-1 downto ABI(1)) <= slv_req_len;
-    slv_data(ABI(3)-1 downto ABI(2)) <= slv_req_user;
-    int_slv_req_addr <= int_slv_data(ABI(1)-1 downto ABI(0));
-    int_slv_req_len  <= int_slv_data(ABI(2)-1 downto ABI(1));
-    int_slv_req_user <= int_slv_data(ABI(3)-1 downto ABI(2));
-  end generate;
-  no_input_slice_gen: if not SLV_SLICE generate
-  begin
-    int_slv_req_valid <= slv_req_valid;
-    slv_req_ready     <= int_slv_req_ready;
-    int_slv_req_addr  <= slv_req_addr;
-    int_slv_req_len   <= slv_req_len;
-    int_slv_req_user  <= slv_req_user;
-  end generate;
+  slv_slice: StreamBuffer
+    generic map (
+      MIN_DEPTH               => SLV_SLICES,
+      DATA_WIDTH              => int_slv_data'length
+    )
+    port map (
+      clk                     => clk,
+      reset                   => reset,
+      in_valid                => slv_req_valid,
+      in_ready                => slv_req_ready,
+      in_data                 => slv_data,
+      out_valid               => int_slv_req_valid,
+      out_ready               => int_slv_req_ready,
+      out_data                => int_slv_data
+    );
+  slv_data(ABI(1)-1 downto ABI(0)) <= slv_req_addr;
+  slv_data(ABI(2)-1 downto ABI(1)) <= slv_req_len;
+  slv_data(ABI(3)-1 downto ABI(2)) <= slv_req_user;
+  int_slv_req_addr <= int_slv_data(ABI(1)-1 downto ABI(0));
+  int_slv_req_len  <= int_slv_data(ABI(2)-1 downto ABI(1));
+  int_slv_req_user <= int_slv_data(ABI(3)-1 downto ABI(2));
 
-  output_slice_gen: if MST_SLICE generate
-  begin
-    slice_inst: StreamSlice
-      generic map (
-        DATA_WIDTH              => mst_data'length
-      )
-      port map (
-        clk                     => clk,
-        reset                   => reset,
-        in_valid                => int_mst_req_valid,
-        in_ready                => int_mst_req_ready,
-        in_data                 => int_mst_data,
-        out_valid               => mst_req_valid,
-        out_ready               => mst_req_ready,
-        out_data                => mst_data
-      );
-    int_mst_data(ABI(1)-1 downto ABI(0)) <= int_mst_req_addr;
-    int_mst_data(ABI(2)-1 downto ABI(1)) <= int_mst_req_len;
-    int_mst_data(ABI(3)-1 downto ABI(2)) <= int_mst_req_user;
-    mst_req_addr <= mst_data(ABI(1)-1 downto ABI(0));
-    mst_req_len  <= mst_data(ABI(2)-1 downto ABI(1));
-    mst_req_user <= mst_data(ABI(3)-1 downto ABI(2));
-  end generate;
-  no_output_slice_gen: if not MST_SLICE generate
-  begin
-    mst_req_valid     <= int_mst_req_valid;
-    int_mst_req_ready <= mst_req_ready;
-    mst_req_addr      <= int_mst_req_addr;
-    mst_req_len       <= int_mst_req_len;
-    mst_req_user      <= int_mst_req_user;
-  end generate;
+  mst_slice: StreamBuffer
+    generic map (
+      MIN_DEPTH               => MST_SLICES,
+      DATA_WIDTH              => mst_data'length
+    )
+    port map (
+      clk                     => clk,
+      reset                   => reset,
+      in_valid                => int_mst_req_valid,
+      in_ready                => int_mst_req_ready,
+      in_data                 => int_mst_data,
+      out_valid               => mst_req_valid,
+      out_ready               => mst_req_ready,
+      out_data                => mst_data
+    );
+  int_mst_data(ABI(1)-1 downto ABI(0)) <= int_mst_req_addr;
+  int_mst_data(ABI(2)-1 downto ABI(1)) <= int_mst_req_len;
+  int_mst_data(ABI(3)-1 downto ABI(2)) <= int_mst_req_user;
+  mst_req_addr <= mst_data(ABI(1)-1 downto ABI(0));
+  mst_req_len  <= mst_data(ABI(2)-1 downto ABI(1));
+  mst_req_user <= mst_data(ABI(3)-1 downto ABI(2));
 
   comb_proc: process(r, int_mst_req_ready,
       int_slv_req_valid, int_slv_req_addr, int_slv_req_len, int_slv_req_user,

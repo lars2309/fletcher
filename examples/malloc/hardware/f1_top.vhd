@@ -470,8 +470,8 @@ begin
     VM_BASE                     => X"4000_0000_0000_0000",
     PT_ENTRIES_LOG2             => 13, -- TODO: bring constants outside
     PAGE_SIZE_LOG2              => 22,
-    SLV_SLICE                   => true,
-    MST_SLICE                   => true
+    SLV_SLICES                  => 4, -- Extra slices to accomodate SLR crossing
+    MST_SLICES                  => 4
   )
   port map (
     clk                         => bus_clk,
@@ -513,8 +513,8 @@ begin
     VM_BASE                     => X"4000_0000_0000_0000",
     PT_ENTRIES_LOG2             => 13, -- TODO: bring constants outside
     PAGE_SIZE_LOG2              => 22,
-    SLV_SLICE                   => true,
-    MST_SLICE                   => true
+    SLV_SLICES                  => 4, -- Extra slices to accomodate SLR crossing
+    MST_SLICES                  => 4
   )
   port map (
     clk                         => bus_clk,
