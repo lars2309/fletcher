@@ -28,11 +28,11 @@ compile:
  -L axi_infrastructure_v1_1_0 \
  -L axi_register_slice_v2_1_15 \
  -L axi_register_slice_v2_1_12 \
- -L fifo_generator_v13_2_1 \
+ -L fifo_generator_v13_2_3 \
  -L fifo_generator_v13_1_4 \
  -L axi_data_fifo_v2_1_11 \
  -L axi_crossbar_v2_1_13 \
- -L axi_interconnect_v1_7_13 \
+ -L axi_interconnect_v1_7_15 \
  -L axi_dwidth_converter_v2_1_12 \
  -L xil_defaultlib \
  -L unisims_ver \
