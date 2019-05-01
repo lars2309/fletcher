@@ -108,7 +108,10 @@ package MM is
       BUS_BURST_STEP_LEN          : natural := 4;
 
       -- Maximum number of beats in a burst.
-      BUS_BURST_MAX_LEN           : natural := 16
+      BUS_BURST_MAX_LEN           : natural := 16;
+
+      BUS_RREQ_SLICE              : boolean := false;
+      BUS_RDAT_SLICE              : boolean := false
     );
     port (
       clk                         : in  std_logic;

@@ -202,8 +202,8 @@ proc add_fletcher {{source_dir ""}} {
   add_arrow $source_dir
   add_streams $source_dir
   add_interconnect $source_dir
-  add_mm $source_dir
   add_buffers $source_dir
+  add_mm $source_dir
   add_arrays $source_dir
   add_wrapper $source_dir
 }
