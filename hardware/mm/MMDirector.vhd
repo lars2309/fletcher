@@ -389,7 +389,7 @@ architecture Behavioral of MMDirector is
                       SET_PTE_RANGE,
                       SET_PTE_RANGE_L1_ADDR, SET_PTE_RANGE_L1_CHECK,
                       SET_PTE_RANGE_L1_UPDATE_ADDR, SET_PTE_RANGE_L1_UPDATE_DAT,
-                      SET_PTE_RANGE_FRAME, SET_PTE_RANGE_L2_CHECK_ADDR,
+                      SET_PTE_RANGE_FRAME, SET_PTE_RANGE_L2_REQ_PT,
                       SET_PTE_RANGE_L2_DEALLOC_FRAME_C, SET_PTE_RANGE_L2_DEALLOC_FRAME_R,
                       SET_PTE_RANGE_L2_UPDATE_ADDR, SET_PTE_RANGE_L2_UPDATE_DAT,
 
@@ -970,7 +970,7 @@ begin
             PT_SIZE_LOG2);
         if v.arg(1) = '1' then
           -- Deallocate; request the mapping to do so.
-          v.state_stack(0)   := SET_PTE_RANGE_L2_CHECK_ADDR;
+          v.state_stack(0)   := SET_PTE_RANGE_L2_REQ_PT;
         else
           -- Allocate
           if v.arg(0) = '1' then
@@ -1040,66 +1040,80 @@ begin
         v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_ADDR;
       end if;
 
-    when SET_PTE_RANGE_L2_CHECK_ADDR =>
+    when SET_PTE_RANGE_L2_REQ_PT =>
       -- Request the existing mapping, to do stuff with it later on. (only for dealloc)
-      my_bus_rreq_valid     <= '1';
-      my_bus_rreq_addr      <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(v.addr_pt, v.addr, 2)));
-      my_bus_rreq_len       <= slv(to_unsigned(1, int_bus_wreq_len'length));
+      pt_reader_cmd_valid    <= '1';
+      pt_reader_cmd_firstIdx <= slv(to_unsigned(0, pt_reader_cmd_firstIdx'length));
+      pt_reader_cmd_lastIdx  <= slv(to_unsigned(PT_SIZE / BUS_DATA_BYTES, pt_reader_cmd_lastIdx'length));
+      pt_reader_cmd_baseAddr <= slv(v.addr_pt);
 
-      if  shift_right(v.addr,    VM_SIZE_L2_LOG2 + log2ceil(BUS_DATA_BYTES / PTE_SIZE))
-        = shift_right(v.addr_vm, VM_SIZE_L2_LOG2 + log2ceil(BUS_DATA_BYTES / PTE_SIZE))
-      then
-        -- Current address is in the mapping of interest.
-        v.in_mapping       := '1';
-      end if;
-
-      v.bus_pte_idx        := (others => '0');
-      if my_bus_rreq_ready = '1' then
-        if v.in_mapping = '1' then
-          v.state_stack(0) := SET_PTE_RANGE_L2_DEALLOC_FRAME_C;
-        else
-          v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_ADDR;
-        end if;
+      v.bus_pte_idx          := (others => '0');
+      if pt_reader_cmd_ready = '1' then
+        v.state_stack(0)     := SET_PTE_RANGE_L2_DEALLOC_FRAME_C;
       end if;
 
     when SET_PTE_RANGE_L2_DEALLOC_FRAME_C =>
-      frames_cmd_free        <= '1';
-      frames_cmd_addr        <= slv(EXTRACT(
-          u(my_bus_rdat_data),
-          int(v.bus_pte_idx) * PTE_WIDTH,
-          BUS_ADDR_WIDTH ));
-      if my_bus_rdat_valid = '1' then
-        if
-          my_bus_rdat_data(PTE_WIDTH * int(v.bus_pte_idx) + PTE_MAPPED) = '1' and
-          my_bus_rdat_data(PTE_WIDTH * int(v.bus_pte_idx) + PTE_PRESENT) = '1'
-        then
-          -- Page is mapped to a frame.
-          frames_cmd_valid   <= '1';
-          if frames_cmd_ready = '1' then
-            v.state_stack(0) := SET_PTE_RANGE_L2_DEALLOC_FRAME_R;
-            v.bus_pte_idx    := v.bus_pte_idx + 1;
-          end if;
+      -- Mark a mapped frame as unused when deallocating.
+      if  shift_right(v.addr,    VM_SIZE_L2_LOG2 + log2ceil(BUS_DATA_BYTES / PTE_SIZE))
+        = shift_right(v.addr_vm, VM_SIZE_L2_LOG2 + log2ceil(BUS_DATA_BYTES / PTE_SIZE))
+      then
+        -- Current address is now in the mapping of interest.
+        v.in_mapping           := '1';
+      end if;
 
-        elsif v.bus_pte_idx = BUS_DATA_BYTES / PTE_SIZE - 1 then
-          -- Investigated all PTEs in bus word.
-          v.state_stack(0)   := SET_PTE_RANGE_L2_UPDATE_ADDR;
-        else
-          -- Page is not mapped to a frame.
-          v.bus_pte_idx      := v.bus_pte_idx + 1;
-        end if;
-        if my_bus_rdat_data(PTE_WIDTH * int(v.bus_pte_idx) + PTE_BOUNDARY) = '1' then
-          v.bus_pte_idx      := to_unsigned(BUS_DATA_BYTES / PTE_SIZE - 1, v.bus_pte_idx'length);
+      -- TODO: handle mappings not starting at bus word boundary.
+      if v.in_mapping = '0' then
+        v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_ADDR;
+      else
+        -- In mapping, do processing (freeing of frames).
+        frames_cmd_free        <= '1';
+        frames_cmd_addr        <= slv(EXTRACT(
+            u(pt_reader_data),
+            int(v.bus_pte_idx) * PTE_WIDTH,
+            BUS_ADDR_WIDTH ));
+        if pt_reader_valid = '1' then
+          if
+            pt_reader_data(PTE_WIDTH * int(v.bus_pte_idx) + PTE_MAPPED) = '1' and
+            pt_reader_data(PTE_WIDTH * int(v.bus_pte_idx) + PTE_PRESENT) = '1'
+          then
+            -- Page is mapped to a frame.
+            frames_cmd_valid   <= '1';
+            if frames_cmd_ready = '1' then
+              -- Handshaked, wait for response in next state.
+              v.state_stack(0) := SET_PTE_RANGE_L2_DEALLOC_FRAME_R;
+              if pt_reader_data(PTE_WIDTH * int(v.bus_pte_idx) + PTE_BOUNDARY) = '1' then
+                -- Reached mapping boundary.
+                -- Skip to end to prevent processing frames belonging to the next mapping.
+                v.bus_pte_idx  := to_unsigned(BUS_DATA_BYTES / PTE_SIZE - 1, v.bus_pte_idx'length);
+              end if;
+            end if;
+
+          else
+            -- Page is not mapped to a frame.
+            if pt_reader_data(PTE_WIDTH * int(v.bus_pte_idx) + PTE_BOUNDARY) = '1' then
+              -- Reached mapping boundary.
+              -- Skip to end to prevent processing frames belonging to the next mapping.
+              v.bus_pte_idx    := to_unsigned(BUS_DATA_BYTES / PTE_SIZE - 1, v.bus_pte_idx'length);
+            end if;
+            if v.bus_pte_idx = BUS_DATA_BYTES / PTE_SIZE - 1 then
+              -- Investigated all PTEs in bus word.
+              v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_ADDR;
+            end if;
+            v.bus_pte_idx      := v.bus_pte_idx + 1;
+          end if;
         end if;
       end if;
 
     when SET_PTE_RANGE_L2_DEALLOC_FRAME_R =>
-      frames_resp_ready    <= '1';
+      frames_resp_ready        <= '1';
       if frames_resp_valid = '1' then
         if v.bus_pte_idx = BUS_DATA_BYTES / PTE_SIZE - 1 then
-          v.state_stack(0)   := SET_PTE_RANGE_L2_UPDATE_ADDR;
+          -- Investigated all PTEs in bus word.
+          v.state_stack(0)     := SET_PTE_RANGE_L2_UPDATE_ADDR;
         else
-          v.state_stack(0)   := SET_PTE_RANGE_L2_DEALLOC_FRAME_C;
+          v.state_stack(0)     := SET_PTE_RANGE_L2_DEALLOC_FRAME_C;
         end if;
+        v.bus_pte_idx          := v.bus_pte_idx + 1;
       end if;
 
     when SET_PTE_RANGE_L2_UPDATE_ADDR =>
@@ -1120,8 +1134,8 @@ begin
       else
         if v.arg(1) = '1' then
           -- Wait until read is done to prevent deadlock
-          int_bus_wreq_valid <= my_bus_rdat_valid;
-          if int_bus_wreq_ready = '1' and my_bus_rdat_valid = '1' then
+          int_bus_wreq_valid <= pt_reader_valid;
+          if int_bus_wreq_ready = '1' and pt_reader_valid = '1' then
             v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
           end if;
         else
@@ -1137,12 +1151,12 @@ begin
       if r.in_mapping = '0' then
         -- Not inside of mapping. This only happens with deallocation.
         -- Consume requested data, do not write.
-        my_bus_rdat_ready    <= '1';
+        pt_reader_ready   <= '1';
         bus_wdat_valid    <= '0';
       elsif v.arg(1) = '1' then
         -- Deallocate
-        my_bus_rdat_ready    <= bus_wdat_ready;
-        bus_wdat_valid    <= my_bus_rdat_valid;
+        pt_reader_ready   <= bus_wdat_ready;
+        bus_wdat_valid    <= pt_reader_valid;
       elsif v.arg(0) = '1' then
         -- Use allocated frame in mapping.
         frames_resp_ready <= bus_wdat_ready;
@@ -1162,12 +1176,12 @@ begin
         if v.arg(1) = '1' then
           -- Deallocate
           if v.in_mapping = '0' and
-            my_bus_rdat_data(PTE_WIDTH * i + PTE_MAPPED) = '1'
+            pt_reader_data(PTE_WIDTH * i + PTE_MAPPED) = '1'
           then
             -- An entry is mapped outside of the deleted mapping.
             v.pt_empty    := '0';
           end if;
-          if my_bus_rdat_data(PTE_WIDTH * i + PTE_BOUNDARY) = '1' then
+          if pt_reader_data(PTE_WIDTH * i + PTE_BOUNDARY) = '1' then
             -- Last entry of the mapping, number of pages now known.
             v.pages       := to_unsigned(i+1, v.pages'length);
             v.in_mapping  := '0';
@@ -1225,10 +1239,10 @@ begin
       if
         (
           r.in_mapping = '0'
-          and my_bus_rdat_valid = '1'
+          and pt_reader_valid = '1'
         ) or (
           r.in_mapping = '1' and v.arg(1) = '1'
-          and my_bus_rdat_valid = '1' and bus_wdat_ready = '1'
+          and pt_reader_valid = '1' and bus_wdat_ready = '1'
         ) or (
           r.in_mapping = '1' and v.arg(0) = '1'
           and frames_resp_valid = '1' and bus_wdat_ready = '1'
@@ -1287,7 +1301,7 @@ begin
         -- Not done in L2 table.
         elsif v.arg(1) = '1' then
           -- Continue with next PTE, check for end of mapping.
-          v.state_stack(0)   := SET_PTE_RANGE_L2_CHECK_ADDR;
+          v.state_stack(0)   := SET_PTE_RANGE_L2_DEALLOC_FRAME_C;
         else
           -- Continue with next PTE.
           v.state_stack(0)   := SET_PTE_RANGE_L2_UPDATE_ADDR;
