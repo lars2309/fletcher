@@ -275,7 +275,10 @@ begin
 
           -- Assert response.
           rdat_int_valid <= '1';
-          wait until rdat_out_valid = '1';
+          -- Wait for internal handshake
+          if rdat_out_valid /= '1' then
+            wait until rdat_out_valid = '1';
+          end if;
           rdat_data <= data;
           if i = len-1 then
             rdat_last <= '1';
