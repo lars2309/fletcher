@@ -57,8 +57,8 @@ end MMBarrier;
 
 architecture Behavioral of MMBarrier is
   type reg_type is record
-    outstanding : unsigned(log2ceil(MAX_OUTSTANDING) - 1 downto 0);
-    barrier     : unsigned(log2ceil(MAX_OUTSTANDING) - 1 downto 0);
+    outstanding : unsigned(log2ceil(MAX_OUTSTANDING+1) - 1 downto 0);
+    barrier     : unsigned(log2ceil(MAX_OUTSTANDING+1) - 1 downto 0);
   end record;
 
   signal r : reg_type;
