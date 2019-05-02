@@ -299,23 +299,44 @@ architecture Behavioral of MMDirector is
     return OVERLAY(u(dex), MEM_MAP_BASE, PAGE_SIZE_LOG2);
   end ROLODEX_TO_ADDR;
 
-  type bus_t is record
-    valid : std_logic;
-    ready : std_logic;
-    last  : std_logic;
-    addr  : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-    len   : std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
-    data  : std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
-  end record bus_t;
+  type bus_req_t is record
+    valid   : std_logic;
+    ready   : std_logic;
+    addr    : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+    len     : std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
+    barrier : std_logic;
+    dirty   : std_logic;
+  end record bus_req_t;
 
-  signal int_bus_wreq           : bus_t;
-  signal int_bus_wreq_barrier   : std_logic;
-  signal int_bus_dirty          : std_logic;
+  type bus_dat_t is record
+    valid   : std_logic;
+    ready   : std_logic;
+    last    : std_logic;
+    data    : std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
+    strobe  : std_logic_vector(BUS_STROBE_WIDTH-1 downto 0);
+  end record bus_dat_t;
 
-  signal my_bus_rreq            : bus_t;
-  signal my_bus_rdat            : bus_t;
-  signal pt_bus_rreq            : bus_t;
-  signal pt_bus_rdat            : bus_t;
+  type bus_resp_t is record
+    valid   : std_logic;
+    ready   : std_logic;
+    ok      : std_logic;
+  end record bus_resp_t;
+
+
+  signal my_bus_wreq            : bus_req_t;
+  signal my_bus_wreq_b          : bus_req_t;
+  signal my_bus_resp_b          : bus_resp_t;
+  signal my_bus_wdat            : bus_dat_t;
+  signal my_bus_rreq            : bus_req_t;
+  signal my_bus_rdat            : bus_dat_t;
+  signal pt_bus_rreq            : bus_req_t;
+  signal pt_bus_rdat            : bus_dat_t;
+  signal mmu_bus_rreq           : bus_req_t;
+  signal mmu_bus_rdat           : bus_dat_t;
+  signal mmu_bus_wreq           : bus_req_t;
+  signal mmu_bus_wreq_b         : bus_req_t;
+  signal mmu_bus_resp_b         : bus_resp_t;
+  signal mmu_bus_wdat           : bus_dat_t;
 
   signal pt_reader_cmd_valid    : std_logic;
   signal pt_reader_cmd_ready    : std_logic;
@@ -323,21 +344,57 @@ architecture Behavioral of MMDirector is
   signal pt_reader_cmd_lastIdx  : std_logic_vector(PT_ENTRIES_LOG2 - log2ceil(BUS_DATA_WIDTH / PTE_WIDTH) downto 0);
   signal pt_reader_cmd_baseAddr : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
 
-  signal pt_reader              : bus_t;
+  signal pt_reader              : bus_dat_t;
+
+  constant FCI : nat_array := cumulative((
+    2 => MM_FRAMES_CMD_WIDTH,
+    1 => BUS_ADDR_WIDTH,
+    0 => log2ceil(MEM_REGIONS)
+  ));
+
+  constant FRI : nat_array := cumulative((
+    1 => BUS_ADDR_WIDTH,
+    0 => 1
+  ));
 
   signal frames_cmd_region      : std_logic_vector(log2ceil(MEM_REGIONS)-1 downto 0);
   signal frames_cmd_addr        : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-  signal frames_cmd_free        : std_logic;
-  signal frames_cmd_alloc       : std_logic;
-  signal frames_cmd_find        : std_logic;
-  signal frames_cmd_clear       : std_logic;
+  signal frames_cmd_action      : std_logic_vector(MM_FRAMES_CMD_WIDTH-1 downto 0);
   signal frames_cmd_valid       : std_logic;
   signal frames_cmd_ready       : std_logic;
+  signal frames_cmd_ser         : std_logic_vector(FCI(FCI'high)-1 downto 0);
+
+  signal dir_frames_cmd_region  : std_logic_vector(log2ceil(MEM_REGIONS)-1 downto 0);
+  signal dir_frames_cmd_addr    : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+  signal dir_frames_cmd_action  : std_logic_vector(MM_FRAMES_CMD_WIDTH-1 downto 0);
+  signal dir_frames_cmd_valid   : std_logic;
+  signal dir_frames_cmd_ready   : std_logic;
+  signal dir_frames_cmd_ser     : std_logic_vector(FCI(FCI'high)-1 downto 0);
+
+  signal mmu_frames_cmd_region  : std_logic_vector(log2ceil(MEM_REGIONS)-1 downto 0);
+  signal mmu_frames_cmd_addr    : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+  signal mmu_frames_cmd_action  : std_logic_vector(MM_FRAMES_CMD_WIDTH-1 downto 0);
+  signal mmu_frames_cmd_valid   : std_logic;
+  signal mmu_frames_cmd_ready   : std_logic;
+  signal mmu_frames_cmd_ser     : std_logic_vector(FCI(FCI'high)-1 downto 0);
 
   signal frames_resp_addr       : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
   signal frames_resp_success    : std_logic;
   signal frames_resp_valid      : std_logic;
   signal frames_resp_ready      : std_logic;
+  signal frames_resp_ser        : std_logic_vector(FRI(FRI'high)-1 downto 0);
+
+  signal dir_frames_resp_addr   : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+  signal dir_frames_resp_success: std_logic;
+  signal dir_frames_resp_valid  : std_logic;
+  signal dir_frames_resp_ready  : std_logic;
+  signal dir_frames_resp_ser    : std_logic_vector(FRI(FRI'high)-1 downto 0);
+
+  signal mmu_frames_resp_addr   : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+  signal mmu_frames_resp_success: std_logic;
+  signal mmu_frames_resp_valid  : std_logic;
+  signal mmu_frames_resp_ready  : std_logic;
+  signal mmu_frames_resp_ser    : std_logic_vector(FRI(FRI'high)-1 downto 0);
 
   signal gap_q_valid            : std_logic;
   signal gap_q_ready            : std_logic;
@@ -362,33 +419,36 @@ architecture Behavioral of MMDirector is
   signal rolodex_delete_ready   : std_logic;
   signal rolodex_delete_entry   : std_logic_vector(FRAME_IDX_WIDTH-1 downto 0);
 
-  type state_type is (RESET_ST, IDLE, FAIL, CLEAR_FRAMES, CLEAR_FRAMES_CHECK,
-                      RESERVE_PT, RESERVE_PT_CHECK, PT0_INIT,
+  type state_mmu_type is (
+      RESET_ST, IDLE, FAIL,
+      MMU_GET_L1_ADDR, MMU_GET_L1_DAT,
+      MMU_GET_L2_ADDR, MMU_GET_L2_DAT, MMU_RESP,
+      MMU_SET_L2_ADDR, MMU_SET_L2_DAT );
 
-                      MMU_GET_L1_ADDR, MMU_GET_L1_DAT,
-                      MMU_GET_L2_ADDR, MMU_GET_L2_DAT, MMU_RESP,
-                      MMU_SET_L2_ADDR, MMU_SET_L2_DAT,
+  type state_type is (
+      RESET_ST, IDLE, FAIL, CLEAR_FRAMES, CLEAR_FRAMES_CHECK,
+      RESERVE_PT, RESERVE_PT_CHECK, PT0_INIT,
 
-                      VMALLOC, VMALLOC_CHECK_PT0, VMALLOC_CHECK_PT0_DATA,
-                      VMALLOC_RESERVE_FRAME, VMALLOC_FINISH,
+      VMALLOC, VMALLOC_CHECK_PT0, VMALLOC_CHECK_PT0_DATA,
+      VMALLOC_RESERVE_FRAME, VMALLOC_FINISH,
 
-                      VFREE, VFREE_FINISH,
+      VFREE, VFREE_FINISH,
 
-                      SET_PTE_RANGE,
-                      SET_PTE_RANGE_L1_ADDR, SET_PTE_RANGE_L1_CHECK,
-                      SET_PTE_RANGE_L1_UPDATE_ADDR, SET_PTE_RANGE_L1_UPDATE_DAT,
-                      SET_PTE_RANGE_FRAME, SET_PTE_RANGE_L2_REQ_PT,
-                      SET_PTE_RANGE_L2_DEALLOC_FRAME_C, SET_PTE_RANGE_L2_DEALLOC_FRAME_R,
-                      SET_PTE_RANGE_L2_UPDATE_ADDR, SET_PTE_RANGE_L2_UPDATE_DAT,
+      SET_PTE_RANGE,
+      SET_PTE_RANGE_L1_ADDR, SET_PTE_RANGE_L1_CHECK,
+      SET_PTE_RANGE_L1_UPDATE_ADDR, SET_PTE_RANGE_L1_UPDATE_DAT,
+      SET_PTE_RANGE_FRAME, SET_PTE_RANGE_L2_REQ_PT,
+      SET_PTE_RANGE_L2_DEALLOC_FRAME_C, SET_PTE_RANGE_L2_DEALLOC_FRAME_R,
+      SET_PTE_RANGE_L2_UPDATE_ADDR, SET_PTE_RANGE_L2_UPDATE_DAT,
 
-                      PT_DEL, PT_DEL_MARK_BM_ADDR, PT_DEL_MARK_BM_DATA,
-                      PT_DEL_ROLODEX, PT_DEL_FRAME,
+      PT_DEL, PT_DEL_MARK_BM_ADDR, PT_DEL_MARK_BM_DATA,
+      PT_DEL_ROLODEX, PT_DEL_FRAME,
 
-                      PT_NEW, PT_NEW_REQ_BM, PT_NEW_CHECK_BM, PT_NEW_MARK_BM_ADDR,
-                      PT_NEW_FRAME, PT_NEW_FRAME_CHECK,
-                      PT_NEW_MARK_BM_DATA, PT_NEW_CLEAR_ADDR, PT_NEW_CLEAR_DATA,
+      PT_NEW, PT_NEW_REQ_BM, PT_NEW_CHECK_BM, PT_NEW_MARK_BM_ADDR,
+      PT_NEW_FRAME, PT_NEW_FRAME_CHECK,
+      PT_NEW_MARK_BM_DATA, PT_NEW_CLEAR_ADDR, PT_NEW_CLEAR_DATA,
 
-                      PT_FRAME_INIT_ADDR, PT_FRAME_INIT_DATA, PT_FRAME_INIT_ROLODEX );
+      PT_FRAME_INIT_ADDR, PT_FRAME_INIT_DATA, PT_FRAME_INIT_ROLODEX );
   constant STATE_STACK_DEPTH : natural := 5;
   type state_stack_type is array (STATE_STACK_DEPTH-1 downto 0) of state_type;
 
@@ -423,8 +483,18 @@ architecture Behavioral of MMDirector is
     beat                        : unsigned(log2ceil(BUS_BURST_MAX_LEN+1)-1 downto 0);
   end record;
 
+  type reg_mmu_type is record
+    state                       : state_mmu_type;
+    addr                        : unsigned(BUS_ADDR_WIDTH-1 downto 0);
+    addr_vm                     : unsigned(BUS_ADDR_WIDTH-1 downto 0); --TODO: reduce width to VA space
+    addr_pt                     : unsigned(BUS_ADDR_WIDTH-1 downto 0);
+  end record;
+
   signal r                      : reg_type;
   signal d                      : reg_type;
+
+  signal r_mmu                  : reg_mmu_type;
+  signal d_mmu                  : reg_mmu_type;
 
 begin
   assert PAGE_SIZE_LOG2 >= PT_ENTRIES_LOG2 + log2ceil( DIV_CEIL(PTE_BITS, BYTE_SIZE))
@@ -466,8 +536,10 @@ begin
       if reset = '1' then
         r.state_stack    <= (others => FAIL);
         r.state_stack(0) <= RESET_ST;
+        r_mmu.state      <= RESET_ST;
       else
-        r <= d;
+        r     <= d;
+        r_mmu <= d_mmu;
       end if;
     end if;
   end process;
@@ -475,12 +547,13 @@ begin
   process (r,
            cmd_region, cmd_addr, cmd_free, cmd_alloc, cmd_realloc, cmd_valid, cmd_size,
            resp_ready,
-           pt_reader_cmd_ready, pt_reader
-           frames_cmd_ready, frames_resp_addr, frames_resp_success, frames_resp_valid,
+           pt_reader_cmd_ready, pt_reader,
+           dir_frames_cmd_ready,
+           dir_frames_resp_addr, dir_frames_resp_success, dir_frames_resp_valid,
            gap_a_valid, gap_a_size, gap_a_offset, gap_q_ready,
            rolodex_entry_valid, rolodex_entry_marked, rolodex_entry,
            rolodex_insert_ready, rolodex_delete_ready,
-           int_bus_wreq, bus_wdat_ready, int_bus_dirty,
+           my_bus_wreq, my_bus_wdat,
            my_bus_rreq, my_bus_rdat,
            mmu_req_valid, mmu_req_addr, mmu_resp_ready) is
     variable v : reg_type;
@@ -498,14 +571,11 @@ begin
     pt_reader_cmd_baseAddr <= (others => 'U');
     pt_reader.ready        <= '0';
 
-    frames_cmd_valid  <= '0';
-    frames_cmd_region <= (others => 'U');
-    frames_cmd_addr   <= (others => 'U');
-    frames_cmd_free   <= '0';
-    frames_cmd_alloc  <= '0';
-    frames_cmd_find   <= '0';
-    frames_cmd_clear  <= '0';
-    frames_resp_ready <= '0';
+    dir_frames_cmd_valid  <= '0';
+    dir_frames_cmd_region <= (others => 'U');
+    dir_frames_cmd_addr   <= (others => 'U');
+    dir_frames_cmd_action <= (others => 'U');
+    dir_frames_resp_ready <= '0';
 
     gap_q_valid       <= '0';
     gap_q_holes       <= (others => 'U');
@@ -519,26 +589,21 @@ begin
     rolodex_delete_valid <= '0';
     rolodex_delete_entry <= (others => 'U');
 
-    int_bus_wreq.valid   <= '0';
-    int_bus_wreq.addr    <= (others => 'U'); --slv(addr);
-    int_bus_wreq.len     <= (others => 'U'); --slv(to_unsigned(1, bus_wreq_len'length));
-    int_bus_wreq_barrier <= '1';
+    my_bus_wreq.valid   <= '0';
+    my_bus_wreq.addr    <= (others => 'U'); --slv(addr);
+    my_bus_wreq.len     <= (others => 'U'); --slv(to_unsigned(1, bus_wreq_len'length));
+    my_bus_wreq.barrier <= '1';
 
-    bus_wdat_valid  <= '0';
-    bus_wdat_data   <= (others => 'U');
-    bus_wdat_strobe <= (others => 'U');
-    bus_wdat_last   <= 'U';
+    my_bus_wdat.valid  <= '0';
+    my_bus_wdat.data   <= (others => 'U');
+    my_bus_wdat.strobe <= (others => 'U');
+    my_bus_wdat.last   <= 'U';
 
     my_bus_rreq.valid  <= '0';
     my_bus_rreq.addr   <= (others => 'U'); --slv(addr);
     my_bus_rreq.len    <= (others => 'U'); --slv(to_unsigned(1, bus_wreq_len'length));
 
     my_bus_rdat.ready  <= '0';
-
-    mmu_req_ready   <= '0';
-
-    mmu_resp_valid  <= '0';
-    mmu_resp_addr   <= (others => 'U');
 
     case v.state_stack(0) is
 
@@ -547,17 +612,17 @@ begin
 
     when CLEAR_FRAMES =>
       -- Clear the frames utilization bitmap.
-      frames_cmd_valid <= '1';
-      frames_cmd_clear <= '1';
+      dir_frames_cmd_valid  <= '1';
+      dir_frames_cmd_action <= MM_FRAMES_CLEAR;
       if frames_cmd_ready = '1' then
         v.state_stack(0) := CLEAR_FRAMES_CHECK;
       end if;
 
     when CLEAR_FRAMES_CHECK =>
       -- Check the clear command response.
-      frames_resp_ready <= '1';
-      if frames_resp_valid = '1' then
-        if frames_resp_success = '1' then
+      dir_frames_resp_ready <= '1';
+      if dir_frames_resp_valid = '1' then
+        if dir_frames_resp_success = '1' then
           v.state_stack(0) := RESERVE_PT;
         else
           v.state_stack(0) := FAIL;
@@ -566,19 +631,19 @@ begin
 
     when RESERVE_PT =>
       -- Reserve the designated frame for the root page table.
-      frames_cmd_valid <= '1';
-      frames_cmd_alloc <= '1';
-      frames_cmd_addr  <= slv(PAGE_BASE(PT_ADDR));
-      if frames_cmd_ready = '1' then
+      dir_frames_cmd_valid  <= '1';
+      dir_frames_cmd_action <= MM_FRAMES_ALLOC;
+      dir_frames_cmd_addr   <= slv(PAGE_BASE(PT_ADDR));
+      if dir_frames_cmd_ready = '1' then
         v.state_stack(0) := RESERVE_PT_CHECK;
       end if;
 
     when RESERVE_PT_CHECK =>
       -- Check the address of the reserved frame.
       -- Execute the `frame initialize' routine to set bitmap, continue to PT0_INIT.
-      frames_resp_ready <= '1';
-      if frames_resp_valid = '1' then
-        if (frames_resp_success = '1') and (u(frames_resp_addr) = PAGE_BASE(PT_ADDR)) then
+      dir_frames_resp_ready <= '1';
+      if dir_frames_resp_valid = '1' then
+        if (dir_frames_resp_success = '1') and (u(dir_frames_resp_addr) = PAGE_BASE(PT_ADDR)) then
           v.state_stack(0) := PT_FRAME_INIT_ADDR;
           v.state_stack(1) := PT0_INIT;
           v.addr           := PAGE_BASE(PT_ADDR);
@@ -594,12 +659,7 @@ begin
       v.addr           := PT_ADDR;
 
     when IDLE =>
-      mmu_req_ready <= '1';
-      if mmu_req_valid = '1' then
-        v.state_stack := push_state(v.state_stack, MMU_GET_L1_ADDR);
-        v.addr_vm     := u(mmu_req_addr);
-
-      elsif cmd_valid = '1' then
+      if cmd_valid = '1' then
 
         if cmd_alloc = '1' then
           if unsigned(cmd_region) = 0 then
@@ -616,156 +676,6 @@ begin
           -- TODO
           v.state_stack(0) := FAIL;
         end if;
-      end if;
-
-    -- === START OF FRAME ALLOCATION ROUTINE ===
-    -- Allocates a frame for an already mapped virtual address, `addr_vm`.
-    -- Response is given on MMU channel.
-
-    when MMU_GET_L1_ADDR =>
-      -- Get the L1 PTE
-      my_bus_rreq.addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(PT_ADDR, v.addr_vm, 1)));
-      my_bus_rreq.len   <= slv(to_unsigned(1, my_bus_rreq.len'length));
-      -- Wait for any outstanding writes to be completed.
-      if int_bus_dirty = '0' then
-        my_bus_rreq.valid <= '1';
-        if my_bus_rreq.ready = '1' then
-          v.state_stack(0) := MMU_GET_L1_DAT;
-        end if;
-      end if;
-
-    when MMU_GET_L1_DAT =>
-      my_bus_rdat.ready <= '1';
-      if my_bus_rdat.valid = '1' then
-        -- Check PRESENT bit of PTE referred to by addr_vm.
-        if my_bus_rdat.data(
-             PTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, v.addr_vm, 1)))
-             + PTE_PRESENT
-           ) /= '1'
-        then
-          -- Given address isn't mapped.
-          v.state_stack(0) := FAIL;
-        else
-          -- Get address of L2 page table from the read data.
-          v.addr_pt := align_beq(
-              EXTRACT(
-                unsigned(my_bus_rdat.data),
-                BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, v.addr_vm, 1))),
-                BYTE_SIZE * PTE_SIZE
-              ),
-              PT_SIZE_LOG2);
-          v.state_stack(0) := MMU_GET_L2_ADDR;
-        end if;
-      end if;
-
-    when MMU_GET_L2_ADDR =>
-      -- Get the L1 PTE
-      my_bus_rreq.addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(v.addr_pt, v.addr_vm, 2)));
-      my_bus_rreq.len   <= slv(to_unsigned(1, my_bus_rreq.len'length));
-      my_bus_rreq.valid <= '1';
-      if my_bus_rreq.ready = '1' then
-        v.state_stack(0) := MMU_GET_L2_DAT;
-      end if;
-
-    when MMU_GET_L2_DAT =>
-      if my_bus_rdat.valid = '1' then
-
-        if my_bus_rdat.data(
-             PTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2)))
-             + PTE_MAPPED
-           ) /= '1'
-        then
-          -- Given address isn't mapped.
-          my_bus_rdat.ready   <= '1';
-          v.state_stack(0) := FAIL;
-
-        elsif my_bus_rdat.data(
-             PTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2)))
-             + PTE_PRESENT
-           ) = '1'
-        then
-          -- Given address is already present, return the mapping.
-          mmu_resp_valid  <= '1';
-          mmu_resp_addr   <= slv(align_beq(
-              EXTRACT(
-                unsigned(my_bus_rdat.data),
-                BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2))),
-                BYTE_SIZE * PTE_SIZE
-              ),
-              PT_SIZE_LOG2));
-          if mmu_resp_ready = '1' then
-            my_bus_rdat.ready <= '1';
-            v.state_stack  := pop_state(v.state_stack);
-          end if;
-
-        else
-          -- Get segment of mapped address from the read data.
-          frames_cmd_valid  <= '1';
-          frames_cmd_find   <= '1';
-          if log2ceil(MEM_REGIONS) > 0 then
-            frames_cmd_region <= slv(
-                resize(
-                  EXTRACT(
-                    unsigned(my_bus_rdat.data),
-                    BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2))) + PTE_SEGMENT,
-                    log2ceil(MEM_REGIONS+1)
-                  ) - 1,
-                  log2ceil(MEM_REGIONS)));
-          end if;
-          -- Store all flags of the mapping (skip the address itself)
-          v.addr            := resize(
-              EXTRACT(
-                unsigned(my_bus_rdat.data),
-                BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2))),
-                PAGE_SIZE_LOG2
-              ),
-              v.addr'length
-            );
-          if frames_cmd_ready = '1' then
-            my_bus_rdat.ready   <= '1';
-            v.state_stack(0) := MMU_RESP;
-          end if;
-        end if;
-      end if;
-
-    when MMU_RESP =>
-      -- Respond with the frame address as soon as possible.
-      mmu_resp_valid <= frames_resp_valid;
-      mmu_resp_addr  <= frames_resp_addr;
-      if mmu_resp_ready = '1' then
-        v.state_stack(0) := MMU_SET_L2_ADDR;
-      end if;
-
-    when MMU_SET_L2_ADDR =>
-      -- Update the PTE.
-      int_bus_wreq.valid <= '1';
-      int_bus_wreq.addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(v.addr_pt, v.addr_vm, 2)));
-      int_bus_wreq.len   <= slv(to_unsigned(1, int_bus_wreq.len'length));
-      if int_bus_wreq.ready = '1' then
-        v.state_stack(0) := MMU_SET_L2_DAT;
-      end if;
-
-    when MMU_SET_L2_DAT =>
-      bus_wdat_valid  <= frames_resp_valid;
-      bus_wdat_last   <= '1';
-      -- Duplicate the address over the data bus.
-      for i in 0 to BUS_DATA_BYTES/PTE_SIZE-1 loop
-        -- Copy the existing flags.
-        bus_wdat_data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= slv(v.addr);
-        -- Mark the entry as present.
-        bus_wdat_data(PTE_WIDTH * i + PTE_PRESENT) <= '1';
-        -- Map to the allocated frame.
-        bus_wdat_data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i + PAGE_SIZE_LOG2)
-            <= slv(EXTRACT(u(frames_resp_addr), PAGE_SIZE_LOG2, PTE_WIDTH-PAGE_SIZE_LOG2));
-      end loop;
-      -- Use strobe to write the correct entry.
-      bus_wdat_strobe <= slv(OVERLAY(
-          not to_unsigned(0, PTE_SIZE),
-          to_unsigned(0, bus_wdat_strobe'length),
-          int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2)))));
-      if bus_wdat_ready = '1' then
-        frames_resp_ready <= '1';
-        v.state_stack     := pop_state(v.state_stack);
       end if;
 
     -- === START OF VMALLOC ROUTINE ===
@@ -793,7 +703,7 @@ begin
     when VMALLOC_CHECK_PT0 =>
       my_bus_rreq.addr  <= slv(v.addr);
       my_bus_rreq.len   <= slv(to_unsigned(1, my_bus_rreq.len'length));
-      if int_bus_dirty = '0' then
+      if my_bus_wreq.dirty = '0' then
         my_bus_rreq.valid <= '1';
         if my_bus_rreq.ready = '1' then
           v.state_stack(0) := VMALLOC_CHECK_PT0_DATA;
@@ -853,13 +763,6 @@ begin
       end if;
 
     when VMALLOC_RESERVE_FRAME =>
-      -- TODO: capture reserved frame in register, so that setPTERange can use the frame allocator.
-      -- Find a frame in the given region, result will be available later.
---      frames_cmd_valid  <= '1';
---      frames_cmd_find   <= '1';
---      frames_cmd_region <= slv(resize(unsigned(cmd_region) - 1, frames_cmd_region'length));
-
---      if frames_cmd_ready = '1' then
         cmd_ready        <= '1';
         -- addr_vm  : virtual base address to start at
         -- cmd_size : length to set
@@ -870,12 +773,11 @@ begin
         v.region         := unsigned(cmd_region);
         -- Take first page mapping from frame allocator
         v.arg            := to_unsigned(1, v.arg'length);
---      end if;
 
     when VMALLOC_FINISH =>
       resp_success <= '1';
       resp_addr    <= slv(v.addr_vm);
-      if int_bus_dirty = '0' then
+      if my_bus_wreq.dirty = '0' then
         resp_valid   <= '1';
         if resp_ready = '1' then
           v.state_stack := pop_state(v.state_stack);
@@ -896,7 +798,7 @@ begin
     when VFREE_FINISH =>
       resp_success <= '1';
       resp_addr    <= (others => '0');
-      if int_bus_dirty = '0' then
+      if my_bus_wreq.dirty = '0' then
         resp_valid   <= '1';
         if resp_ready = '1' then
           v.state_stack := pop_state(v.state_stack);
@@ -935,7 +837,7 @@ begin
       v.pt_empty       := '1';
 
       -- Wait for any outstanding writes to be completed.
-      if int_bus_dirty = '0' then
+      if my_bus_wreq.dirty = '0' then
         my_bus_rreq.valid <= '1';
         if my_bus_rreq.ready = '1' then
           v.state_stack(0) := SET_PTE_RANGE_L1_CHECK;
@@ -985,32 +887,32 @@ begin
 
     when SET_PTE_RANGE_L1_UPDATE_ADDR =>
       -- A new PT was allocated, update the corresponding L1 entry.
-      int_bus_wreq.valid <= '1';
-      int_bus_wreq.addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(PT_ADDR, PAGE_BASE(v.addr)-1, 1)));
-      int_bus_wreq.len   <= slv(to_unsigned(1, int_bus_wreq.len'length));
-      if int_bus_wreq.ready = '1' then
+      my_bus_wreq.valid <= '1';
+      my_bus_wreq.addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(PT_ADDR, PAGE_BASE(v.addr)-1, 1)));
+      my_bus_wreq.len   <= slv(to_unsigned(1, my_bus_wreq.len'length));
+      if my_bus_wreq.ready = '1' then
         v.state_stack(0) := SET_PTE_RANGE_L1_UPDATE_DAT;
       end if;
 
     when SET_PTE_RANGE_L1_UPDATE_DAT =>
       -- Update the PTE
-      bus_wdat_valid  <= '1';
-      bus_wdat_last   <= '1';
+      my_bus_wdat.valid  <= '1';
+      my_bus_wdat.last   <= '1';
       -- Duplicate the address over the data bus
       for i in 0 to BUS_DATA_BYTES/PTE_SIZE-1 loop
-        bus_wdat_data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= slv(v.addr_pt);
+        my_bus_wdat.data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= slv(v.addr_pt);
         if v.arg(1) = '0' then
           -- Mark the entry as mapped and present
-          bus_wdat_data(PTE_WIDTH * i + PTE_MAPPED)  <= '1';
-          bus_wdat_data(PTE_WIDTH * i + PTE_PRESENT) <= '1';
+          my_bus_wdat.data(PTE_WIDTH * i + PTE_MAPPED)  <= '1';
+          my_bus_wdat.data(PTE_WIDTH * i + PTE_PRESENT) <= '1';
         end if;
       end loop;
       -- Use strobe to write the correct entry
-      bus_wdat_strobe <= slv(OVERLAY(
+      my_bus_wdat.strobe <= slv(OVERLAY(
           not to_unsigned(0, PTE_SIZE),
-          to_unsigned(0, bus_wdat_strobe'length),
+          to_unsigned(0, my_bus_wdat.strobe'length),
           int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, PAGE_BASE(v.addr)-1, 1)))));
-      if bus_wdat_ready = '1' then
+      if my_bus_wdat.ready = '1' then
         if v.pages = 0 then
           -- Done (de)allocating.
           v.state_stack    := pop_state(v.state_stack);
@@ -1021,10 +923,10 @@ begin
 
     when SET_PTE_RANGE_FRAME =>
       -- Allocate a single frame for the mapping.
-      frames_cmd_valid   <= '1';
-      frames_cmd_find    <= '1';
-      frames_cmd_region  <= slv(resize(v.region - 1, frames_cmd_region'length));
-      if frames_cmd_ready = '1' then
+      dir_frames_cmd_valid   <= '1';
+      dir_frames_cmd_action  <= MM_FRAMES_FIND;
+      dir_frames_cmd_region  <= slv(resize(v.region - 1, dir_frames_cmd_region'length));
+      if dir_frames_cmd_ready = '1' then
         v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_ADDR;
       end if;
 
@@ -1054,8 +956,8 @@ begin
         v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_ADDR;
       else
         -- In mapping, do processing (freeing of frames).
-        frames_cmd_free        <= '1';
-        frames_cmd_addr        <= slv(EXTRACT(
+        dir_frames_cmd_action      <= MM_FRAMES_FREE;
+        dir_frames_cmd_addr        <= slv(EXTRACT(
             u(pt_reader.data),
             int(v.bus_pte_idx) * PTE_WIDTH,
             BUS_ADDR_WIDTH ));
@@ -1065,8 +967,8 @@ begin
             pt_reader.data(PTE_WIDTH * int(v.bus_pte_idx) + PTE_PRESENT) = '1'
           then
             -- Page is mapped to a frame.
-            frames_cmd_valid   <= '1';
-            if frames_cmd_ready = '1' then
+            dir_frames_cmd_valid   <= '1';
+            if dir_frames_cmd_ready = '1' then
               -- Handshaked, wait for response in next state.
               v.state_stack(0) := SET_PTE_RANGE_L2_DEALLOC_FRAME_R;
               if pt_reader.data(PTE_WIDTH * int(v.bus_pte_idx) + PTE_BOUNDARY) = '1' then
@@ -1093,8 +995,8 @@ begin
       end if;
 
     when SET_PTE_RANGE_L2_DEALLOC_FRAME_R =>
-      frames_resp_ready        <= '1';
-      if frames_resp_valid = '1' then
+      dir_frames_resp_ready    <= '1';
+      if dir_frames_resp_valid = '1' then
         if v.bus_pte_idx = BUS_DATA_BYTES / PTE_SIZE - 1 then
           -- Investigated all PTEs in bus word.
           v.state_stack(0)     := SET_PTE_RANGE_L2_UPDATE_ADDR;
@@ -1106,8 +1008,8 @@ begin
 
     when SET_PTE_RANGE_L2_UPDATE_ADDR =>
       -- L2 page table entry address
-      int_bus_wreq.addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(v.addr_pt, v.addr, 2)));
-      int_bus_wreq.len   <= slv(to_unsigned(1, int_bus_wreq.len'length));
+      my_bus_wreq.addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(v.addr_pt, v.addr, 2)));
+      my_bus_wreq.len   <= slv(to_unsigned(1, my_bus_wreq.len'length));
 
       if  shift_right(v.addr,    VM_SIZE_L2_LOG2 + log2ceil(BUS_DATA_BYTES / PTE_SIZE))
         = shift_right(v.addr_vm, VM_SIZE_L2_LOG2 + log2ceil(BUS_DATA_BYTES / PTE_SIZE))
@@ -1122,13 +1024,13 @@ begin
       else
         if v.arg(1) = '1' then
           -- Wait until read is done to prevent deadlock
-          int_bus_wreq.valid <= pt_reader.valid;
-          if int_bus_wreq.ready = '1' and pt_reader.valid = '1' then
+          my_bus_wreq.valid <= pt_reader.valid;
+          if my_bus_wreq.ready = '1' and pt_reader.valid = '1' then
             v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
           end if;
         else
-          int_bus_wreq.valid <= '1';
-          if int_bus_wreq.ready = '1' then
+          my_bus_wreq.valid <= '1';
+          if my_bus_wreq.ready = '1' then
             v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
           end if;
         end if;
@@ -1139,27 +1041,27 @@ begin
       if r.in_mapping = '0' then
         -- Not inside of mapping. This only happens with deallocation.
         -- Consume requested data, do not write.
-        pt_reader.ready   <= '1';
-        bus_wdat_valid    <= '0';
+        pt_reader.ready       <= '1';
+        my_bus_wdat.valid     <= '0';
       elsif v.arg(1) = '1' then
         -- Deallocate
-        pt_reader.ready   <= bus_wdat_ready;
-        bus_wdat_valid    <= pt_reader.valid;
+        pt_reader.ready       <= my_bus_wdat.ready;
+        my_bus_wdat.valid     <= pt_reader.valid;
       elsif v.arg(0) = '1' then
         -- Use allocated frame in mapping.
-        frames_resp_ready <= bus_wdat_ready;
-        bus_wdat_valid    <= frames_resp_valid;
+        dir_frames_resp_ready <= my_bus_wdat.ready;
+        my_bus_wdat.valid     <= dir_frames_resp_valid;
       else
         -- Create mapping without allocation.
-        bus_wdat_valid    <= '1';
+        my_bus_wdat.valid     <= '1';
       end if;
-      bus_wdat_last       <= '1';
+      my_bus_wdat.last        <= '1';
 
       -- Loop over the PTEs on the data bus.
       for i in 0 to BUS_DATA_BYTES/PTE_SIZE-1 loop
 
         -- Default to a zero'd entry
-        bus_wdat_data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= (others => '0');
+        my_bus_wdat.data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= (others => '0');
 
         if v.arg(1) = '1' then
           -- Deallocate
@@ -1182,21 +1084,21 @@ begin
           PAGE_BASE(v.addr) + shift_left(to_unsigned(i, v.addr_vm'length), VM_SIZE_L2_LOG2) = PAGE_BASE(v.addr_vm)
         then
           -- Map to the allocated frame.
-          bus_wdat_data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= frames_resp_addr;
+          my_bus_wdat.data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= dir_frames_resp_addr;
           -- Mark the entry as present.
-          bus_wdat_data(PTE_WIDTH * i + PTE_PRESENT) <= '1';
+          my_bus_wdat.data(PTE_WIDTH * i + PTE_PRESENT) <= '1';
         end if;
 
         -- Last entry
         if r.pages - i - 1 = 0 then
-          bus_wdat_data(PTE_WIDTH * i + PTE_BOUNDARY) <= '1';
+          my_bus_wdat.data(PTE_WIDTH * i + PTE_BOUNDARY) <= '1';
         end if;
 
         -- Mark as mapped / not mapped
-        bus_wdat_data(PTE_WIDTH * i + PTE_MAPPED)  <= not v.arg(1);
+        my_bus_wdat.data(PTE_WIDTH * i + PTE_MAPPED)  <= not v.arg(1);
 
         -- Write region
-        bus_wdat_data(PTE_WIDTH * i + PTE_SEGMENT + v.region'length - 1 downto PTE_WIDTH * i + PTE_SEGMENT) <= slv(v.region);
+        my_bus_wdat.data(PTE_WIDTH * i + PTE_SEGMENT + v.region'length - 1 downto PTE_WIDTH * i + PTE_SEGMENT) <= slv(v.region);
       end loop;
 
       -- current = v.addr
@@ -1208,9 +1110,9 @@ begin
       if 0 = ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr, 2)) then
         -- First PTE is aligned to start of bus word.
         -- Shift a vector of ones to the right to get the correct strobe.
-        bus_wdat_strobe <= slv(
+        my_bus_wdat.strobe <= slv(
             shift_right(
-              not to_unsigned(0, bus_wdat_strobe'length),
+              not to_unsigned(0, my_bus_wdat.strobe'length),
               PTE_SIZE * ((BUS_DATA_BYTES / PTE_SIZE) -
                 -- Amount of PTEs in this bus word
                 int(CLAMP(
@@ -1230,13 +1132,13 @@ begin
           and pt_reader.valid = '1'
         ) or (
           r.in_mapping = '1' and v.arg(1) = '1'
-          and pt_reader.valid = '1' and bus_wdat_ready = '1'
+          and pt_reader.valid = '1' and my_bus_wdat.ready = '1'
         ) or (
           r.in_mapping = '1' and v.arg(0) = '1'
-          and frames_resp_valid = '1' and bus_wdat_ready = '1'
+          and dir_frames_resp_valid = '1' and my_bus_wdat.ready = '1'
         ) or (
           r.in_mapping = '1' and v.arg(1) = '0' and v.arg(0) = '0'
-          and bus_wdat_ready = '1'
+          and my_bus_wdat.ready = '1'
         )
       then
         -- Do not try to use allocated frame on next iteration.
@@ -1310,10 +1212,10 @@ begin
     when PT_FRAME_INIT_ADDR =>
       -- Can write further than the bitmap,
       -- because the entire frame should be unused at this point.
-      int_bus_wreq.valid <= '1';
-      int_bus_wreq.addr  <= slv(v.addr);
-      int_bus_wreq.len   <= slv(to_unsigned(1, int_bus_wreq.len'length));
-      if int_bus_wreq.ready = '1' then
+      my_bus_wreq.valid <= '1';
+      my_bus_wreq.addr  <= slv(v.addr);
+      my_bus_wreq.len   <= slv(to_unsigned(1, my_bus_wreq.len'length));
+      if my_bus_wreq.ready = '1' then
         v.state_stack(0) := PT_FRAME_INIT_DATA;
         if (PT_PER_FRAME > BUS_DATA_WIDTH) then
           -- Need another write on a higher address
@@ -1322,11 +1224,11 @@ begin
       end if;
 
     when PT_FRAME_INIT_DATA =>
-      bus_wdat_valid  <= '1';
-      bus_wdat_data   <= (others => '0');
-      bus_wdat_strobe <= (others => '1');
-      bus_wdat_last   <= '1';
-      if bus_wdat_ready = '1' then
+      my_bus_wdat.valid  <= '1';
+      my_bus_wdat.data   <= (others => '0');
+      my_bus_wdat.strobe <= (others => '1');
+      my_bus_wdat.last   <= '1';
+      if my_bus_wdat.ready = '1' then
         if (PT_PER_FRAME <= BUS_DATA_WIDTH) or (PAGE_OFFSET(v.addr) * BYTE_SIZE > PT_PER_FRAME) then
           -- Entire bitmap has been initialized
           v.state_stack(0) := PT_FRAME_INIT_ROLODEX;
@@ -1357,10 +1259,10 @@ begin
 
     when PT_DEL_MARK_BM_ADDR =>
       -- Set address for marking bit in bitmap
-      int_bus_wreq.valid <= my_bus_rdat.valid;
-      my_bus_rdat.ready     <= int_bus_wreq.ready;
-      int_bus_wreq.addr  <= slv(PAGE_BASE(v.addr_pt) + PT_BITMAP_IDX(v.addr_pt) / BUS_DATA_WIDTH);
-      int_bus_wreq.len   <= slv(to_unsigned(1, int_bus_wreq.len'length));
+      my_bus_wreq.valid <= my_bus_rdat.valid;
+      my_bus_rdat.ready     <= my_bus_wreq.ready;
+      my_bus_wreq.addr  <= slv(PAGE_BASE(v.addr_pt) + PT_BITMAP_IDX(v.addr_pt) / BUS_DATA_WIDTH);
+      my_bus_wreq.len   <= slv(to_unsigned(1, my_bus_wreq.len'length));
       -- Copy the byte that has to be written back.
       v.byte_buffer      := EXTRACT(
           u(my_bus_rdat.data),
@@ -1368,7 +1270,7 @@ begin
           BYTE_SIZE);
       -- Mark PT as unused in bitmap's byte.
       v.byte_buffer(int(PT_BITMAP_IDX(v.addr_pt) mod BYTE_SIZE)) := '0';
-      if int_bus_wreq.ready = '1' then
+      if my_bus_wreq.ready = '1' then
         -- TODO: make this work for bitmaps > BUS_DATA_WIDTH
         if BIT_COUNT(my_bus_rdat.data(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH) downto 0)) = 1 then
           -- This was the last page table in the frame, delete it.
@@ -1386,27 +1288,27 @@ begin
       end if;
 
     when PT_DEL_FRAME =>
-      frames_cmd_valid <= '1';
-      frames_cmd_free  <= '1';
-      frames_cmd_addr  <= slv(PAGE_BASE(v.addr_pt));
-      if frames_cmd_ready = '1' then
+      dir_frames_cmd_valid  <= '1';
+      dir_frames_cmd_action <= MM_FRAMES_FREE;
+      dir_frames_cmd_addr   <= slv(PAGE_BASE(v.addr_pt));
+      if dir_frames_cmd_ready = '1' then
         v.state_stack(0) := PT_DEL_MARK_BM_DATA;
       end if;
 
     when PT_DEL_MARK_BM_DATA =>
-      bus_wdat_valid  <= '1';
+      my_bus_wdat.valid  <= '1';
       for i in 0 to BUS_DATA_BYTES-1 loop
-        bus_wdat_data(BYTE_SIZE*(i+1)-1 downto BYTE_SIZE*i) <= slv(v.byte_buffer);
+        my_bus_wdat.data(BYTE_SIZE*(i+1)-1 downto BYTE_SIZE*i) <= slv(v.byte_buffer);
       end loop;
-      bus_wdat_strobe <= (others => '0');
+      my_bus_wdat.strobe <= (others => '0');
       -- Get page table number referenced by addr and figure out which byte of the bitmap it is in.
-      bus_wdat_strobe(int(
+      my_bus_wdat.strobe(int(
         div_floor(
           PT_BITMAP_IDX(v.addr_pt) mod BUS_DATA_WIDTH,
           BYTE_SIZE)
         )) <= '1';
-      bus_wdat_last <= '1';
-      if bus_wdat_ready = '1' then
+      my_bus_wdat.last <= '1';
+      if my_bus_wdat.ready = '1' then
         v.state_stack := pop_state(v.state_stack);
       end if;
 
@@ -1422,7 +1324,7 @@ begin
       v.addr_pt          := v.addr;
       -- Mark current rolodex entry, to detect wrap around
       rolodex_entry_mark <= '1';
-      if rolodex_entry_valid = '1' and int_bus_dirty = '0' then
+      if rolodex_entry_valid = '1' and my_bus_wreq.dirty = '0' then
         v.state_stack(0) := PT_NEW_REQ_BM;
       end if;
 
@@ -1445,21 +1347,21 @@ begin
       end if;
 
     when PT_NEW_FRAME =>
-      frames_cmd_valid   <= '1';
-      frames_cmd_alloc   <= '1';
-      frames_cmd_addr    <= slv(PAGE_BASE(PT_ADDR));
-      if frames_cmd_ready = '1' then
+      dir_frames_cmd_valid   <= '1';
+      dir_frames_cmd_action  <= MM_FRAMES_ALLOC;
+      dir_frames_cmd_addr    <= slv(PAGE_BASE(PT_ADDR));
+      if dir_frames_cmd_ready = '1' then
         v.state_stack(0) := PT_NEW_FRAME_CHECK;
       end if;
 
     when PT_NEW_FRAME_CHECK =>
       -- Execute the `frame initialize' routine to set bitmap.
-      if frames_resp_valid = '1' then
-        frames_resp_ready  <= '1';
-        if frames_resp_success = '1' then
+      if dir_frames_resp_valid = '1' then
+        dir_frames_resp_ready  <= '1';
+        if dir_frames_resp_success = '1' then
           v.state_stack(0) := PT_NEW_REQ_BM;
           v.state_stack    := push_state(v.state_stack, PT_FRAME_INIT_ADDR);
-          v.addr           := PAGE_BASE(u(frames_resp_addr));
+          v.addr           := PAGE_BASE(u(dir_frames_resp_addr));
         else
           v.state_stack(0) := FAIL;
         end if;
@@ -1500,34 +1402,34 @@ begin
 
     when PT_NEW_MARK_BM_ADDR =>
       -- Set address for marking bit in bitmap
-      int_bus_wreq.valid <= '1';
-      int_bus_wreq.addr  <= slv(PAGE_BASE(v.addr));
-      int_bus_wreq.len   <= slv(to_unsigned(1, int_bus_wreq.len'length));
+      my_bus_wreq.valid <= '1';
+      my_bus_wreq.addr  <= slv(PAGE_BASE(v.addr));
+      my_bus_wreq.len   <= slv(to_unsigned(1, my_bus_wreq.len'length));
       -- TODO: enable bitmap location > BUS_DATA_WIDTH
-      if int_bus_wreq.ready = '1' then
+      if my_bus_wreq.ready = '1' then
         v.state_stack(0) := PT_NEW_MARK_BM_DATA;
       end if;
 
     when PT_NEW_MARK_BM_DATA =>
-      bus_wdat_valid  <= '1';
+      my_bus_wdat.valid  <= '1';
       for i in 0 to BUS_DATA_BYTES-1 loop
-        bus_wdat_data(BYTE_SIZE*(i+1)-1 downto BYTE_SIZE*i) <= slv(v.byte_buffer);
+        my_bus_wdat.data(BYTE_SIZE*(i+1)-1 downto BYTE_SIZE*i) <= slv(v.byte_buffer);
       end loop;
-      bus_wdat_strobe <= (others => '0');
+      my_bus_wdat.strobe <= (others => '0');
       -- Get page table number referenced by addr and figure out which byte of the bitmap it is in.
-      bus_wdat_strobe(int(
+      my_bus_wdat.strobe(int(
         div_floor(
           PT_BITMAP_IDX(v.addr),
           BYTE_SIZE)
         )) <= '1';
-      bus_wdat_last <= '1';
-      if bus_wdat_ready = '1' then
+      my_bus_wdat.last <= '1';
+      if my_bus_wdat.ready = '1' then
         v.state_stack(0) := PT_NEW_CLEAR_ADDR;
       end if;
 
     when PT_NEW_CLEAR_ADDR =>
-      int_bus_wreq.valid <= '1';
-      int_bus_wreq.addr  <= slv(v.addr);
+      my_bus_wreq.valid <= '1';
+      my_bus_wreq.addr  <= slv(v.addr);
       -- The number of beats in the burst
       v.beat         := to_unsigned(
                         work.Utils.min(
@@ -1537,22 +1439,22 @@ begin
                             BUS_DATA_BYTES))
                         ),
                         v.beat'length);
-      int_bus_wreq.len   <= slv(resize(v.beat, int_bus_wreq.len'length));
-      if int_bus_wreq.ready = '1' then
+      my_bus_wreq.len   <= slv(resize(v.beat, my_bus_wreq.len'length));
+      if my_bus_wreq.ready = '1' then
         v.state_stack(0) := PT_NEW_CLEAR_DATA;
         v.addr           := v.addr + BYTES_IN_BEATS(v.beat);
       end if;
 
     when PT_NEW_CLEAR_DATA =>
-      bus_wdat_valid  <= '1';
-      bus_wdat_data   <= (others => '0');
-      bus_wdat_strobe <= (others => '1');
+      my_bus_wdat.valid  <= '1';
+      my_bus_wdat.data   <= (others => '0');
+      my_bus_wdat.strobe <= (others => '1');
       if v.beat = 1 then
-        bus_wdat_last <= '1';
+        my_bus_wdat.last <= '1';
       else
-        bus_wdat_last <= '0';
+        my_bus_wdat.last <= '0';
       end if;
-      if bus_wdat_ready = '1' then
+      if my_bus_wdat.ready = '1' then
         if v.beat = 1 then
           -- This is the last beat
           if PT_OFFSET(v.addr) = 0 then
@@ -1576,6 +1478,214 @@ begin
 
     d <= v;
   end process;
+
+    -- === START OF FRAME ALLOCATION ROUTINE ===
+    -- Allocates a frame for an already mapped virtual address, `addr_vm`.
+    -- Response is given on MMU channel.
+  mmu : process (r_mmu,
+           mmu_frames_cmd_ready,
+           mmu_frames_resp_addr, mmu_frames_resp_success, mmu_frames_resp_valid,
+           mmu_bus_wreq, mmu_bus_wdat,
+           mmu_bus_rreq, mmu_bus_rdat,
+           mmu_req_valid, mmu_req_addr, mmu_resp_ready) is
+    variable v : reg_mmu_type;
+  begin
+    v := r_mmu;
+
+    mmu_frames_cmd_valid     <= '0';
+    mmu_frames_cmd_region    <= (others => 'U');
+    mmu_frames_cmd_addr      <= (others => 'U');
+    mmu_frames_cmd_action    <= (others => 'U');
+    mmu_frames_resp_ready    <= '0';
+
+    mmu_bus_wreq.valid       <= '0';
+    mmu_bus_wreq.addr        <= (others => 'U');
+    mmu_bus_wreq.len         <= (others => 'U');
+    mmu_bus_wreq.barrier     <= '1';
+
+    mmu_bus_wdat.valid       <= '0';
+    mmu_bus_wdat.data        <= (others => 'U');
+    mmu_bus_wdat.strobe      <= (others => 'U');
+    mmu_bus_wdat.last        <= 'U';
+
+    mmu_bus_rreq.valid       <= '0';
+    mmu_bus_rreq.addr        <= (others => 'U');
+    mmu_bus_rreq.len         <= (others => 'U');
+
+    mmu_bus_rdat.ready       <= '0';
+
+    mmu_req_ready            <= '0';
+
+    mmu_resp_valid           <= '0';
+    mmu_resp_addr            <= (others => 'U');
+
+    case v.state is
+
+    when RESET_ST =>
+      v.state                := IDLE;
+
+    when IDLE =>
+      mmu_req_ready <= '1';
+      if mmu_req_valid = '1' then
+        v.state              := MMU_GET_L1_ADDR;
+        v.addr_vm            := u(mmu_req_addr);
+      end if;
+
+    when MMU_GET_L1_ADDR =>
+      -- Get the L1 PTE
+      mmu_bus_rreq.addr       <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(PT_ADDR, v.addr_vm, 1)));
+      mmu_bus_rreq.len        <= slv(to_unsigned(1, mmu_bus_rreq.len'length));
+      -- Wait for any outstanding writes to be completed.
+      if mmu_bus_wreq.dirty = '0' then
+        mmu_bus_rreq.valid <= '1';
+        if mmu_bus_rreq.ready = '1' then
+          v.state            := MMU_GET_L1_DAT;
+        end if;
+      end if;
+
+    when MMU_GET_L1_DAT =>
+      mmu_bus_rdat.ready     <= '1';
+      if mmu_bus_rdat.valid = '1' then
+        -- Check PRESENT bit of PTE referred to by addr_vm.
+        if mmu_bus_rdat.data(
+             PTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, v.addr_vm, 1)))
+             + PTE_PRESENT
+           ) /= '1'
+        then
+          -- Given address isn't mapped.
+          v.state            := FAIL;
+        else
+          -- Get address of L2 page table from the read data.
+          v.addr_pt          := align_beq(
+              EXTRACT(
+                unsigned(mmu_bus_rdat.data),
+                BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, v.addr_vm, 1))),
+                BYTE_SIZE * PTE_SIZE
+              ),
+              PT_SIZE_LOG2);
+          v.state            := MMU_GET_L2_ADDR;
+        end if;
+      end if;
+
+    when MMU_GET_L2_ADDR =>
+      -- Get the L1 PTE
+      mmu_bus_rreq.addr      <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(v.addr_pt, v.addr_vm, 2)));
+      mmu_bus_rreq.len       <= slv(to_unsigned(1, mmu_bus_rreq.len'length));
+      mmu_bus_rreq.valid     <= '1';
+      if mmu_bus_rreq.ready = '1' then
+        v.state              := MMU_GET_L2_DAT;
+      end if;
+
+    when MMU_GET_L2_DAT =>
+      if mmu_bus_rdat.valid = '1' then
+
+        if mmu_bus_rdat.data(
+             PTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2)))
+             + PTE_MAPPED
+           ) /= '1'
+        then
+          -- Given address isn't mapped.
+          mmu_bus_rdat.ready  <= '1';
+          v.state            := FAIL;
+
+        elsif mmu_bus_rdat.data(
+             PTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2)))
+             + PTE_PRESENT
+           ) = '1'
+        then
+          -- Given address is already present, return the mapping.
+          mmu_resp_valid     <= '1';
+          mmu_resp_addr      <= slv(align_beq(
+              EXTRACT(
+                unsigned(mmu_bus_rdat.data),
+                BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2))),
+                BYTE_SIZE * PTE_SIZE
+              ),
+              PT_SIZE_LOG2));
+          if mmu_resp_ready = '1' then
+            mmu_bus_rdat.ready <= '1';
+            v.state          := IDLE;
+          end if;
+
+        else
+          -- Get segment of mapped address from the read data.
+          mmu_frames_cmd_valid  <= '1';
+          mmu_frames_cmd_action <= MM_FRAMES_FIND;
+          if log2ceil(MEM_REGIONS) > 0 then
+            mmu_frames_cmd_region <= slv(
+                resize(
+                  EXTRACT(
+                    unsigned(mmu_bus_rdat.data),
+                    BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2))) + PTE_SEGMENT,
+                    log2ceil(MEM_REGIONS+1)
+                  ) - 1,
+                  log2ceil(MEM_REGIONS)));
+          end if;
+          -- Store all flags of the mapping (skip the address itself)
+          v.addr             := resize(
+              EXTRACT(
+                unsigned(mmu_bus_rdat.data),
+                BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2))),
+                PAGE_SIZE_LOG2
+              ),
+              v.addr'length
+            );
+          if mmu_frames_cmd_ready = '1' then
+            mmu_bus_rdat.ready <= '1';
+            v.state          := MMU_RESP;
+          end if;
+        end if;
+      end if;
+
+    when MMU_RESP =>
+      -- Respond with the frame address as soon as possible.
+      mmu_resp_valid         <= mmu_frames_resp_valid;
+      mmu_resp_addr          <= mmu_frames_resp_addr;
+      if mmu_resp_ready = '1' then
+        v.state              := MMU_SET_L2_ADDR;
+      end if;
+
+    when MMU_SET_L2_ADDR =>
+      -- Update the PTE.
+      mmu_bus_wreq.valid     <= '1';
+      mmu_bus_wreq.addr      <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(v.addr_pt, v.addr_vm, 2)));
+      mmu_bus_wreq.len       <= slv(to_unsigned(1, mmu_bus_wreq.len'length));
+      if mmu_bus_wreq.ready = '1' then
+        v.state              := MMU_SET_L2_DAT;
+      end if;
+
+    when MMU_SET_L2_DAT =>
+      mmu_bus_wdat.valid     <= mmu_frames_resp_valid;
+      mmu_bus_wdat.last      <= '1';
+      -- Duplicate the address over the data bus.
+      for i in 0 to BUS_DATA_BYTES/PTE_SIZE-1 loop
+        -- Copy the existing flags.
+        mmu_bus_wdat.data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= slv(v.addr);
+        -- Mark the entry as present.
+        mmu_bus_wdat.data(PTE_WIDTH * i + PTE_PRESENT) <= '1';
+        -- Map to the allocated frame.
+        mmu_bus_wdat.data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i + PAGE_SIZE_LOG2)
+            <= slv(EXTRACT(u(mmu_frames_resp_addr), PAGE_SIZE_LOG2, PTE_WIDTH-PAGE_SIZE_LOG2));
+      end loop;
+      -- Use strobe to write the correct entry.
+      mmu_bus_wdat.strobe        <= slv(OVERLAY(
+          not to_unsigned(0, PTE_SIZE),
+          to_unsigned(0, mmu_bus_wdat.strobe'length),
+          int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2)))));
+      if mmu_bus_wdat.ready = '1' then
+        mmu_frames_resp_ready <= '1';
+        v.state              := IDLE;
+      end if;
+
+    when others =>
+
+    end case;
+
+    d_mmu <= v;
+  end process;
+
+
+  -- === START OF COMPONENT MAPPINGS ===
 
   pt_frames : MMRolodex
     generic map (
@@ -1636,10 +1746,7 @@ begin
       reset                       => reset,
       cmd_region                  => frames_cmd_region,
       cmd_addr                    => frames_cmd_addr,
-      cmd_free                    => frames_cmd_free,
-      cmd_alloc                   => frames_cmd_alloc,
-      cmd_find                    => frames_cmd_find,
-      cmd_clear                   => frames_cmd_clear,
+      cmd_action                  => frames_cmd_action,
       cmd_valid                   => frames_cmd_valid,
       cmd_ready                   => frames_cmd_ready,
 
@@ -1649,7 +1756,69 @@ begin
       resp_ready                  => frames_resp_ready
     );
 
-  barrier : MMBarrier
+  frames_arbiter : BusReadArbiter
+    generic map (
+      BUS_ADDR_WIDTH              => FCI(FCI'high),
+      BUS_LEN_WIDTH               => 1,
+      BUS_DATA_WIDTH              => FRI(FRI'high),
+      NUM_SLAVE_PORTS             => 2,
+      ARB_METHOD                  => "FIXED",
+      MAX_OUTSTANDING             => 2,
+      SLV_REQ_SLICES              => false,
+      MST_REQ_SLICE               => false,
+      MST_DAT_SLICE               => false,
+      SLV_DAT_SLICES              => false
+    )
+    port map (
+      bus_clk                     => clk,
+      bus_reset                   => reset,
+
+      mst_rreq_valid              => frames_cmd_valid,
+      mst_rreq_ready              => frames_cmd_ready,
+      mst_rreq_addr               => frames_cmd_ser,
+      mst_rreq_len                => open,
+      mst_rdat_valid              => frames_resp_valid,
+      mst_rdat_ready              => frames_resp_ready,
+      mst_rdat_data               => frames_resp_ser,
+      mst_rdat_last               => '1',
+
+      bs00_rreq_valid             => mmu_frames_cmd_valid,
+      bs00_rreq_ready             => mmu_frames_cmd_ready,
+      bs00_rreq_addr              => mmu_frames_cmd_ser,
+      bs00_rreq_len               => "1",
+      bs00_rdat_valid             => mmu_frames_resp_valid,
+      bs00_rdat_ready             => mmu_frames_resp_ready,
+      bs00_rdat_data              => mmu_frames_resp_ser,
+      bs00_rdat_last              => open,
+
+      bs01_rreq_valid             => dir_frames_cmd_valid,
+      bs01_rreq_ready             => dir_frames_cmd_ready,
+      bs01_rreq_addr              => dir_frames_cmd_ser,
+      bs01_rreq_len               => "1",
+      bs01_rdat_valid             => dir_frames_resp_valid,
+      bs01_rdat_ready             => dir_frames_resp_ready,
+      bs01_rdat_data              => dir_frames_resp_ser,
+      bs01_rdat_last              => open
+    );
+
+  mmu_frames_cmd_ser(FCI(3)-1 downto FCI(2)) <= mmu_frames_cmd_action;
+  mmu_frames_cmd_ser(FCI(2)-1 downto FCI(1)) <= mmu_frames_cmd_addr;
+  mmu_frames_cmd_ser(FCI(1)-1 downto FCI(0)) <= mmu_frames_cmd_region;
+  dir_frames_cmd_ser(FCI(3)-1 downto FCI(2)) <= dir_frames_cmd_action;
+  dir_frames_cmd_ser(FCI(2)-1 downto FCI(1)) <= dir_frames_cmd_addr;
+  dir_frames_cmd_ser(FCI(1)-1 downto FCI(0)) <= dir_frames_cmd_region;
+  frames_cmd_action <= frames_cmd_ser(FCI(3)-1 downto FCI(2));
+  frames_cmd_addr   <= frames_cmd_ser(FCI(2)-1 downto FCI(1));
+  frames_cmd_region <= frames_cmd_ser(FCI(1)-1 downto FCI(0));
+  frames_resp_ser(FRI(2)-1 downto FRI(1)) <= frames_resp_addr;
+  frames_resp_ser(FRI(0))                 <= frames_resp_success;
+  mmu_frames_resp_addr    <= mmu_frames_resp_ser(FRI(2)-1 downto FRI(1));
+  mmu_frames_resp_success <= mmu_frames_resp_ser(FRI(0));
+  dir_frames_resp_addr    <= dir_frames_resp_ser(FRI(2)-1 downto FRI(1));
+  dir_frames_resp_success <= dir_frames_resp_ser(FRI(0));
+
+
+  director_barrier : MMBarrier
     generic map (
       BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
       BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
@@ -1658,31 +1827,64 @@ begin
     port map (
       clk                         => clk,
       reset                       => reset,
-      dirty                       => int_bus_dirty,
+      dirty                       => my_bus_wreq.dirty,
 
       -- Slave write request channel
-      slv_wreq_valid              => int_bus_wreq.valid,
-      slv_wreq_ready              => int_bus_wreq.ready,
-      slv_wreq_addr               => int_bus_wreq.addr,
-      slv_wreq_len                => int_bus_wreq.len,
-      slv_wreq_barrier            => int_bus_wreq_barrier,
+      slv_wreq_valid              => my_bus_wreq.valid,
+      slv_wreq_ready              => my_bus_wreq.ready,
+      slv_wreq_addr               => my_bus_wreq.addr,
+      slv_wreq_len                => my_bus_wreq.len,
+      slv_wreq_barrier            => my_bus_wreq.barrier,
       -- Master write request channel
-      mst_wreq_valid              => bus_wreq_valid,
-      mst_wreq_ready              => bus_wreq_ready,
-      mst_wreq_addr               => bus_wreq_addr,
-      mst_wreq_len                => bus_wreq_len,
+      mst_wreq_valid              => my_bus_wreq_b.valid,
+      mst_wreq_ready              => my_bus_wreq_b.ready,
+      mst_wreq_addr               => my_bus_wreq_b.addr,
+      mst_wreq_len                => my_bus_wreq_b.len,
 
       -- Slave response channel
       slv_resp_valid              => open,
       slv_resp_ready              => open,
       slv_resp_ok                 => open,
       -- Master response channel
-      mst_resp_valid              => bus_resp_valid,
-      mst_resp_ready              => bus_resp_ready,
-      mst_resp_ok                 => bus_resp_ok
+      mst_resp_valid              => my_bus_resp_b.valid,
+      mst_resp_ready              => my_bus_resp_b.ready,
+      mst_resp_ok                 => my_bus_resp_b.ok
     );
 
-  pt_reader : BufferReader
+  mmu_barrier : MMBarrier
+    generic map (
+      BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
+      BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
+      MAX_OUTSTANDING             => 1
+    )
+    port map (
+      clk                         => clk,
+      reset                       => reset,
+      dirty                       => mmu_bus_wreq.dirty,
+
+      -- Slave write request channel
+      slv_wreq_valid              => mmu_bus_wreq.valid,
+      slv_wreq_ready              => mmu_bus_wreq.ready,
+      slv_wreq_addr               => mmu_bus_wreq.addr,
+      slv_wreq_len                => mmu_bus_wreq.len,
+      slv_wreq_barrier            => mmu_bus_wreq.barrier,
+      -- Master write request channel
+      mst_wreq_valid              => mmu_bus_wreq_b.valid,
+      mst_wreq_ready              => mmu_bus_wreq_b.ready,
+      mst_wreq_addr               => mmu_bus_wreq_b.addr,
+      mst_wreq_len                => mmu_bus_wreq_b.len,
+
+      -- Slave response channel
+      slv_resp_valid              => open,
+      slv_resp_ready              => open,
+      slv_resp_ok                 => open,
+      -- Master response channel
+      mst_resp_valid              => mmu_bus_resp_b.valid,
+      mst_resp_ready              => mmu_bus_resp_b.ready,
+      mst_resp_ok                 => mmu_bus_resp_b.ok
+    );
+
+  pt_reader_inst : BufferReader
     generic map (
       BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
       BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
@@ -1743,13 +1945,72 @@ begin
       out_last                    => pt_reader.last
     );
 
+  bus_w_arbiter : BusWriteArbiter
+    generic map (
+      BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
+      BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
+      BUS_DATA_WIDTH              => BUS_DATA_WIDTH,
+      BUS_STROBE_WIDTH            => BUS_STROBE_WIDTH,
+      NUM_SLAVE_PORTS             => 2,
+      ARB_METHOD                  => "FIXED",
+      MAX_OUTSTANDING             => MAX_OUTSTANDING_TRANSACTIONS,
+      SLV_REQ_SLICES              => false,
+      MST_REQ_SLICE               => false,
+      MST_DAT_SLICE               => false,
+      SLV_DAT_SLICES              => false,
+      MST_RSP_SLICE               => false,
+      SLV_RSP_SLICES              => false
+    )
+    port map (
+      bus_clk                   => clk,
+      bus_reset                 => reset,
+
+      mst_wreq_valid            => bus_wreq_valid,
+      mst_wreq_ready            => bus_wreq_ready,
+      mst_wreq_addr             => bus_wreq_addr,
+      mst_wreq_len              => bus_wreq_len,
+      mst_wdat_valid            => bus_wdat_valid,
+      mst_wdat_ready            => bus_wdat_ready,
+      mst_wdat_data             => bus_wdat_data,
+      mst_wdat_strobe           => bus_wdat_strobe,
+      mst_wdat_last             => bus_wdat_last,
+      mst_resp_valid            => bus_resp_valid,
+      mst_resp_ready            => bus_resp_ready,
+      mst_resp_ok               => bus_resp_ok,
+
+      bs00_wreq_valid           => mmu_bus_wreq_b.valid,
+      bs00_wreq_ready           => mmu_bus_wreq_b.ready,
+      bs00_wreq_addr            => mmu_bus_wreq_b.addr,
+      bs00_wreq_len             => mmu_bus_wreq_b.len,
+      bs00_wdat_valid           => mmu_bus_wdat.valid,
+      bs00_wdat_ready           => mmu_bus_wdat.ready,
+      bs00_wdat_data            => mmu_bus_wdat.data,
+      bs00_wdat_strobe          => mmu_bus_wdat.strobe,
+      bs00_wdat_last            => mmu_bus_wdat.last,
+      bs00_resp_valid           => mmu_bus_resp_b.valid,
+      bs00_resp_ready           => mmu_bus_resp_b.ready,
+      bs00_resp_ok              => mmu_bus_resp_b.ok,
+
+      bs01_wreq_valid           => my_bus_wreq_b.valid,
+      bs01_wreq_ready           => my_bus_wreq_b.ready,
+      bs01_wreq_addr            => my_bus_wreq_b.addr,
+      bs01_wreq_len             => my_bus_wreq_b.len,
+      bs01_wdat_valid           => my_bus_wdat.valid,
+      bs01_wdat_ready           => my_bus_wdat.ready,
+      bs01_wdat_data            => my_bus_wdat.data,
+      bs01_wdat_strobe          => my_bus_wdat.strobe,
+      bs01_wdat_last            => my_bus_wdat.last,
+      bs01_resp_valid           => my_bus_resp_b.valid,
+      bs01_resp_ready           => my_bus_resp_b.ready,
+      bs01_resp_ok              => my_bus_resp_b.ok
+    );
+
   bus_r_arbiter : BusReadArbiter
     generic map (
       BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
       BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
       BUS_DATA_WIDTH              => BUS_DATA_WIDTH,
-
-      NUM_SLAVE_PORTS             => 2,
+      NUM_SLAVE_PORTS             => 3,
       ARB_METHOD                  => "FIXED",
       MAX_OUTSTANDING             => 2,
       SLV_REQ_SLICES              => false,
@@ -1770,23 +2031,32 @@ begin
       mst_rdat_data               => bus_rdat_data,
       mst_rdat_last               => bus_rdat_last,
 
-      bs00_rreq_valid             => my_bus_rreq.valid,
-      bs00_rreq_ready             => my_bus_rreq.ready,
-      bs00_rreq_addr              => my_bus_rreq.addr,
-      bs00_rreq_len               => my_bus_rreq.len,
-      bs00_rdat_valid             => my_bus_rdat.valid,
-      bs00_rdat_ready             => my_bus_rdat.ready,
-      bs00_rdat_data              => my_bus_rdat.data,
-      bs00_rdat_last              => my_bus_rdat.last,
+      bs00_rreq_valid             => mmu_bus_rreq.valid,
+      bs00_rreq_ready             => mmu_bus_rreq.ready,
+      bs00_rreq_addr              => mmu_bus_rreq.addr,
+      bs00_rreq_len               => mmu_bus_rreq.len,
+      bs00_rdat_valid             => mmu_bus_rdat.valid,
+      bs00_rdat_ready             => mmu_bus_rdat.ready,
+      bs00_rdat_data              => mmu_bus_rdat.data,
+      bs00_rdat_last              => mmu_bus_rdat.last,
 
-      bs01_rreq_valid             => pt_bus_rreq.valid,
-      bs01_rreq_ready             => pt_bus_rreq.ready,
-      bs01_rreq_addr              => pt_bus_rreq.addr,
-      bs01_rreq_len               => pt_bus_rreq.len,
-      bs01_rdat_valid             => pt_bus_rdat.valid,
-      bs01_rdat_ready             => pt_bus_rdat.ready,
-      bs01_rdat_data              => pt_bus_rdat.data,
-      bs01_rdat_last              => pt_bus_rdat.last
+      bs01_rreq_valid             => my_bus_rreq.valid,
+      bs01_rreq_ready             => my_bus_rreq.ready,
+      bs01_rreq_addr              => my_bus_rreq.addr,
+      bs01_rreq_len               => my_bus_rreq.len,
+      bs01_rdat_valid             => my_bus_rdat.valid,
+      bs01_rdat_ready             => my_bus_rdat.ready,
+      bs01_rdat_data              => my_bus_rdat.data,
+      bs01_rdat_last              => my_bus_rdat.last,
+
+      bs02_rreq_valid             => pt_bus_rreq.valid,
+      bs02_rreq_ready             => pt_bus_rreq.ready,
+      bs02_rreq_addr              => pt_bus_rreq.addr,
+      bs02_rreq_len               => pt_bus_rreq.len,
+      bs02_rdat_valid             => pt_bus_rdat.valid,
+      bs02_rdat_ready             => pt_bus_rdat.ready,
+      bs02_rdat_data              => pt_bus_rdat.data,
+      bs02_rdat_last              => pt_bus_rdat.last
     );
 
 end architecture;

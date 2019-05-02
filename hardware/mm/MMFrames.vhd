@@ -34,10 +34,7 @@ entity MMFrames is
     reset                       : in  std_logic;
     cmd_region                  : in  std_logic_vector(log2ceil(MEM_REGIONS)-1 downto 0);
     cmd_addr                    : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-    cmd_free                    : in  std_logic;
-    cmd_alloc                   : in  std_logic;
-    cmd_find                    : in  std_logic;
-    cmd_clear                   : in  std_logic;
+    cmd_action                  : in  std_logic_vector(MM_FRAMES_CMD_WIDTH-1 downto 0);
     cmd_valid                   : in  std_logic;
     cmd_ready                   : out std_logic;
 
@@ -168,7 +165,7 @@ begin
   end process;
 
   process (state, r_data, region, frame, cmd_addr, cmd_region, cmd_valid,
-           cmd_alloc, cmd_free, cmd_clear, cmd_find, resp_ready) begin
+           cmd_action, resp_ready) begin
     state_next   <= state;
     frame_next   <= frame;
     region_next  <= region;
@@ -187,25 +184,27 @@ begin
       cmd_ready <= '1';
 
       if cmd_valid = '1' then
-
-        if cmd_alloc = '1' then
+        case cmd_action is
+        when MM_FRAMES_ALLOC =>
           state_next  <= ALLOC_CHECK;
           region_next <= to_unsigned(PAGE_TO_REGION(cmd_addr), region'length);
           frame_next  <= PAGE_TO_FRAME(cmd_addr);
 
-        elsif cmd_free = '1' then
+        when MM_FRAMES_FREE =>
           state_next  <= FREE;
           frame_next  <= PAGE_TO_FRAME(cmd_addr);
 
-        elsif cmd_clear = '1' then
+        when MM_FRAMES_CLEAR =>
           state_next  <= CLEAR;
           frame_next  <= (others => '0');
 
-        elsif cmd_find = '1' then
+        when MM_FRAMES_FIND =>
           state_next  <= FIND;
           region_next <= unsigned(cmd_region);
           frame_next  <= REGION_TO_FRAME(to_integer(unsigned(cmd_region)));
-        end if;
+
+        when others =>
+        end case;
       end if;
 
     when CLEAR =>

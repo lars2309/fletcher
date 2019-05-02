@@ -31,10 +31,7 @@ architecture tb of MMFrames_tc is
   signal acc_reset              : std_logic                                               := '0';
   signal frames_cmd_region      : std_logic_vector(log2ceil(MEM_REGIONS)-1 downto 0);
   signal frames_cmd_addr        : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-  signal frames_cmd_free        : std_logic                                               := '0';
-  signal frames_cmd_alloc       : std_logic                                               := '0';
-  signal frames_cmd_find        : std_logic                                               := '0';
-  signal frames_cmd_clear       : std_logic                                               := '0';
+  signal frames_cmd_action      : std_logic_vector(MM_FRAMES_CMD_WIDTH-1 downto 0);
   signal frames_cmd_valid       : std_logic                                               := '0';
   signal frames_cmd_ready       : std_logic;
 
@@ -94,20 +91,17 @@ begin
     frames_resp_ready           <= '0';
 
     -- Clear frames
-    frames_cmd_clear            <= '1';
+    frames_cmd_action           <= MM_FRAMES_CLEAR;
     handshake_out(TbClock, frames_cmd_ready, frames_cmd_valid);
-    frames_cmd_clear            <= '0';
     handshake_in(TbClock, frames_resp_ready, frames_resp_valid);
 
     -- Reserve frame for page table
-    frames_cmd_alloc            <= '1';
+    frames_cmd_action           <= MM_FRAMES_ALLOC;
     frames_cmd_addr             <= std_logic_vector(PT_ADDR);
     handshake_out(TbClock, frames_cmd_ready, frames_cmd_valid);
-    frames_cmd_alloc            <= '0';
     handshake_in(TbClock, frames_resp_ready, frames_resp_valid);
 
     -- Reserve other frame by address
-    frames_cmd_alloc            <= '1';
     frames_cmd_addr             <= std_logic_vector(unsigned(PT_ADDR) + 7 * LOG2_TO_UNSIGNED(PAGE_SIZE_LOG2));
     handshake_out(TbClock, frames_cmd_ready, frames_cmd_valid);
     handshake_in(TbClock, frames_resp_ready, frames_resp_valid);
@@ -115,14 +109,12 @@ begin
     -- Try to reserve it again, should give other address
     handshake_out(TbClock, frames_cmd_ready, frames_cmd_valid);
     handshake_in(TbClock, frames_resp_ready, frames_resp_valid);
-    frames_cmd_alloc            <= '0';
 
     -- Find arbitrary free frame in given region
-    frames_cmd_find             <= '1';
+    frames_cmd_action           <= MM_FRAMES_FIND;
     frames_cmd_region           <= "1";
     handshake_out(TbClock, frames_cmd_ready, frames_cmd_valid);
     handshake_in(TbClock, frames_resp_ready, frames_resp_valid);
-    frames_cmd_find             <= '0';
 
 
     TbSimEnded                  <= '1';
@@ -147,10 +139,7 @@ begin
       reset                     => bus_reset,
       cmd_region                => frames_cmd_region,
       cmd_addr                  => frames_cmd_addr,
-      cmd_free                  => frames_cmd_free,
-      cmd_alloc                 => frames_cmd_alloc,
-      cmd_find                  => frames_cmd_find,
-      cmd_clear                 => frames_cmd_clear,
+      cmd_action                => frames_cmd_action,
       cmd_valid                 => frames_cmd_valid,
       cmd_ready                 => frames_cmd_ready,
 

@@ -16,6 +16,12 @@ package MM is
 
   constant MM_H2D_REG_OFFSET : natural := 6;
 
+  constant MM_FRAMES_CMD_WIDTH : natural := 2;
+  constant MM_FRAMES_FREE   : std_logic_vector := "00";
+  constant MM_FRAMES_ALLOC  : std_logic_vector := "01";
+  constant MM_FRAMES_FIND   : std_logic_vector := "10";
+  constant MM_FRAMES_CLEAR  : std_logic_vector := "11";
+
   function LOG2_TO_UNSIGNED (v : natural)
                              return unsigned;
 
@@ -61,10 +67,7 @@ package MM is
       reset                       : in  std_logic;
       cmd_region                  : in  std_logic_vector(log2ceil(MEM_REGIONS)-1 downto 0);
       cmd_addr                    : in  std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-      cmd_free                    : in  std_logic;
-      cmd_alloc                   : in  std_logic;
-      cmd_find                    : in  std_logic;
-      cmd_clear                   : in  std_logic;
+      cmd_action                  : in  std_logic_vector(MM_FRAMES_CMD_WIDTH-1 downto 0);
       cmd_valid                   : in  std_logic;
       cmd_ready                   : out std_logic;
 

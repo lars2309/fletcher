@@ -110,8 +110,24 @@ acc_clk <= TbClock;
 bus_reset <= TbReset;
 acc_reset <= TbReset;
 
-bus_w.resp_ok    <= '1';
-bus_w.resp_valid <= bus_w.dat_valid and bus_w.dat_ready and bus_w.dat_last;
+response : process (TbClock)
+  variable responses : natural := 0;
+begin
+  bus_w.resp_ok    <= '1';
+  if rising_edge(TbClock) then
+    if (bus_w.dat_valid and bus_w.dat_ready and bus_w.dat_last) = '1' then
+      responses := responses + 1;
+    end if;
+    if bus_w.resp_valid = '1' and bus_w.resp_ready = '1' then
+      responses := responses - 1;
+    end if;
+    if responses /= 0 then
+      bus_w.resp_valid <= '1';
+    else
+      bus_w.resp_valid <= '0';
+    end if;
+  end if;
+end process;
 
 stimuli : process
   variable addr_a : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
