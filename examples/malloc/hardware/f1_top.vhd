@@ -53,7 +53,7 @@ entity f1_top is
     TAG_WIDTH                   : natural := 1;
     NUM_ARROW_BUFFERS           : natural := 0;
     NUM_USER_REGS               : natural := 0;
-    NUM_REGS                    : natural := 10
+    NUM_REGS                    : natural := 26 + 0
   );
   port (
     acc_clk                     : in  std_logic;
