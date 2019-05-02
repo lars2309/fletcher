@@ -44,7 +44,7 @@ entity fletcher_wrapper is
     PAGE_SIZE_LOG2                             : natural := 22;
     VM_BASE                                    : unsigned;
     MEM_REGIONS                                : natural := 1;
-    MEM_SIZES                                  : nat_array := (1024, 0);
+    MEM_SIZES                                  : nat_array := (0 => 1024);
     MEM_MAP_BASE                               : unsigned;
     MEM_MAP_SIZE_LOG2                          : natural := 37;
     PT_ENTRIES_LOG2                            : natural := 13;

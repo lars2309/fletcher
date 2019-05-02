@@ -18,8 +18,9 @@ use ieee.numeric_std.all;
 use ieee.std_logic_misc.all;
 
 library work;
-use work.axi.all;
 use work.Utils.all;
+use work.MM.all;
+use work.axi.all;
 
 -- AXI4 compatible top level for Fletcher generated accelerators.
 entity axi_top is
@@ -39,6 +40,16 @@ entity axi_top is
 
     -- Arrow properties
     INDEX_WIDTH                 : natural := 32;
+
+    -- Virtual memory properties
+    PAGE_SIZE_LOG2              : natural := 22;
+    VM_BASE                     : unsigned(ADDR_WIDTH_LIMIT-1 downto 0) := X"4000_0000_0000_0000";
+    MEM_REGIONS                 : natural := 1;
+    MEM_SIZES                   : nat_array;
+    MEM_MAP_BASE                : unsigned(ADDR_WIDTH_LIMIT-1 downto 0) := (others => '0');
+    MEM_MAP_SIZE_LOG2           : natural := 37;
+    PT_ENTRIES_LOG2             : natural := 13;
+    PTE_BITS                    : natural := 64; -- BUS_ADDR_WIDTH
 
     -- Accelerator properties
     TAG_WIDTH                   : natural := 1;
@@ -132,14 +143,6 @@ entity axi_top is
 end axi_top;
 
 architecture Behavorial of axi_top is
-  constant PAGE_SIZE_LOG2              : natural := 22;
-  constant VM_BASE                     : unsigned(BUS_ADDR_WIDTH-1 downto 0) := X"4000_0000_0000_0000";
-  constant MEM_REGIONS                 : natural := 1;
-  constant MEM_SIZES                   : nat_array := (0 => 16*1024*1024/(2**PAGE_SIZE_LOG2/1024));
-  constant MEM_MAP_BASE                : unsigned(BUS_ADDR_WIDTH-1 downto 0) := (others => '0');
-  constant MEM_MAP_SIZE_LOG2           : natural := 37;
-  constant PT_ENTRIES_LOG2             : natural := 13;
-  constant PTE_BITS                    : natural := BUS_ADDR_WIDTH;
 
   component fletcher_wrapper is
     generic(
@@ -159,13 +162,13 @@ architecture Behavorial of axi_top is
       ---------------------------------------------------------------------------
       TAG_WIDTH                                  : natural;
       ---------------------------------------------------------------------------
-      PAGE_SIZE_LOG2                             : natural := 22;
+      PAGE_SIZE_LOG2                             : natural;
       VM_BASE                                    : unsigned;
-      MEM_REGIONS                                : natural := 1;
-      MEM_SIZES                                  : nat_array := (1024, 0);
+      MEM_REGIONS                                : natural;
+      MEM_SIZES                                  : nat_array;
       MEM_MAP_BASE                               : unsigned;
-      MEM_MAP_SIZE_LOG2                          : natural := 37;
-      PT_ENTRIES_LOG2                            : natural := 13;
+      MEM_MAP_SIZE_LOG2                          : natural;
+      PT_ENTRIES_LOG2                            : natural;
       PTE_BITS                                   : natural
     );
     port(

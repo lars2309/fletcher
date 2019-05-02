@@ -35,7 +35,25 @@ entity f1_top is
 
     -- MMIO bus properties
     SLV_BUS_ADDR_WIDTH          : natural := 32;
-    SLV_BUS_DATA_WIDTH          : natural := 32
+    SLV_BUS_DATA_WIDTH          : natural := 32;
+    REG_WIDTH                   : natural := 32;
+
+    -- Virtual memory properties
+    PAGE_SIZE_LOG2              : natural := 22;
+    VM_BASE                     : unsigned(ADDR_WIDTH_LIMIT-1 downto 0) := X"4000_0000_0000_0000";
+    MEM_REGIONS                 : natural := 1;
+    MEM_SIZES                   : nat_array := (0 => 16*1024*1024/(2**22/1024)); -- (2**PAGE_SIZE_LOG2/1024)
+    MEM_MAP_BASE                : unsigned(ADDR_WIDTH_LIMIT-1 downto 0) := (others => '0');
+    MEM_MAP_SIZE_LOG2           : natural := 37;
+    PT_ENTRIES_LOG2             : natural := 13;
+    PTE_BITS                    : natural := 64; -- BUS_ADDR_WIDTH
+
+    -- Accelerator properties
+    INDEX_WIDTH                 : natural := 32;
+    TAG_WIDTH                   : natural := 1;
+    NUM_ARROW_BUFFERS           : natural := 0;
+    NUM_USER_REGS               : natural := 0;
+    NUM_REGS                    : natural := 10
   );
   port (
     acc_clk                     : in  std_logic;
@@ -211,6 +229,16 @@ architecture Behavorial of f1_top is
       -- Arrow properties
       INDEX_WIDTH                 : natural := 32;
 
+      -- Virtual memory properties
+      PAGE_SIZE_LOG2              : natural := 22;
+      VM_BASE                     : unsigned(ADDR_WIDTH_LIMIT-1 downto 0) := X"4000_0000_0000_0000";
+      MEM_REGIONS                 : natural := 1;
+      MEM_SIZES                   : nat_array;
+      MEM_MAP_BASE                : unsigned(ADDR_WIDTH_LIMIT-1 downto 0) := (others => '0');
+      MEM_MAP_SIZE_LOG2           : natural := 37;
+      PT_ENTRIES_LOG2             : natural := 13;
+      PTE_BITS                    : natural := 64; -- BUS_ADDR_WIDTH
+
       -- Accelerator properties
       TAG_WIDTH                   : natural := 1;
       NUM_ARROW_BUFFERS           : natural := 0;
@@ -350,9 +378,37 @@ begin
 
   axi_top_inst : axi_top
   generic map (
-    NUM_ARROW_BUFFERS           => 0,
-    NUM_USER_REGS               => 0,
-    NUM_REGS                    => 26 + 0
+    -- Host bus properties
+    BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
+    BUS_DATA_WIDTH              => BUS_DATA_WIDTH,
+    BUS_STROBE_WIDTH            => BUS_STROBE_WIDTH,
+    BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
+    BUS_BURST_MAX_LEN           => BUS_BURST_MAX_LEN,
+    BUS_BURST_STEP_LEN          => BUS_BURST_STEP_LEN,
+
+    -- MMIO bus properties
+    SLV_BUS_ADDR_WIDTH          => SLV_BUS_ADDR_WIDTH,
+    SLV_BUS_DATA_WIDTH          => SLV_BUS_DATA_WIDTH,
+    REG_WIDTH                   => REG_WIDTH,
+
+    -- Arrow properties
+    INDEX_WIDTH                 => INDEX_WIDTH,
+
+    -- Virtual memory properties
+    PAGE_SIZE_LOG2              => PAGE_SIZE_LOG2,
+    VM_BASE                     => VM_BASE,
+    MEM_REGIONS                 => MEM_REGIONS,
+    MEM_SIZES                   => MEM_SIZES,
+    MEM_MAP_BASE                => MEM_MAP_BASE,
+    MEM_MAP_SIZE_LOG2           => MEM_MAP_SIZE_LOG2,
+    PT_ENTRIES_LOG2             => PT_ENTRIES_LOG2,
+    PTE_BITS                    => PTE_BITS,
+
+    -- Accelerator properties
+    TAG_WIDTH                   => TAG_WIDTH,
+    NUM_ARROW_BUFFERS           => NUM_ARROW_BUFFERS,
+    NUM_USER_REGS               => NUM_USER_REGS,
+    NUM_REGS                    => NUM_REGS
   )
   port map (
     acc_clk                     => acc_clk,
@@ -467,9 +523,9 @@ begin
     BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
     BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
     USER_WIDTH                  => s_axi_aruser'length,
-    VM_BASE                     => X"4000_0000_0000_0000",
-    PT_ENTRIES_LOG2             => 13, -- TODO: bring constants outside
-    PAGE_SIZE_LOG2              => 22,
+    VM_BASE                     => VM_BASE,
+    PT_ENTRIES_LOG2             => PT_ENTRIES_LOG2,
+    PAGE_SIZE_LOG2              => PAGE_SIZE_LOG2,
     SLV_SLICES                  => 4, -- Extra slices to accomodate SLR crossing
     MST_SLICES                  => 4
   )
@@ -510,9 +566,9 @@ begin
     BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
     BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
     USER_WIDTH                  => s_axi_awuser'length,
-    VM_BASE                     => X"4000_0000_0000_0000",
-    PT_ENTRIES_LOG2             => 13, -- TODO: bring constants outside
-    PAGE_SIZE_LOG2              => 22,
+    VM_BASE                     => VM_BASE,
+    PT_ENTRIES_LOG2             => PT_ENTRIES_LOG2,
+    PAGE_SIZE_LOG2              => PAGE_SIZE_LOG2,
     SLV_SLICES                  => 4, -- Extra slices to accomodate SLR crossing
     MST_SLICES                  => 4
   )
