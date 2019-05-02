@@ -703,11 +703,9 @@ begin
     when VMALLOC_CHECK_PT0 =>
       my_bus_rreq.addr  <= slv(v.addr);
       my_bus_rreq.len   <= slv(to_unsigned(1, my_bus_rreq.len'length));
-      if my_bus_wreq.dirty = '0' then
-        my_bus_rreq.valid <= '1';
-        if my_bus_rreq.ready = '1' then
-          v.state_stack(0) := VMALLOC_CHECK_PT0_DATA;
-        end if;
+      my_bus_rreq.valid <= '1';
+      if my_bus_rreq.ready = '1' then
+        v.state_stack(0) := VMALLOC_CHECK_PT0_DATA;
       end if;
 
     when VMALLOC_CHECK_PT0_DATA =>
@@ -777,6 +775,7 @@ begin
     when VMALLOC_FINISH =>
       resp_success <= '1';
       resp_addr    <= slv(v.addr_vm);
+      -- Only give response after page table updates hit main memory.
       if my_bus_wreq.dirty = '0' then
         resp_valid   <= '1';
         if resp_ready = '1' then
@@ -788,8 +787,13 @@ begin
     -- === START OF VFREE ROUTINE ===
 
     when VFREE =>
-      v.state_stack(0) := VFREE_FINISH;
-      v.state_stack    := push_state(v.state_stack, SET_PTE_RANGE);
+      -- MMU can update page tables and assign new frames.
+      -- Make sure we see all those writes.
+      -- TODO This could wait indefinitely.
+      if mmu_bus_wreq.dirty = '0' then
+        v.state_stack(0) := VFREE_FINISH;
+        v.state_stack    := push_state(v.state_stack, SET_PTE_RANGE);
+      end if;
       v.addr_vm        := PAGE_BASE(unsigned(cmd_addr));
       v.arg            := (others => '0');
       v.arg(1)         := '1'; -- deallocate
@@ -798,6 +802,7 @@ begin
     when VFREE_FINISH =>
       resp_success <= '1';
       resp_addr    <= (others => '0');
+      -- Only give response after page table updates hit main memory.
       if my_bus_wreq.dirty = '0' then
         resp_valid   <= '1';
         if resp_ready = '1' then
@@ -836,12 +841,9 @@ begin
       -- Start off by assuming the L2 page table is unused.
       v.pt_empty       := '1';
 
-      -- Wait for any outstanding writes to be completed.
-      if my_bus_wreq.dirty = '0' then
-        my_bus_rreq.valid <= '1';
-        if my_bus_rreq.ready = '1' then
-          v.state_stack(0) := SET_PTE_RANGE_L1_CHECK;
-        end if;
+      my_bus_rreq.valid <= '1';
+      if my_bus_rreq.ready = '1' then
+        v.state_stack(0) := SET_PTE_RANGE_L1_CHECK;
       end if;
 
     when SET_PTE_RANGE_L1_CHECK =>
@@ -1324,6 +1326,7 @@ begin
       v.addr_pt          := v.addr;
       -- Mark current rolodex entry, to detect wrap around
       rolodex_entry_mark <= '1';
+      -- Make sure any earlier bitmap edit has been written out.
       if rolodex_entry_valid = '1' and my_bus_wreq.dirty = '0' then
         v.state_stack(0) := PT_NEW_REQ_BM;
       end if;
