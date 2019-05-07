@@ -432,6 +432,8 @@ architecture Behavioral of MMDirector is
       VMALLOC, VMALLOC_CHECK_PT0, VMALLOC_CHECK_PT0_DATA,
       VMALLOC_RESERVE_FRAME, VMALLOC_FINISH,
 
+      VREALLOC, VREALLOC_MOVE, VREALLOC_FREE, VREALLOC_RESPONSE,
+
       VFREE, VFREE_FINISH,
 
       FIND_GAP, FIND_GAP_PT0, FIND_GAP_PT0_DATA,
@@ -439,6 +441,7 @@ architecture Behavioral of MMDirector is
       SET_PTE_RANGE,
       SET_PTE_RANGE_L1_ADDR, SET_PTE_RANGE_L1_CHECK,
       SET_PTE_RANGE_L1_UPDATE_ADDR, SET_PTE_RANGE_L1_UPDATE_DAT,
+      SET_PTE_RANGE_SRC_L1_ADDR, SET_PTE_RANGE_SRC_L2_REQ,
       SET_PTE_RANGE_FRAME, SET_PTE_RANGE_L2_REQ_PT,
       SET_PTE_RANGE_L2_DEALLOC_FRAME_C, SET_PTE_RANGE_L2_DEALLOC_FRAME_R,
       SET_PTE_RANGE_L2_UPDATE_ADDR, SET_PTE_RANGE_L2_UPDATE_DAT,
@@ -473,11 +476,12 @@ architecture Behavioral of MMDirector is
     state_stack                 : state_stack_type;
     addr                        : unsigned(BUS_ADDR_WIDTH-1 downto 0);
     addr_vm                     : unsigned(BUS_ADDR_WIDTH-1 downto 0); --TODO: reduce width to VA space
+    addr_vm_src                 : unsigned(BUS_ADDR_WIDTH-1 downto 0); --TODO: reduce width to VA space
     addr_pt                     : unsigned(BUS_ADDR_WIDTH-1 downto 0);
     size                        : unsigned(BUS_ADDR_WIDTH-1 downto 0);
     pages                       : unsigned(VM_SIZE_L0_LOG2 - PAGE_SIZE_LOG2 - 1 downto 0);
     region                      : unsigned(log2ceil(MEM_REGIONS+1)-1 downto 0);
-    arg                         : unsigned(1 downto 0);
+    arg                         : unsigned(2 downto 0);
     pt_empty                    : std_logic;
     in_mapping                  : std_logic;
     bus_pte_idx                 : unsigned(log2ceil(DIV_CEIL(BUS_DATA_BYTES, PTE_SIZE))-1 downto 0);
@@ -675,8 +679,7 @@ begin
           v.state_stack   := push_state(v.state_stack, VFREE);
 
         elsif cmd_realloc = '1' then
-          -- TODO
-          v.state_stack(0) := FAIL;
+          v.state_stack   := push_state(v.state_stack, VREALLOC);
         end if;
       end if;
 
@@ -695,15 +698,51 @@ begin
         -- cmd_size : length to set
         v.state_stack(0) := VMALLOC_FINISH;
         v.state_stack    := push_state(v.state_stack, SET_PTE_RANGE);
-        v.size           := unsigned(cmd_size);
         v.pages          := PAGE_COUNT(unsigned(cmd_size));
         v.region         := unsigned(cmd_region);
-        -- Take first page mapping from frame allocator
-        v.arg            := to_unsigned(1, v.arg'length);
+        v.arg            := (others => '0');
+        v.arg(0)         := '1'; -- Take first page mapping from frame allocator
 
     when VMALLOC_FINISH =>
       resp_success <= '1';
       resp_addr    <= slv(v.addr_vm);
+      -- Only give response after page table updates hit main memory.
+      if my_bus_wreq.dirty = '0' then
+        resp_valid   <= '1';
+        if resp_ready = '1' then
+          v.state_stack := pop_state(v.state_stack);
+        end if;
+      end if;
+
+
+    -- === START OF VREALLOC ROUTINE ===
+
+    when VREALLOC =>
+      v.state_stack(0) := VREALLOC_MOVE;
+      v.state_stack    := push_state(v.state_stack, FIND_GAP);
+
+    when VREALLOC_MOVE =>
+      -- addr_vm  : virtual base address to start at
+      -- cmd_size : length to set
+      v.state_stack(0) := VREALLOC_FREE;
+      v.state_stack    := push_state(v.state_stack, SET_PTE_RANGE);
+      v.pages          := PAGE_COUNT(unsigned(cmd_size));
+      v.addr_vm_src    := PAGE_BASE(unsigned(cmd_addr));
+      v.arg            := (others => '0');
+      v.arg(2)         := '1'; -- Move page table entries.
+
+    when VREALLOC_FREE =>
+      cmd_ready        <= '1';
+      v.state_stack(0) := VREALLOC_RESPONSE;
+      v.state_stack    := push_state(v.state_stack, SET_PTE_RANGE);
+      v.addr_vm_src    := v.addr_vm;
+      v.addr_vm        := PAGE_BASE(unsigned(cmd_addr));
+      v.arg            := (others => '0');
+      v.arg(1)         := '1'; -- deallocate
+
+    when VREALLOC_RESPONSE =>
+      resp_success <= '1';
+      resp_addr    <= slv(v.addr_vm_src);
       -- Only give response after page table updates hit main memory.
       if my_bus_wreq.dirty = '0' then
         resp_valid   <= '1';
@@ -831,7 +870,7 @@ begin
     -- `pages`   must be initialized to the number of pages in the mapping.
     -- arg(0) = '1' -> Take first frame from frame allocator.
     -- arg(1) = '1' -> Deallocate
-    -- arg(2) = '1' -> Conditional allocation: stop when already mapped. TODO
+    -- arg(2) = '1' -> Copy mapping from other location. TODO
 
     when SET_PTE_RANGE =>
       v.addr           := v.addr_vm;
@@ -955,6 +994,38 @@ begin
       v.bus_pte_idx          := (others => '0');
       if pt_reader_cmd_ready = '1' then
         v.state_stack(0)     := SET_PTE_RANGE_L2_DEALLOC_FRAME_C;
+      end if;
+
+    when SET_PTE_RANGE_SRC_L1_ADDR =>
+      -- Get the L1 PTE
+      my_bus_rreq.addr       <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(PT_ADDR, v.addr_vm_src, 1)));
+      my_bus_rreq.len        <= slv(to_unsigned(1, my_bus_rreq.len'length));
+      my_bus_rreq.valid      <= '1';
+      if my_bus_rreq.ready = '1' then
+        v.state_stack(0) := SET_PTE_RANGE_SRC_L2_REQ;
+      end if;
+
+    when SET_PTE_RANGE_SRC_L2_REQ =>
+      -- Request the existing mapping, to do stuff with it later on. (only for realloc)
+      pt_reader_cmd_valid    <= my_bus_rdat.valid;
+      my_bus_rdat.ready      <= pt_reader_cmd_ready;
+      -- First argument to VA_TO_PTE doesn't matter here, since we only use the offset within the PT.
+      pt_reader_cmd_firstIdx <= slv(resize(
+            div_floor(
+              VA_TO_PTE(PT_ADDR, v.addr_vm_src, 2),
+              BUS_DATA_BYTES / PTE_SIZE),
+            pt_reader_cmd_firstIdx'length));
+      pt_reader_cmd_lastIdx  <= slv(to_unsigned(PT_SIZE / BUS_DATA_BYTES, pt_reader_cmd_lastIdx'length));
+      pt_reader_cmd_baseAddr <= slv(align_beq(
+            EXTRACT(
+              unsigned(my_bus_rdat.data),
+              BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, v.addr_vm_src, 1))),
+              BYTE_SIZE * PTE_SIZE
+            ),
+            PT_SIZE_LOG2));
+
+      if pt_reader_cmd_ready = '1' and my_bus_rdat.valid = '1' then
+        v.state_stack(0)     := SET_PTE_RANGE_L2_UPDATE_ADDR;
       end if;
 
     when SET_PTE_RANGE_L2_DEALLOC_FRAME_C =>

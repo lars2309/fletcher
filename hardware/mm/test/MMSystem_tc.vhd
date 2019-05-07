@@ -202,6 +202,14 @@ begin
   -- Purge pipelines
   wait for TbPeriod * 20;
 
+  -- Resize the first allocation
+  report "Resizing A"  severity note;
+  cmd_realloc <= '1';
+  cmd_addr <= addr_a;
+  cmd_size <= slv(shift_left(to_unsigned(5, cmd_size'length), PT_ENTRIES_LOG2+PAGE_SIZE_LOG2 - 5));
+  handshake_out(TbClock, cmd_ready, cmd_valid);
+  handshake_in(TbClock, resp_ready, resp_valid);
+
   -- Free the first allocation
   report "Freeing A"  severity note;
   cmd_free <= '1';
