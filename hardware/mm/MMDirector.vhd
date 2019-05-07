@@ -434,6 +434,8 @@ architecture Behavioral of MMDirector is
 
       VFREE, VFREE_FINISH,
 
+      FIND_GAP, FIND_GAP_PT0, FIND_GAP_PT0_DATA,
+
       SET_PTE_RANGE,
       SET_PTE_RANGE_L1_ADDR, SET_PTE_RANGE_L1_CHECK,
       SET_PTE_RANGE_L1_UPDATE_ADDR, SET_PTE_RANGE_L1_UPDATE_DAT,
@@ -684,6 +686,67 @@ begin
     -- `addr_vm' will contain virtual address of allocation.
 
     when VMALLOC =>
+      v.state_stack(0) := VMALLOC_RESERVE_FRAME;
+      v.state_stack    := push_state(v.state_stack, FIND_GAP);
+
+    when VMALLOC_RESERVE_FRAME =>
+        cmd_ready        <= '1';
+        -- addr_vm  : virtual base address to start at
+        -- cmd_size : length to set
+        v.state_stack(0) := VMALLOC_FINISH;
+        v.state_stack    := push_state(v.state_stack, SET_PTE_RANGE);
+        v.size           := unsigned(cmd_size);
+        v.pages          := PAGE_COUNT(unsigned(cmd_size));
+        v.region         := unsigned(cmd_region);
+        -- Take first page mapping from frame allocator
+        v.arg            := to_unsigned(1, v.arg'length);
+
+    when VMALLOC_FINISH =>
+      resp_success <= '1';
+      resp_addr    <= slv(v.addr_vm);
+      -- Only give response after page table updates hit main memory.
+      if my_bus_wreq.dirty = '0' then
+        resp_valid   <= '1';
+        if resp_ready = '1' then
+          v.state_stack := pop_state(v.state_stack);
+        end if;
+      end if;
+
+
+    -- === START OF VFREE ROUTINE ===
+
+    when VFREE =>
+      -- MMU can update page tables and assign new frames.
+      -- Make sure we see all those writes.
+      -- TODO This could wait indefinitely.
+      if mmu_bus_wreq.dirty = '0' then
+        v.state_stack(0) := VFREE_FINISH;
+        v.state_stack    := push_state(v.state_stack, SET_PTE_RANGE);
+      end if;
+      v.addr_vm        := PAGE_BASE(unsigned(cmd_addr));
+      v.arg            := (others => '0');
+      v.arg(1)         := '1'; -- deallocate
+      cmd_ready        <= '1';
+
+    when VFREE_FINISH =>
+      resp_success <= '1';
+      resp_addr    <= (others => '0');
+      -- Only give response after page table updates hit main memory.
+      if my_bus_wreq.dirty = '0' then
+        resp_valid   <= '1';
+        if resp_ready = '1' then
+          v.state_stack := pop_state(v.state_stack);
+        end if;
+      end if;
+
+    -- === START OF FIND_GAP ROUTINE ===
+    -- Find a free contiguous space in VM.
+    -- `cmd_size` The requested gap size in bytes. Will be rounded up to some convenient size.
+    -- `addr_vm`  Start address of the found gap.
+    -- `addr`     Is used internally.
+    -- `size`     Is used internally.
+
+    when FIND_GAP =>
       -- Request the L0 page table to find a high-level gap.
       -- TODO: find gaps in lower level page tables.
       v.addr           := PT_ADDR;
@@ -698,17 +761,17 @@ begin
                               VM_SIZE_L1_LOG2),
                             v.size'length);
       v.addr_vm        := PTE_TO_VA(PT_INDEX(v.addr), 1);
-      v.state_stack(0) := VMALLOC_CHECK_PT0;
+      v.state_stack(0) := FIND_GAP_PT0;
 
-    when VMALLOC_CHECK_PT0 =>
+    when FIND_GAP_PT0 =>
       my_bus_rreq.addr  <= slv(v.addr);
       my_bus_rreq.len   <= slv(to_unsigned(1, my_bus_rreq.len'length));
       my_bus_rreq.valid <= '1';
       if my_bus_rreq.ready = '1' then
-        v.state_stack(0) := VMALLOC_CHECK_PT0_DATA;
+        v.state_stack(0) := FIND_GAP_PT0_DATA;
       end if;
 
-    when VMALLOC_CHECK_PT0_DATA =>
+    when FIND_GAP_PT0_DATA =>
       -- Check the returned PTEs for allocation gaps.
       -- v.size tracks the remaining gap size to be found, rounded up to L1 PTE coverage.
       gap_q_valid    <= my_bus_rdat.valid;
@@ -753,60 +816,10 @@ begin
 
         if 0 = EXTRACT(v.size, VM_SIZE_L1_LOG2, VM_SIZE_L0_LOG2 - VM_SIZE_L1_LOG2) then
           -- Gap is big enough, continue to allocate a frame
-          v.state_stack(0) := VMALLOC_RESERVE_FRAME;
+          v.state_stack    := pop_state(v.state_stack);
         else
           -- Check more L0 entries
-          v.state_stack(0) := VMALLOC_CHECK_PT0;
-        end if;
-      end if;
-
-    when VMALLOC_RESERVE_FRAME =>
-        cmd_ready        <= '1';
-        -- addr_vm  : virtual base address to start at
-        -- cmd_size : length to set
-        v.state_stack    := push_state(v.state_stack, SET_PTE_RANGE);
-        v.state_stack(1) := VMALLOC_FINISH;
-        v.size           := unsigned(cmd_size);
-        v.pages          := PAGE_COUNT(unsigned(cmd_size));
-        v.region         := unsigned(cmd_region);
-        -- Take first page mapping from frame allocator
-        v.arg            := to_unsigned(1, v.arg'length);
-
-    when VMALLOC_FINISH =>
-      resp_success <= '1';
-      resp_addr    <= slv(v.addr_vm);
-      -- Only give response after page table updates hit main memory.
-      if my_bus_wreq.dirty = '0' then
-        resp_valid   <= '1';
-        if resp_ready = '1' then
-          v.state_stack := pop_state(v.state_stack);
-        end if;
-      end if;
-
-
-    -- === START OF VFREE ROUTINE ===
-
-    when VFREE =>
-      -- MMU can update page tables and assign new frames.
-      -- Make sure we see all those writes.
-      -- TODO This could wait indefinitely.
-      if mmu_bus_wreq.dirty = '0' then
-        v.state_stack(0) := VFREE_FINISH;
-        v.state_stack    := push_state(v.state_stack, SET_PTE_RANGE);
-      end if;
-      v.addr_vm        := PAGE_BASE(unsigned(cmd_addr));
-      v.arg            := (others => '0');
-      v.arg(1)         := '1'; -- deallocate
-      cmd_ready        <= '1';
-
-    when VFREE_FINISH =>
-      resp_success <= '1';
-      resp_addr    <= (others => '0');
-      -- Only give response after page table updates hit main memory.
-      if my_bus_wreq.dirty = '0' then
-        resp_valid   <= '1';
-        if resp_ready = '1' then
-          v.state_stack := pop_state(v.state_stack);
+          v.state_stack(0) := FIND_GAP_PT0;
         end if;
       end if;
 
