@@ -203,12 +203,49 @@ begin
   wait for TbPeriod * 20;
 
   -- Resize the first allocation
-  report "Resizing A"  severity note;
+  report "Resizing A (single PT)"  severity note;
   cmd_realloc <= '1';
   cmd_addr <= addr_a;
   cmd_size <= slv(shift_left(to_unsigned(5, cmd_size'length), PT_ENTRIES_LOG2+PAGE_SIZE_LOG2 - 5));
   handshake_out(TbClock, cmd_ready, cmd_valid);
-  handshake_in(TbClock, resp_ready, resp_valid);
+  resp_ready <= '1';
+  loop
+    wait until rising_edge(TbClock);
+    exit when resp_valid = '1';
+  end loop;
+  addr_a := resp_addr;
+  wait for 0 ns;
+  resp_ready <= '0';
+
+  -- Resize the first allocation
+  report "Resizing A (multi PT)"  severity note;
+  cmd_realloc <= '1';
+  cmd_addr <= addr_a;
+  cmd_size <= slv(shift_left(to_unsigned(34, cmd_size'length), PT_ENTRIES_LOG2+PAGE_SIZE_LOG2 - 5));
+  handshake_out(TbClock, cmd_ready, cmd_valid);
+  resp_ready <= '1';
+  loop
+    wait until rising_edge(TbClock);
+    exit when resp_valid = '1';
+  end loop;
+  addr_a := resp_addr;
+  wait for 0 ns;
+  resp_ready <= '0';
+
+  -- Resize the first allocation
+  report "Resizing B"  severity note;
+  cmd_realloc <= '1';
+  cmd_addr <= addr_b;
+  cmd_size <= slv(shift_left(to_unsigned(39, cmd_size'length), PT_ENTRIES_LOG2+PAGE_SIZE_LOG2 - 5));
+  handshake_out(TbClock, cmd_ready, cmd_valid);
+  resp_ready <= '1';
+  loop
+    wait until rising_edge(TbClock);
+    exit when resp_valid = '1';
+  end loop;
+  addr_b := resp_addr;
+  wait for 0 ns;
+  resp_ready <= '0';
 
   -- Free the first allocation
   report "Freeing A"  severity note;

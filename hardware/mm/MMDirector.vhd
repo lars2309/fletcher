@@ -448,7 +448,7 @@ architecture Behavioral of MMDirector is
       SET_PTE_RANGE_FINISH,
 
       PT_DEL, PT_DEL_MARK_BM_ADDR, PT_DEL_MARK_BM_DATA,
-      PT_DEL_ROLODEX, PT_DEL_FRAME,
+      PT_DEL_ROLODEX, PT_DEL_FRAME, PT_DEL_FRAME_CHECK,
 
       PT_NEW, PT_NEW_REQ_BM, PT_NEW_CHECK_BM, PT_NEW_MARK_BM_ADDR,
       PT_NEW_FRAME, PT_NEW_FRAME_CHECK,
@@ -1262,10 +1262,13 @@ begin
             shift_left(
               to_unsigned(BUS_DATA_BYTES / PTE_SIZE, v.addr'length),
               VM_SIZE_L2_LOG2);
-        v.addr_vm_src := PAGE_BASE(v.addr_vm_src) +
-            shift_left(
-              to_unsigned(BUS_DATA_BYTES / PTE_SIZE, v.addr_vm_src'length),
-              VM_SIZE_L2_LOG2);
+        if v.pt_arg.copy = '1' then
+          -- Do not alter register when not needed by operation.
+          v.addr_vm_src := PAGE_BASE(v.addr_vm_src) +
+              shift_left(
+                to_unsigned(BUS_DATA_BYTES / PTE_SIZE, v.addr_vm_src'length),
+                VM_SIZE_L2_LOG2);
+        end if;
 
         -- Update pages left to process.
         v.pages  := v.pages -
@@ -1274,6 +1277,10 @@ begin
               -- Amount of PTEs left
               v.pages,
               BUS_DATA_BYTES / PTE_SIZE);
+
+        if pt_reader.valid = '1' and pt_reader.last = '1' then
+          v.pt_reader_outstanding := '0';
+        end if;
 
         if v.pt_arg.unmap = '0' and v.pages = 0 then
           -- Allocated enough space.
@@ -1407,35 +1414,41 @@ begin
       end if;
 
     when PT_DEL_ROLODEX =>
-      rolodex_delete_entry <= ADDR_TO_ROLODEX(v.addr_pt);
-      rolodex_delete_valid <= '1';
+      rolodex_delete_entry   <= ADDR_TO_ROLODEX(v.addr_pt);
+      rolodex_delete_valid   <= '1';
       if rolodex_delete_ready = '1' then
-        v.state_stack(0) := PT_DEL_FRAME;
+        v.state_stack(0)     := PT_DEL_FRAME;
       end if;
 
     when PT_DEL_FRAME =>
-      dir_frames_cmd_valid  <= '1';
-      dir_frames_cmd_action <= MM_FRAMES_FREE;
-      dir_frames_cmd_addr   <= slv(PAGE_BASE(v.addr_pt));
+      dir_frames_cmd_valid   <= '1';
+      dir_frames_cmd_action  <= MM_FRAMES_FREE;
+      dir_frames_cmd_addr    <= slv(PAGE_BASE(v.addr_pt));
       if dir_frames_cmd_ready = '1' then
-        v.state_stack(0) := PT_DEL_MARK_BM_DATA;
+        v.state_stack(0)     := PT_DEL_FRAME_CHECK;
+      end if;
+
+    when PT_DEL_FRAME_CHECK =>
+      dir_frames_resp_ready  <= '1';
+      if dir_frames_resp_valid = '1' then
+        v.state_stack(0)     := PT_DEL_MARK_BM_DATA;
       end if;
 
     when PT_DEL_MARK_BM_DATA =>
-      my_bus_wdat.valid  <= '1';
+      my_bus_wdat.valid      <= '1';
       for i in 0 to BUS_DATA_BYTES-1 loop
         my_bus_wdat.data(BYTE_SIZE*(i+1)-1 downto BYTE_SIZE*i) <= slv(v.byte_buffer);
       end loop;
-      my_bus_wdat.strobe <= (others => '0');
+      my_bus_wdat.strobe     <= (others => '0');
       -- Get page table number referenced by addr and figure out which byte of the bitmap it is in.
       my_bus_wdat.strobe(int(
         div_floor(
           PT_BITMAP_IDX(v.addr_pt) mod BUS_DATA_WIDTH,
           BYTE_SIZE)
-        )) <= '1';
-      my_bus_wdat.last <= '1';
+        ))                   <= '1';
+      my_bus_wdat.last       <= '1';
       if my_bus_wdat.ready = '1' then
-        v.state_stack := pop_state(v.state_stack);
+        v.state_stack        := pop_state(v.state_stack);
       end if;
 
 
@@ -1483,8 +1496,8 @@ begin
 
     when PT_NEW_FRAME_CHECK =>
       -- Execute the `frame initialize' routine to set bitmap.
+      dir_frames_resp_ready  <= '1';
       if dir_frames_resp_valid = '1' then
-        dir_frames_resp_ready  <= '1';
         if dir_frames_resp_success = '1' then
           v.state_stack(0) := PT_NEW_REQ_BM;
           v.state_stack    := push_state(v.state_stack, PT_FRAME_INIT_ADDR);
