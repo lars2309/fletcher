@@ -445,6 +445,7 @@ architecture Behavioral of MMDirector is
       SET_PTE_RANGE_FRAME, SET_PTE_RANGE_L2_REQ_PT,
       SET_PTE_RANGE_L2_DEALLOC_FRAME_C, SET_PTE_RANGE_L2_DEALLOC_FRAME_R,
       SET_PTE_RANGE_L2_UPDATE_ADDR, SET_PTE_RANGE_L2_UPDATE_DAT,
+      SET_PTE_RANGE_FINISH,
 
       PT_DEL, PT_DEL_MARK_BM_ADDR, PT_DEL_MARK_BM_DATA,
       PT_DEL_ROLODEX, PT_DEL_FRAME,
@@ -881,14 +882,12 @@ begin
     -- `addr_vm` contains address to start mapping at.
     -- `region`  region is recorded in the page tables, and used for allocation.
     -- `pages`   must be initialized to the number of pages in the mapping.
-    -- arg(0) = '1' -> Take first frame from frame allocator.
-    -- arg(1) = '1' -> Deallocate
-    -- arg(2) = '1' -> Copy mapping from other location. TODO
 
     when SET_PTE_RANGE =>
       v.addr           := v.addr_vm;
       -- This will be set when v.addr reaches the intended mapping.
       v.in_mapping     := '0';
+      v.pt_reader_outstanding := '0';
       if v.pt_arg.unmap = '1' then
         -- Length for unmap is not known in advance, set it to maximum.
         v.pages        := not to_unsigned(0, v.pages'length);
@@ -984,7 +983,7 @@ begin
       if my_bus_wdat.ready = '1' then
         if v.pages = 0 then
           -- Done (de)allocating.
-          v.state_stack    := pop_state(v.state_stack);
+          v.state_stack(0) := SET_PTE_RANGE_FINISH;
         else
           v.state_stack(0) := SET_PTE_RANGE_L1_ADDR;
         end if;
@@ -1000,15 +999,22 @@ begin
       end if;
 
     when SET_PTE_RANGE_L2_REQ_PT =>
-      -- Request the existing mapping, to do stuff with it later on. (only for dealloc)
+      -- Request the existing mapping, to do stuff with it later on. (only for unmap)
       pt_reader_cmd_valid    <= '1';
       pt_reader_cmd_firstIdx <= slv(to_unsigned(0, pt_reader_cmd_firstIdx'length));
       pt_reader_cmd_lastIdx  <= slv(to_unsigned(PT_SIZE / BUS_DATA_BYTES, pt_reader_cmd_lastIdx'length));
       pt_reader_cmd_baseAddr <= slv(v.addr_pt);
 
+      v.pt_reader_outstanding := '1';
       v.bus_pte_idx          := (others => '0');
       if pt_reader_cmd_ready = '1' then
-        v.state_stack(0)     := SET_PTE_RANGE_L2_DEALLOC_FRAME_C;
+        if v.pt_arg.dealloc = '1' then
+          -- Deallocate frames in the mapping.
+          v.state_stack(0)   := SET_PTE_RANGE_L2_DEALLOC_FRAME_C;
+        else
+          -- Do not deallocate frames, just unmap.
+          v.state_stack(0)   := SET_PTE_RANGE_L2_UPDATE_ADDR;
+        end if;
       end if;
 
     when SET_PTE_RANGE_SRC_L1_ADDR =>
@@ -1039,6 +1045,7 @@ begin
             ),
             PT_SIZE_LOG2));
 
+      v.pt_reader_outstanding := '1';
       if pt_reader_cmd_ready = '1' and my_bus_rdat.valid = '1' then
         v.state_stack(0)     := SET_PTE_RANGE_L2_UPDATE_ADDR;
       end if;
@@ -1109,34 +1116,33 @@ begin
 
     when SET_PTE_RANGE_L2_UPDATE_ADDR =>
       -- L2 page table entry address
-      my_bus_wreq.addr  <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(v.addr_pt, v.addr, 2)));
-      my_bus_wreq.len   <= slv(to_unsigned(1, my_bus_wreq.len'length));
+      my_bus_wreq.addr       <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(v.addr_pt, v.addr, 2)));
+      my_bus_wreq.len        <= slv(to_unsigned(1, my_bus_wreq.len'length));
 
       if  shift_right(v.addr,    VM_SIZE_L2_LOG2 + log2ceil(BUS_DATA_BYTES / PTE_SIZE))
         = shift_right(v.addr_vm, VM_SIZE_L2_LOG2 + log2ceil(BUS_DATA_BYTES / PTE_SIZE))
       then
         -- Current address is in the mapping of interest.
-        v.in_mapping  := '1';
+        v.in_mapping         := '1';
       end if;
 
-      if v.pt_arg.unmap = '1' or v.pt_arg.copy = '1' then
-        -- Something might have been requested from the PT reader.
+      if v.pt_reader_outstanding = '1' then
         if v.pt_arg.unmap = '1' and v.in_mapping = '0' then
           -- Skip write if before the start address, or after the end address.
-          v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
+          handshake          := '1';
         else
           -- Wait until read is done to prevent deadlock
-          my_bus_wreq.valid <= pt_reader.valid;
-          if my_bus_wreq.ready = '1' and pt_reader.valid = '1' then
-            v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
-          end if;
+          my_bus_wreq.valid  <= pt_reader.valid;
+          handshake          := my_bus_wreq.ready and pt_reader.valid;
         end if;
       else
         -- No pending read from PT reader.
-        my_bus_wreq.valid <= '1';
-        if my_bus_wreq.ready = '1' then
-          v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
-        end if;
+        my_bus_wreq.valid    <= '1';
+        handshake            := my_bus_wreq.ready;
+      end if;
+
+      if handshake = '1' then
+        v.state_stack(0)     := SET_PTE_RANGE_L2_UPDATE_DAT;
       end if;
 
     when SET_PTE_RANGE_L2_UPDATE_DAT =>
@@ -1276,7 +1282,7 @@ begin
             v.state_stack(0) := SET_PTE_RANGE_L1_UPDATE_ADDR;
           else
             -- Allocation is done.
-            v.state_stack    := pop_state(v.state_stack);
+            v.state_stack(0) := SET_PTE_RANGE_FINISH;
           end if;
 
         -- Not done for allocation, maybe done for deallocation.
@@ -1294,7 +1300,7 @@ begin
           elsif v.pt_arg.unmap = '1' then
             -- Done deallocating.
             -- TODO: check condition. Need to check v.pages ?
-            v.state_stack    := pop_state(v.state_stack);
+            v.state_stack(0)  := SET_PTE_RANGE_FINISH;
           else
             -- Not done allocating, continue to next L1 entry.
             v.state_stack(0) := SET_PTE_RANGE_L1_ADDR;
@@ -1312,6 +1318,15 @@ begin
       else
         -- No handshake, do not update in_mapping just yet.
         v.in_mapping := r.in_mapping;
+      end if;
+
+    when SET_PTE_RANGE_FINISH =>
+      -- Sink all the PT reader data.
+      pt_reader.ready        <= '1';
+      if (pt_reader.valid = '1' and pt_reader.last = '1')
+        or v.pt_reader_outstanding = '0'
+      then
+        v.state_stack          := pop_state(v.state_stack);
       end if;
 
 
