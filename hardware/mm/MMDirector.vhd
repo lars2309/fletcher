@@ -472,6 +472,14 @@ architecture Behavioral of MMDirector is
     return ret;
   end push_state;
 
+  type pt_arg_type is record
+    unmap                       : std_logic;
+    dealloc                     : std_logic;
+    copy                        : std_logic;
+    alloc_first                 : std_logic;
+  end record;
+  constant PT_ARG_DEFAULT : pt_arg_type := ('0', '0', '0', '0');
+
   type reg_type is record
     state_stack                 : state_stack_type;
     addr                        : unsigned(BUS_ADDR_WIDTH-1 downto 0);
@@ -481,9 +489,10 @@ architecture Behavioral of MMDirector is
     size                        : unsigned(BUS_ADDR_WIDTH-1 downto 0);
     pages                       : unsigned(VM_SIZE_L0_LOG2 - PAGE_SIZE_LOG2 - 1 downto 0);
     region                      : unsigned(log2ceil(MEM_REGIONS+1)-1 downto 0);
-    arg                         : unsigned(2 downto 0);
+    pt_arg                      : pt_arg_type;
     pt_empty                    : std_logic;
     in_mapping                  : std_logic;
+    pt_reader_outstanding       : std_logic;
     bus_pte_idx                 : unsigned(log2ceil(DIV_CEIL(BUS_DATA_BYTES, PTE_SIZE))-1 downto 0);
     byte_buffer                 : unsigned(BYTE_SIZE-1 downto 0);
     beat                        : unsigned(log2ceil(BUS_BURST_MAX_LEN+1)-1 downto 0);
@@ -696,15 +705,15 @@ begin
       v.state_stack    := push_state(v.state_stack, FIND_GAP);
 
     when VMALLOC_RESERVE_FRAME =>
-        cmd_ready        <= '1';
+        cmd_ready            <= '1';
         -- addr_vm  : virtual base address to start at
         -- cmd_size : length to set
-        v.state_stack(0) := VMALLOC_FINISH;
-        v.state_stack    := push_state(v.state_stack, SET_PTE_RANGE);
-        v.pages          := PAGE_COUNT(unsigned(cmd_size));
-        v.region         := unsigned(cmd_region);
-        v.arg            := (others => '0');
-        v.arg(0)         := '1'; -- Take first page mapping from frame allocator
+        v.state_stack(0)     := VMALLOC_FINISH;
+        v.state_stack        := push_state(v.state_stack, SET_PTE_RANGE);
+        v.pages              := PAGE_COUNT(unsigned(cmd_size));
+        v.region             := unsigned(cmd_region);
+        v.pt_arg             := PT_ARG_DEFAULT;
+        v.pt_arg.alloc_first := '1'; -- Take first page mapping from frame allocator
 
     when VMALLOC_FINISH =>
       resp_success <= '1';
@@ -731,8 +740,8 @@ begin
       v.state_stack    := push_state(v.state_stack, SET_PTE_RANGE);
       v.pages          := PAGE_COUNT(unsigned(cmd_size));
       v.addr_vm_src    := PAGE_BASE(unsigned(cmd_addr));
-      v.arg            := (others => '0');
-      v.arg(2)         := '1'; -- Move page table entries.
+      v.pt_arg         := PT_ARG_DEFAULT;
+      v.pt_arg.copy    := '1';
 
     when VREALLOC_FREE =>
       cmd_ready        <= '1';
@@ -740,8 +749,8 @@ begin
       v.state_stack    := push_state(v.state_stack, SET_PTE_RANGE);
       v.addr_vm_src    := v.addr_vm;
       v.addr_vm        := PAGE_BASE(unsigned(cmd_addr));
-      v.arg            := (others => '0');
-      v.arg(1)         := '1'; -- deallocate
+      v.pt_arg         := PT_ARG_DEFAULT;
+      v.pt_arg.unmap   := '1';
 
     when VREALLOC_RESPONSE =>
       resp_success <= '1';
@@ -766,8 +775,9 @@ begin
         v.state_stack    := push_state(v.state_stack, SET_PTE_RANGE);
       end if;
       v.addr_vm        := PAGE_BASE(unsigned(cmd_addr));
-      v.arg            := (others => '0');
-      v.arg(1)         := '1'; -- deallocate
+      v.pt_arg         := PT_ARG_DEFAULT;
+      v.pt_arg.dealloc := '1';
+      v.pt_arg.unmap   := '1';
       cmd_ready        <= '1';
 
     when VFREE_FINISH =>
@@ -879,8 +889,8 @@ begin
       v.addr           := v.addr_vm;
       -- This will be set when v.addr reaches the intended mapping.
       v.in_mapping     := '0';
-      if v.arg(1) = '1' then
-        -- Length for deallocation is not known in advance, set it to maximum.
+      if v.pt_arg.unmap = '1' then
+        -- Length for unmap is not known in advance, set it to maximum.
         v.pages        := not to_unsigned(0, v.pages'length);
         -- Start at beginning of L2 page table,
         -- to check whether it is in use by another allocation.
@@ -915,15 +925,14 @@ begin
               BYTE_SIZE * PTE_SIZE
             ),
             PT_SIZE_LOG2);
-        if v.arg(1) = '1' then
-          -- Deallocate; request the mapping to do so.
+        if v.pt_arg.unmap = '1' then
+          -- unmap; request the mapping to do so.
           v.state_stack(0)   := SET_PTE_RANGE_L2_REQ_PT;
-        elsif v.arg(2) = '1' then
-          -- Copy
+        elsif v.pt_arg.copy = '1' then
           v.state_stack(0)   := SET_PTE_RANGE_SRC_L1_ADDR;
         else
-          -- Allocate
-          if v.arg(0) = '1' then
+          -- map
+          if v.pt_arg.alloc_first = '1' then
             -- Request a frame for this mapping.
             v.state_stack(0) := SET_PTE_RANGE_FRAME;
           else
@@ -939,7 +948,7 @@ begin
         then
           -- L2 PT does not exist, need to allocate one.
           v.state_stack      := push_state(v.state_stack, PT_NEW);
-        elsif v.arg(1) = '0' then
+        elsif v.pt_arg.unmap = '0' then
           -- Indicate the L1 entry does not need updating.
           v.pt_empty         := '0';
         end if;
@@ -961,7 +970,7 @@ begin
       -- Duplicate the address over the data bus
       for i in 0 to BUS_DATA_BYTES/PTE_SIZE-1 loop
         my_bus_wdat.data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= slv(v.addr_pt);
-        if v.arg(1) = '0' then
+        if v.pt_arg.unmap = '0' then
           -- Mark the entry as mapped and present
           my_bus_wdat.data(PTE_WIDTH * i + PTE_MAPPED)  <= '1';
           my_bus_wdat.data(PTE_WIDTH * i + PTE_PRESENT) <= '1';
@@ -1110,8 +1119,9 @@ begin
         v.in_mapping  := '1';
       end if;
 
-      if v.arg(1) = '1' then
-        if v.in_mapping = '0' then
+      if v.pt_arg.unmap = '1' or v.pt_arg.copy = '1' then
+        -- Something might have been requested from the PT reader.
+        if v.pt_arg.unmap = '1' and v.in_mapping = '0' then
           -- Skip write if before the start address, or after the end address.
           v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
         else
@@ -1122,6 +1132,7 @@ begin
           end if;
         end if;
       else
+        -- No pending read from PT reader.
         my_bus_wreq.valid <= '1';
         if my_bus_wreq.ready = '1' then
           v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
@@ -1130,18 +1141,18 @@ begin
 
     when SET_PTE_RANGE_L2_UPDATE_DAT =>
       -- Update the L2 page table entries (whole bus word)
-      if v.arg(1) = '1' and r.in_mapping = '0' then
+      if v.pt_arg.unmap = '1' and v.in_mapping = '0' then
         -- Not inside of mapping during deallocation.
         -- Consume requested data, do not write.
         pt_reader.ready       <= '1';
         my_bus_wdat.valid     <= '0';
         handshake             := pt_reader.valid;
-      elsif v.arg(1) = '1' or v.arg(2) = '1' then
-        -- Take data from PT reader (deallocate or copy)
+      elsif v.pt_arg.unmap = '1' or v.pt_arg.copy = '1' then
+        -- Take data from PT reader
         pt_reader.ready       <= my_bus_wdat.ready;
         my_bus_wdat.valid     <= pt_reader.valid;
         handshake             := pt_reader.valid and my_bus_wdat.ready;
-      elsif v.arg(0) = '1' then
+      elsif v.pt_arg.alloc_first = '1' then
         -- Use allocated frame in mapping.
         dir_frames_resp_ready <= my_bus_wdat.ready;
         my_bus_wdat.valid     <= dir_frames_resp_valid;
@@ -1159,7 +1170,7 @@ begin
         -- Default to a zero'd entry when not copying.
         my_bus_wdat.data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= (others => '0');
 
-        if v.arg(2) = '1' then
+        if v.pt_arg.copy = '1' then
           if v.in_mapping = '1' then
             -- Copy entry
             -- TODO support unaligned source.
@@ -1170,14 +1181,10 @@ begin
               -- Last entry in source, stop copy after this entry.
               v.in_mapping  := '0';
             end if;
-          else
-            -- No more entries to copy, create new entries.
-            -- TODO
           end if;
         end if;
 
-        if v.arg(1) = '1' then
-          -- Deallocate
+        if v.pt_arg.unmap = '1' then
           if v.in_mapping = '0' and
             pt_reader.data(PTE_WIDTH * i + PTE_MAPPED) = '1'
           then
@@ -1192,7 +1199,7 @@ begin
         end if;
 
         -- First entry
-        if v.arg(0) = '1' and -- Allocate first entry.
+        if v.pt_arg.alloc_first = '1' and -- Allocate first entry.
           -- This offset is the first entry for the mapping.
           PAGE_BASE(v.addr) + shift_left(to_unsigned(i, v.addr_vm'length), VM_SIZE_L2_LOG2) = PAGE_BASE(v.addr_vm)
         then
@@ -1210,7 +1217,7 @@ begin
         end if;
 
         -- Mark as mapped / not mapped
-        my_bus_wdat.data(PTE_WIDTH * i + PTE_MAPPED)  <= not v.arg(1);
+        my_bus_wdat.data(PTE_WIDTH * i + PTE_MAPPED)  <= not v.pt_arg.unmap;
 
         -- Write region
         my_bus_wdat.data(PTE_WIDTH * i + PTE_SEGMENT + v.region'length - 1 downto PTE_WIDTH * i + PTE_SEGMENT) <= slv(v.region);
@@ -1242,12 +1249,16 @@ begin
 
       if handshake = '1' then
         -- Do not try to use allocated frame on next iteration.
-        v.arg(0) := '0';
+        v.pt_arg.alloc_first := '0';
 
         -- Next address is increased by the size addressable by the written entries.
         v.addr := PAGE_BASE(v.addr) +
             shift_left(
               to_unsigned(BUS_DATA_BYTES / PTE_SIZE, v.addr'length),
+              VM_SIZE_L2_LOG2);
+        v.addr_vm_src := PAGE_BASE(v.addr_vm_src) +
+            shift_left(
+              to_unsigned(BUS_DATA_BYTES / PTE_SIZE, v.addr_vm_src'length),
               VM_SIZE_L2_LOG2);
 
         -- Update pages left to process.
@@ -1258,7 +1269,7 @@ begin
               v.pages,
               BUS_DATA_BYTES / PTE_SIZE);
 
-        if v.arg(1) = '0' and v.pages = 0 then
+        if v.pt_arg.unmap = '0' and v.pages = 0 then
           -- Allocated enough space.
           if v.pt_empty = '1' then
             -- New PT, update L1 entry.
@@ -1274,14 +1285,15 @@ begin
           if v.pt_empty = '1' then
             -- New PT, or delete PT: update L1 entry.
             v.state_stack(0) := SET_PTE_RANGE_L1_UPDATE_ADDR;
-            if v.arg(1) = '1' then
+            if v.pt_arg.unmap = '1' then
               -- Delete page table.
               v.state_stack  := push_state(v.state_stack, PT_DEL);
             end if;
 
           -- No new or deleted PT.
-          elsif v.arg(1) = '1' then
+          elsif v.pt_arg.unmap = '1' then
             -- Done deallocating.
+            -- TODO: check condition. Need to check v.pages ?
             v.state_stack    := pop_state(v.state_stack);
           else
             -- Not done allocating, continue to next L1 entry.
@@ -1289,8 +1301,8 @@ begin
           end if;
 
         -- Not done in L2 table.
-        elsif v.arg(1) = '1' then
-          -- Continue with next PTE, check for end of mapping.
+        elsif v.pt_arg.dealloc = '1' then
+          -- Deallocate
           v.state_stack(0)   := SET_PTE_RANGE_L2_DEALLOC_FRAME_C;
         else
           -- Continue with next PTE.
