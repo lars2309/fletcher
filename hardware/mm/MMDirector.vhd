@@ -563,8 +563,11 @@ begin
            my_bus_rreq, my_bus_rdat,
            mmu_req_valid, mmu_req_addr, mmu_resp_ready) is
     variable v : reg_type;
+    variable handshake : std_logic;
   begin
     v := r;
+
+    handshake := 'U';
 
     resp_success <= '0';
     resp_valid   <= '0';
@@ -915,6 +918,9 @@ begin
         if v.arg(1) = '1' then
           -- Deallocate; request the mapping to do so.
           v.state_stack(0)   := SET_PTE_RANGE_L2_REQ_PT;
+        elsif v.arg(2) = '1' then
+          -- Copy
+          v.state_stack(0)   := SET_PTE_RANGE_SRC_L1_ADDR;
         else
           -- Allocate
           if v.arg(0) = '1' then
@@ -1104,57 +1110,78 @@ begin
         v.in_mapping  := '1';
       end if;
 
-      if v.in_mapping = '0' then
-        -- Skip write if before the start address, or after the end address.
-        v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
-      else
-        if v.arg(1) = '1' then
+      if v.arg(1) = '1' then
+        if v.in_mapping = '0' then
+          -- Skip write if before the start address, or after the end address.
+          v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
+        else
           -- Wait until read is done to prevent deadlock
           my_bus_wreq.valid <= pt_reader.valid;
           if my_bus_wreq.ready = '1' and pt_reader.valid = '1' then
             v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
           end if;
-        else
-          my_bus_wreq.valid <= '1';
-          if my_bus_wreq.ready = '1' then
-            v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
-          end if;
+        end if;
+      else
+        my_bus_wreq.valid <= '1';
+        if my_bus_wreq.ready = '1' then
+          v.state_stack(0) := SET_PTE_RANGE_L2_UPDATE_DAT;
         end if;
       end if;
 
     when SET_PTE_RANGE_L2_UPDATE_DAT =>
       -- Update the L2 page table entries (whole bus word)
-      if r.in_mapping = '0' then
-        -- Not inside of mapping. This only happens with deallocation.
+      if v.arg(1) = '1' and r.in_mapping = '0' then
+        -- Not inside of mapping during deallocation.
         -- Consume requested data, do not write.
         pt_reader.ready       <= '1';
         my_bus_wdat.valid     <= '0';
-      elsif v.arg(1) = '1' then
-        -- Deallocate
+        handshake             := pt_reader.valid;
+      elsif v.arg(1) = '1' or v.arg(2) = '1' then
+        -- Take data from PT reader (deallocate or copy)
         pt_reader.ready       <= my_bus_wdat.ready;
         my_bus_wdat.valid     <= pt_reader.valid;
+        handshake             := pt_reader.valid and my_bus_wdat.ready;
       elsif v.arg(0) = '1' then
         -- Use allocated frame in mapping.
         dir_frames_resp_ready <= my_bus_wdat.ready;
         my_bus_wdat.valid     <= dir_frames_resp_valid;
+        handshake             := dir_frames_resp_valid and my_bus_wdat.ready;
       else
         -- Create mapping without allocation.
         my_bus_wdat.valid     <= '1';
+        handshake             := my_bus_wdat.ready;
       end if;
       my_bus_wdat.last        <= '1';
 
       -- Loop over the PTEs on the data bus.
       for i in 0 to BUS_DATA_BYTES/PTE_SIZE-1 loop
 
-        -- Default to a zero'd entry
+        -- Default to a zero'd entry when not copying.
         my_bus_wdat.data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= (others => '0');
+
+        if v.arg(2) = '1' then
+          if v.in_mapping = '1' then
+            -- Copy entry
+            -- TODO support unaligned source.
+            my_bus_wdat.data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i) <= pt_reader.data(PTE_WIDTH * (i+1) - 1 downto PTE_WIDTH * i);
+            -- Get region from existing mapping, to write to new entries.
+            v.region        := u(pt_reader.data(PTE_WIDTH * i + PTE_SEGMENT + v.region'length - 1 downto PTE_WIDTH * i + PTE_SEGMENT));
+            if pt_reader.data(PTE_WIDTH * i + PTE_BOUNDARY) = '1' then
+              -- Last entry in source, stop copy after this entry.
+              v.in_mapping  := '0';
+            end if;
+          else
+            -- No more entries to copy, create new entries.
+            -- TODO
+          end if;
+        end if;
 
         if v.arg(1) = '1' then
           -- Deallocate
           if v.in_mapping = '0' and
             pt_reader.data(PTE_WIDTH * i + PTE_MAPPED) = '1'
           then
-            -- An entry is mapped outside of the deleted mapping.
+            -- An entry is mapped outside of the deleted mapping. Do not delete PT.
             v.pt_empty    := '0';
           end if;
           if pt_reader.data(PTE_WIDTH * i + PTE_BOUNDARY) = '1' then
@@ -1178,6 +1205,8 @@ begin
         -- Last entry
         if r.pages - i - 1 = 0 then
           my_bus_wdat.data(PTE_WIDTH * i + PTE_BOUNDARY) <= '1';
+        else
+          my_bus_wdat.data(PTE_WIDTH * i + PTE_BOUNDARY) <= '0';
         end if;
 
         -- Mark as mapped / not mapped
@@ -1211,22 +1240,7 @@ begin
         v.state_stack(0)   := FAIL;
       end if;
 
-      -- Check for handshake
-      if
-        (
-          r.in_mapping = '0'
-          and pt_reader.valid = '1'
-        ) or (
-          r.in_mapping = '1' and v.arg(1) = '1'
-          and pt_reader.valid = '1' and my_bus_wdat.ready = '1'
-        ) or (
-          r.in_mapping = '1' and v.arg(0) = '1'
-          and dir_frames_resp_valid = '1' and my_bus_wdat.ready = '1'
-        ) or (
-          r.in_mapping = '1' and v.arg(1) = '0' and v.arg(0) = '0'
-          and my_bus_wdat.ready = '1'
-        )
-      then
+      if handshake = '1' then
         -- Do not try to use allocated frame on next iteration.
         v.arg(0) := '0';
 
@@ -1286,7 +1300,6 @@ begin
       else
         -- No handshake, do not update in_mapping just yet.
         v.in_mapping := r.in_mapping;
-        v.pt_empty   := r.pt_empty;
       end if;
 
 
