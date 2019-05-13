@@ -192,7 +192,7 @@ int main(int argc, char ** argv) {
   // Use hardware benchmarker
   if (benchmark_buffer >= 0) {
     std::cerr << "running device benchmarker...";
-    const int BENCH_REG_OFFSET = 26;
+    int bench_reg_offset = 26;
     const int BUS_DATA_BYTES = 512/8;
     const double PERIOD = 0.000000004;
     uint32_t control = 0;
@@ -218,38 +218,67 @@ int main(int argc, char ** argv) {
     uint32_t addr_mask_hi = (uint32_t) (addr_mask >> 32);
     uint32_t cycles_per_word = 0;
     uint32_t cycles;
-    platform->writeMMIO(BENCH_REG_OFFSET+2, burst_len);
-    platform->writeMMIO(BENCH_REG_OFFSET+3, max_bursts);
-    platform->writeMMIO(BENCH_REG_OFFSET+4, base_addr_lo);
-    platform->writeMMIO(BENCH_REG_OFFSET+5, base_addr_hi);
-    platform->writeMMIO(BENCH_REG_OFFSET+6, addr_mask_lo);
-    platform->writeMMIO(BENCH_REG_OFFSET+7, addr_mask_hi);
-    platform->writeMMIO(BENCH_REG_OFFSET+8, cycles_per_word);
+    platform->writeMMIO(bench_reg_offset+2, burst_len);
+    platform->writeMMIO(bench_reg_offset+3, max_bursts);
+    platform->writeMMIO(bench_reg_offset+4, base_addr_lo);
+    platform->writeMMIO(bench_reg_offset+5, base_addr_hi);
+    platform->writeMMIO(bench_reg_offset+6, addr_mask_lo);
+    platform->writeMMIO(bench_reg_offset+7, addr_mask_hi);
+    platform->writeMMIO(bench_reg_offset+8, cycles_per_word);
     // Reset
     control = 4;
-    platform->writeMMIO(BENCH_REG_OFFSET+0, control);
+    platform->writeMMIO(bench_reg_offset+0, control);
     // Start
     control = 1;
-    platform->writeMMIO(BENCH_REG_OFFSET+0, control);
+    platform->writeMMIO(bench_reg_offset+0, control);
     // Deassert start
     control = 0;
-    platform->writeMMIO(BENCH_REG_OFFSET+0, control);
+    platform->writeMMIO(bench_reg_offset+0, control);
     // Wait until done
     do {
       usleep(2000);
-      platform->readMMIO(BENCH_REG_OFFSET+1, &status);
+      platform->readMMIO(bench_reg_offset+1, &status);
     } while (status == 2);
     if (status != 4) {
       std::cerr << "ERROR\n";
     } else {
       std::cerr << "finished\n";
-      platform->readMMIO(BENCH_REG_OFFSET+9, &cycles);
+      platform->readMMIO(bench_reg_offset+9, &cycles);
       uint64_t num_bytes =  BUS_DATA_BYTES * burst_len * max_bursts;
       int throughput = (num_bytes/(cycles*PERIOD))/1000/1000;
       std::cout << cycles << " cycles for " << max_bursts << " bursts of length "
           << burst_len << " (" << (num_bytes/1024) << " KiB)\n";
       std::cout << "D_R[0]: " << throughput << " MB/s\n";
     }
+
+    std::cerr << "running device benchmarker...";
+    bench_reg_offset = 26 + 12;
+    // Reset
+    control = 4;
+    platform->writeMMIO(bench_reg_offset+0, control);
+    // Start
+    control = 1;
+    platform->writeMMIO(bench_reg_offset+0, control);
+    // Deassert start
+    control = 0;
+    platform->writeMMIO(bench_reg_offset+0, control);
+    // Wait until done
+    do {
+      usleep(2000);
+      platform->readMMIO(bench_reg_offset+1, &status);
+    } while (status == 2);
+    if (status != 4) {
+      std::cerr << "ERROR\n";
+    } else {
+      std::cerr << "finished\n";
+      platform->readMMIO(bench_reg_offset+9, &cycles);
+      uint64_t num_bytes =  BUS_DATA_BYTES * burst_len * max_bursts;
+      int throughput = (num_bytes/(cycles*PERIOD))/1000/1000;
+      std::cout << cycles << " cycles for " << max_bursts << " bursts of length "
+          << burst_len << " (" << (num_bytes/1024) << " KiB)\n";
+      std::cout << "D_R[0]: " << throughput << " MB/s\n";
+    }
+
   }
 
 
