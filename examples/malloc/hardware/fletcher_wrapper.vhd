@@ -172,7 +172,8 @@ architecture Implementation of fletcher_wrapper is
   signal dir_r                  : bus_r_t;
   signal dir_w                  : bus_w_t;
   signal mmu_r                  : bus_r_t;
-  signal bench_sr               : bus_r_t;
+  signal bench_rs               : bus_r_t;
+  signal bench_rr               : bus_r_t;
 
 begin
 
@@ -189,14 +190,14 @@ begin
       bus_clk                     => bus_clk,
       bus_reset                   => bus_reset,
 
-      bus_rreq_valid              => bench_sr.req_valid,
-      bus_rreq_ready              => bench_sr.req_ready,
-      bus_rreq_addr               => bench_sr.req_addr,
-      bus_rreq_len                => bench_sr.req_len,
-      bus_rdat_valid              => bench_sr.dat_valid,
-      bus_rdat_ready              => bench_sr.dat_ready,
-      bus_rdat_data               => bench_sr.dat_data,
-      bus_rdat_last               => bench_sr.dat_last,
+      bus_rreq_valid              => bench_rs.req_valid,
+      bus_rreq_ready              => bench_rs.req_ready,
+      bus_rreq_addr               => bench_rs.req_addr,
+      bus_rreq_len                => bench_rs.req_len,
+      bus_rdat_valid              => bench_rs.dat_valid,
+      bus_rdat_ready              => bench_rs.dat_ready,
+      bus_rdat_data               => bench_rs.dat_data,
+      bus_rdat_last               => bench_rs.dat_last,
       
       -- Control / status registers
       reg_control                 => regs_in (
@@ -250,14 +251,14 @@ begin
       bus_clk                     => bus_clk,
       bus_reset                   => bus_reset,
 
-      bus_rreq_valid              => bench_sr.req_valid,
-      bus_rreq_ready              => bench_sr.req_ready,
-      bus_rreq_addr               => bench_sr.req_addr,
-      bus_rreq_len                => bench_sr.req_len,
-      bus_rdat_valid              => bench_sr.dat_valid,
-      bus_rdat_ready              => bench_sr.dat_ready,
-      bus_rdat_data               => bench_sr.dat_data,
-      bus_rdat_last               => bench_sr.dat_last,
+      bus_rreq_valid              => bench_rr.req_valid,
+      bus_rreq_ready              => bench_rr.req_ready,
+      bus_rreq_addr               => bench_rr.req_addr,
+      bus_rreq_len                => bench_rr.req_len,
+      bus_rdat_valid              => bench_rr.dat_valid,
+      bus_rdat_ready              => bench_rr.dat_ready,
+      bus_rdat_data               => bench_rr.dat_data,
+      bus_rdat_last               => bench_rr.dat_last,
       
       -- Control / status registers
       reg_control                 => regs_in (
@@ -442,7 +443,7 @@ begin
       BUS_ADDR_WIDTH            => BUS_ADDR_WIDTH,
       BUS_LEN_WIDTH             => BUS_LEN_WIDTH,
       BUS_DATA_WIDTH            => BUS_DATA_WIDTH,
-      NUM_SLAVE_PORTS           => 3,
+      NUM_SLAVE_PORTS           => 4,
       ARB_METHOD                => "FIXED",
       MAX_OUTSTANDING           => 8,
       SLV_REQ_SLICES            => false,
@@ -481,14 +482,23 @@ begin
       bs01_rdat_data            => dir_r.dat_data,
       bs01_rdat_last            => dir_r.dat_last,
 
-      bs02_rreq_valid           => bench_sr.req_valid,
-      bs02_rreq_ready           => bench_sr.req_ready,
-      bs02_rreq_addr            => bench_sr.req_addr,
-      bs02_rreq_len             => bench_sr.req_len,
-      bs02_rdat_valid           => bench_sr.dat_valid,
-      bs02_rdat_ready           => bench_sr.dat_ready,
-      bs02_rdat_data            => bench_sr.dat_data,
-      bs02_rdat_last            => bench_sr.dat_last
+      bs02_rreq_valid           => bench_rs.req_valid,
+      bs02_rreq_ready           => bench_rs.req_ready,
+      bs02_rreq_addr            => bench_rs.req_addr,
+      bs02_rreq_len             => bench_rs.req_len,
+      bs02_rdat_valid           => bench_rs.dat_valid,
+      bs02_rdat_ready           => bench_rs.dat_ready,
+      bs02_rdat_data            => bench_rs.dat_data,
+      bs02_rdat_last            => bench_rs.dat_last,
+
+      bs03_rreq_valid           => bench_rr.req_valid,
+      bs03_rreq_ready           => bench_rr.req_ready,
+      bs03_rreq_addr            => bench_rr.req_addr,
+      bs03_rreq_len             => bench_rr.req_len,
+      bs03_rdat_valid           => bench_rr.dat_valid,
+      bs03_rdat_ready           => bench_rr.dat_ready,
+      bs03_rdat_data            => bench_rr.dat_data,
+      bs03_rdat_last            => bench_rr.dat_last
     );
 
   bus_write_arb_inst : BusWriteArbiter

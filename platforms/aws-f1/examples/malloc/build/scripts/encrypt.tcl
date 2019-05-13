@@ -49,6 +49,7 @@ file copy -force $FLETCHER_HARDWARE_DIR/streams/StreamFIFO.vhd                  
 file copy -force $FLETCHER_HARDWARE_DIR/streams/StreamGearbox.vhd               $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/streams/StreamNormalizer.vhd            $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/streams/StreamParallelizer.vhd          $TARGET_DIR
+file copy -force $FLETCHER_HARDWARE_DIR/streams/StreamPseudoRandomGenerator.vhd $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/streams/StreamSerializer.vhd            $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/streams/StreamSlice.vhd                 $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/streams/StreamSync.vhd                  $TARGET_DIR
