@@ -238,7 +238,7 @@ begin
     );
 
   regs_out_en(MM_REG_OFFSET_BENCH_RR + MM_BENCH_REGS - 1 downto MM_REG_OFFSET_BENCH_RR) <= "011000000010";
-  bench_rs : BusReadBenchmarker
+  bench_rr : BusReadBenchmarker
     generic map (
       BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
       BUS_DATA_WIDTH              => BUS_DATA_WIDTH,
