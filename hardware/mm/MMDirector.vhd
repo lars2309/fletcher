@@ -18,6 +18,7 @@ use ieee.numeric_std.all;
 
 library work;
 use work.Utils.all;
+use work.SimUtils.all;
 use work.Buffers.all;
 use work.Interconnect.all;
 use work.MM.all;
@@ -623,6 +624,121 @@ begin
     my_bus_rreq.len    <= (others => 'U'); --slv(to_unsigned(1, bus_wreq_len'length));
 
     my_bus_rdat.ready  <= '0';
+
+    if false then
+    case v.state_stack(0) is
+      when RESET_ST =>
+        report "state: RESET_ST" severity note;
+      when IDLE =>
+        report "state: IDLE" severity note;
+      when FAIL =>
+        report "state: FAIL" severity note;
+      when CLEAR_FRAMES =>
+        report "state: CLEAR_FRAMES" severity note;
+      when CLEAR_FRAMES_CHECK =>
+        report "state: CLEAR_FRAMES_CHECK" severity note;
+      when RESERVE_PT =>
+        report "state: RESERVE_PT" severity note;
+      when RESERVE_PT_CHECK =>
+        report "state: RESERVE_PT_CHECK" severity note;
+      when PT0_INIT =>
+        report "state: PT0_INIT" severity note;
+      when VMALLOC =>
+        report "state: VMALLOC" severity note;
+      when VMALLOC_CHECK_PT0 =>
+        report "state: VMALLOC_CHECK_PT0" severity note;
+      when VMALLOC_CHECK_PT0_DATA =>
+        report "state: VMALLOC_CHECK_PT0_DATA" severity note;
+      when VMALLOC_RESERVE_FRAME =>
+        report "state: VMALLOC_RESERVE_FRAME" severity note;
+      when VMALLOC_FINISH =>
+        report "state: VMALLOC_FINISH" severity note;
+      when VREALLOC =>
+        report "state: VREALLOC" severity note;
+      when VREALLOC_MOVE =>
+        report "state: VREALLOC_MOVE" severity note;
+      when VREALLOC_FREE =>
+        report "state: VREALLOC_FREE" severity note;
+      when VREALLOC_RESPONSE =>
+        report "state: VREALLOC_RESPONSE" severity note;
+      when VFREE =>
+        report "state: VFREE" severity note;
+      when VFREE_FINISH =>
+        report "state: VFREE_FINISH" severity note;
+      when FIND_GAP =>
+        report "state: FIND_GAP" severity note;
+      when FIND_GAP_PT0 =>
+        report "state: FIND_GAP_PT0" severity note;
+      when FIND_GAP_PT0_DATA =>
+        report "state: FIND_GAP_PT0_DATA" severity note;
+      when SET_PTE_RANGE =>
+        report "state: SET_PTE_RANGE" severity note;
+      when SET_PTE_RANGE_L1_ADDR =>
+        report "state: SET_PTE_RANGE_L1_ADDR" severity note;
+      when SET_PTE_RANGE_L1_CHECK =>
+        report "state: SET_PTE_RANGE_L1_CHECK" severity note;
+      when SET_PTE_RANGE_L1_UPDATE_ADDR =>
+        report "state: SET_PTE_RANGE_L1_UPDATE_ADDR" severity note;
+      when SET_PTE_RANGE_L1_UPDATE_DAT =>
+        report "state: SET_PTE_RANGE_L1_UPDATE_DAT" severity note;
+      when SET_PTE_RANGE_SRC_L1_ADDR =>
+        report "state: SET_PTE_RANGE_SRC_L1_ADDR" severity note;
+      when SET_PTE_RANGE_SRC_L2_REQ =>
+        report "state: SET_PTE_RANGE_SRC_L2_REQ" severity note;
+      when SET_PTE_RANGE_FRAME =>
+        report "state: SET_PTE_RANGE_FRAME" severity note;
+      when SET_PTE_RANGE_L2_REQ_PT =>
+        report "state: SET_PTE_RANGE_L2_REQ_PT" severity note;
+      when SET_PTE_RANGE_L2_DEALLOC_FRAME_C =>
+        report "state: SET_PTE_RANGE_L2_DEALLOC_FRAME_C" severity note;
+      when SET_PTE_RANGE_L2_DEALLOC_FRAME_R =>
+        report "state: SET_PTE_RANGE_L2_DEALLOC_FRAME_R" severity note;
+      when SET_PTE_RANGE_L2_UPDATE_ADDR =>
+        report "state: SET_PTE_RANGE_L2_UPDATE_ADDR" severity note;
+      when SET_PTE_RANGE_L2_UPDATE_DAT =>
+        report "state: SET_PTE_RANGE_L2_UPDATE_DAT" severity note;
+      when SET_PTE_RANGE_FINISH =>
+        report "state: SET_PTE_RANGE_FINISH" severity note;
+      when PT_DEL =>
+        report "state: PT_DEL" severity note;
+      when PT_DEL_MARK_BM_ADDR =>
+        report "state: PT_DEL_MARK_BM_ADDR" severity note;
+      when PT_DEL_MARK_BM_DATA =>
+        report "state: PT_DEL_MARK_BM_DATA" severity note;
+      when PT_DEL_ROLODEX =>
+        report "state: PT_DEL_ROLODEX" severity note;
+      when PT_DEL_FRAME =>
+        report "state: PT_DEL_FRAME" severity note;
+      when PT_DEL_FRAME_CHECK =>
+        report "state: PT_DEL_FRAME_CHECK" severity note;
+      when PT_NEW =>
+        report "state: PT_NEW" severity note;
+      when PT_NEW_REQ_BM =>
+        report "state: PT_NEW_REQ_BM" severity note;
+      when PT_NEW_CHECK_BM =>
+        report "state: PT_NEW_CHECK_BM" severity note;
+      when PT_NEW_MARK_BM_ADDR =>
+        report "state: PT_NEW_MARK_BM_ADDR" severity note;
+      when PT_NEW_FRAME =>
+        report "state: PT_NEW_FRAME" severity note;
+      when PT_NEW_FRAME_CHECK =>
+        report "state: PT_NEW_FRAME_CHECK" severity note;
+      when PT_NEW_MARK_BM_DATA =>
+        report "state: PT_NEW_MARK_BM_DATA" severity note;
+      when PT_NEW_CLEAR_ADDR =>
+        report "state: PT_NEW_CLEAR_ADDR" severity note;
+      when PT_NEW_CLEAR_DATA =>
+        report "state: PT_NEW_CLEAR_DATA" severity note;
+      when PT_FRAME_INIT_ADDR =>
+        report "state: PT_FRAME_INIT_ADDR" severity note;
+      when PT_FRAME_INIT_DATA =>
+        report "state: PT_FRAME_INIT_DATA" severity note;
+      when PT_FRAME_INIT_ROLODEX =>
+        report "state: PT_FRAME_INIT_ROLODEX" severity note;
+      when others =>
+        report "state: unknown" severity note;
+    end case;
+    end if;
 
     case v.state_stack(0) is
 
@@ -1383,7 +1499,7 @@ begin
     -- the PT pool if the frame contains no more page tables.
 
     when PT_DEL =>
-      my_bus_rreq.addr  <= slv(PAGE_BASE(v.addr_pt) + PT_BITMAP_IDX(v.addr_pt) / BUS_DATA_WIDTH);
+      my_bus_rreq.addr  <= slv(PAGE_BASE(v.addr_pt) + div_floor(PT_BITMAP_IDX(v.addr_pt), BUS_DATA_WIDTH));
       my_bus_rreq.len   <= slv(to_unsigned(1, my_bus_rreq.len'length));
       my_bus_rreq.valid <= '1';
       if my_bus_rreq.ready = '1' then
@@ -1393,8 +1509,8 @@ begin
     when PT_DEL_MARK_BM_ADDR =>
       -- Set address for marking bit in bitmap
       my_bus_wreq.valid <= my_bus_rdat.valid;
-      my_bus_rdat.ready     <= my_bus_wreq.ready;
-      my_bus_wreq.addr  <= slv(PAGE_BASE(v.addr_pt) + PT_BITMAP_IDX(v.addr_pt) / BUS_DATA_WIDTH);
+      my_bus_rdat.ready <= my_bus_wreq.ready;
+      my_bus_wreq.addr  <= slv(PAGE_BASE(v.addr_pt) + div_floor(PT_BITMAP_IDX(v.addr_pt), BUS_DATA_WIDTH));
       my_bus_wreq.len   <= slv(to_unsigned(1, my_bus_wreq.len'length));
       -- Copy the byte that has to be written back.
       v.byte_buffer      := EXTRACT(
@@ -2037,7 +2153,7 @@ begin
       -- of outstanding requests is approximately this number divided by the
       -- burst length. If set to 2, a register slice is inserted instead of a
       -- FIFO. If set to 0, the buffers are omitted.
-      BUS_FIFO_DEPTH              => work.Utils.min(BUS_BURST_MAX_LEN, (PT_SIZE / BUS_DATA_BYTES)),
+      BUS_FIFO_DEPTH              => work.Utils.min(BUS_BURST_MAX_LEN*4, (PT_SIZE / BUS_DATA_BYTES)),
       -- Element FIFO size in number of elements.
       ELEMENT_FIFO_SIZE           => 0,
 

@@ -98,6 +98,9 @@ initial begin
 
   $display("[%t] : Starting tests", $realtime);
 
+  // =============
+  // === alloc ===
+  // =============
   // Set region to 1
   tb.poke_bar1(.addr(4 * `FLETCHER_REG_MM_HDR_REGION), .data(32'h0000_0001));
 
@@ -124,18 +127,24 @@ initial begin
   // Get address
   tb.peek_bar1(.addr(4 * `FLETCHER_REG_MM_HDA_ADDR_LO), .data(read_data_lo));
   tb.peek_bar1(.addr(4 * `FLETCHER_REG_MM_HDA_ADDR_HI), .data(read_data_hi));
+  cl_buffer_address = {read_data_hi, read_data_lo};
   $display("[%t] : malloc of size 12MB at %H_%H", $realtime, read_data_hi, read_data_lo);
 
   // Reset response
   tb.poke_bar1(.addr(4 * `FLETCHER_REG_MM_HDA_STATUS), .data(32'h0000_0000));
 
+  if (error_count != 0) begin
+    $display("ERROR_COUNT > 0");
+  end
 
 
+  // =============
+  // === write ===
+  // =============
   // Try to write to allocated memory.
   $display("[%t] : Starting host to CL DMA transfers ", $realtime);
 
   host_buffer_address = `HOST_ADDR;
-  cl_buffer_address = {read_data_hi, read_data_lo};
 
   // Queue the data movement
   tb.que_buffer_to_cl(
@@ -180,12 +189,17 @@ initial begin
     );
     error_count++;
   end
+  if (error_count != 0) begin
+    $display("ERROR_COUNT > 0");
+  end
   $display("[%t] : Write complete", $realtime);
   // Write is reported complete before response. Wait for duration of shell timeout.
   #8000ns;
 
 
-  // Readback
+  // ================
+  // === Readback ===
+  // ================
   $display("[%t] : Starting CL to host DMA transfers ", $realtime);
 
   // Queue the data movement
@@ -227,8 +241,8 @@ initial begin
     );
     error_count++;
   end
-  $display("[%t] : Read complete", $realtime);
 
+  // Check data integrity
   for (int i=0; i<num_buf_bytes; i++) begin
     if (tb.hm_get_byte(i    ) != tb.hm_get_byte(i + 1024*1024*4)) begin
       error_count++;
@@ -240,9 +254,121 @@ initial begin
       error_count++;
     end
   end
+  if (error_count != 0) begin
+    $display("ERROR_COUNT > 0");
+  end
+  $display("[%t] : Read complete", $realtime);
 
 
-  // Direct read
+  // ===============
+  // === Realloc ===
+  // ===============
+  $display("[%t] : Starting realloc", $realtime);
+  // Buffer address is still in read_data_*
+  tb.poke_bar1(.addr(4 * `FLETCHER_REG_MM_HDR_ADDR_LO), .data(read_data_lo));
+  tb.poke_bar1(.addr(4 * `FLETCHER_REG_MM_HDR_ADDR_HI), .data(read_data_hi));
+
+  // Set size to 20 MB
+  tb.poke_bar1(.addr(4 * `FLETCHER_REG_MM_HDR_SIZE_LO), .data(32'h0140_0000));
+  tb.poke_bar1(.addr(4 * `FLETCHER_REG_MM_HDR_SIZE_HI), .data(32'h0000_0000));
+
+  // Reallocate
+  tb.poke_bar1(.addr(4 * `FLETCHER_REG_MM_HDR_CMD), .data(32'h0000_0009));
+
+  // Wait for completion
+
+  // Poll status at an interval of 1000 nsec
+  // For the real thing, you should probably increase this to put 
+  // less stress on the PCI interface
+  do
+    begin
+      tb.nsec_delay(1000);
+      tb.peek_bar1(.addr(4 * `FLETCHER_REG_MM_HDA_STATUS), .data(read_data));
+      $display("[%t] : Status: %H", $realtime, read_data);
+    end
+  while(read_data[0] !== 1);
+
+  // Get address
+  tb.peek_bar1(.addr(4 * `FLETCHER_REG_MM_HDA_ADDR_LO), .data(read_data_lo));
+  tb.peek_bar1(.addr(4 * `FLETCHER_REG_MM_HDA_ADDR_HI), .data(read_data_hi));
+  cl_buffer_address = {read_data_hi, read_data_lo};
+  $display("[%t] : realloc to %H_%H", $realtime, read_data_hi, read_data_lo);
+
+  // Reset response
+  tb.poke_bar1(.addr(4 * `FLETCHER_REG_MM_HDA_STATUS), .data(32'h0000_0000));
+
+  if (error_count != 0) begin
+    $display("ERROR_COUNT > 0");
+  end
+  $display("[%t] : Reallocated buffer", $realtime);
+
+
+  // ================
+  // === Readback ===
+  // ================
+  $display("[%t] : Starting CL to host DMA transfers ", $realtime);
+
+  // Queue the data movement
+  tb.que_cl_to_buffer(
+    .chan(0),
+    .dst_addr(host_buffer_address + 1024*1024*4),
+    .cl_addr(cl_buffer_address),
+    .len(num_buf_bytes)
+  );
+  tb.que_cl_to_buffer(
+    .chan(0),
+    .dst_addr(host_buffer_address + 1024*1024*8),
+    .cl_addr(cl_buffer_address + 1024*1024*4),
+    .len(num_buf_bytes-64)
+  );
+  tb.que_cl_to_buffer(
+    .chan(0),
+    .dst_addr(host_buffer_address + 1024*1024*12),
+    .cl_addr(cl_buffer_address + 1024*1024*8),
+    .len(num_buf_bytes-128)
+  );
+
+  // Start transfers of data from CL DDR
+  tb.start_que_to_buffer(.chan(0));
+
+  // Wait for dma transfers to complete,
+  // increase the timeout if you have to transfer a lot of data
+  timeout_count = 0;
+  do begin
+    status[0] = tb.is_dma_to_buffer_done(.chan(0));
+    #10ns;
+    timeout_count++;
+  end while ((status != 4'hf) && (timeout_count < 4000));
+
+  if (timeout_count >= 4000) begin
+    $display(
+      "[%t] : *** ERROR *** Timeout waiting for dma transfers from cl",
+      $realtime
+    );
+    error_count++;
+  end
+
+  // Check data integrity
+  for (int i=0; i<num_buf_bytes; i++) begin
+    if (tb.hm_get_byte(i    ) != tb.hm_get_byte(i + 1024*1024*4)) begin
+      error_count++;
+    end
+    if (tb.hm_get_byte(i+ 64) != tb.hm_get_byte(i + 1024*1024*8)) begin
+      error_count++;
+    end
+    if (tb.hm_get_byte(i+128) != tb.hm_get_byte(i + 1024*1024*12)) begin
+      error_count++;
+    end
+  end
+  if (error_count != 0) begin
+    $display("ERROR_COUNT > 0");
+  end
+  $display("[%t] : Read complete", $realtime);
+
+
+  // ===================
+  // === Direct read ===
+  // ===================
   $display("[%t] : Starting direct device memory read ", $realtime);
 
   // Queue the data movement

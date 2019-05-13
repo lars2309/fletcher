@@ -55,7 +55,7 @@ entity axi_top is
     TAG_WIDTH                   : natural := 1;
     NUM_ARROW_BUFFERS           : natural := 0;
     NUM_USER_REGS               : natural := 0;
-    NUM_REGS                    : natural := 26 + 0
+    NUM_REGS                    : natural := 26 + 12
   );
 
   port (

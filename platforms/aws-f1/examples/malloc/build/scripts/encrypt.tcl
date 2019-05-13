@@ -70,6 +70,7 @@ file copy -force $FLETCHER_HARDWARE_DIR/interconnect/Interconnect.vhd           
 file copy -force $FLETCHER_HARDWARE_DIR/interconnect/BusReadArbiter.vhd         $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/interconnect/BusReadArbiterVec.vhd      $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/interconnect/BusReadBuffer.vhd          $TARGET_DIR
+file copy -force $FLETCHER_HARDWARE_DIR/interconnect/BusReadBenchmarker.vhd     $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/interconnect/BusWriteArbiter.vhd        $TARGET_DIR
 file copy -force $FLETCHER_HARDWARE_DIR/interconnect/BusWriteArbiterVec.vhd     $TARGET_DIR
 
