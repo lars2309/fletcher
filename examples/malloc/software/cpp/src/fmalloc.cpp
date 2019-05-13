@@ -193,6 +193,8 @@ int main(int argc, char ** argv) {
   if (benchmark_buffer >= 0) {
     std::cerr << "running device benchmarker...";
     const int BENCH_REG_OFFSET = 26;
+    const int BUS_DATA_BYTES = 512/8;
+    const double PERIOD = 0.000000004;
     uint32_t control = 0;
     uint32_t status;
     uint32_t burst_len = 64;
@@ -208,7 +210,7 @@ int main(int argc, char ** argv) {
     }
     for (int i=0; i<64; i++) {
       if ( (burst_len >> i) == 0) {
-        addr_mask &= (~0) << (64-i+9); // 64-i+log2(BUS_DATA_WIDTH)
+        addr_mask &= (~0) << (64-i+9); // 64-i+log2(BUS_DATA_BYTES)
         break;
       }
     }
@@ -242,9 +244,11 @@ int main(int argc, char ** argv) {
     } else {
       std::cerr << "finished\n";
       platform->readMMIO(BENCH_REG_OFFSET+9, &cycles);
+      uint64_t num_bytes =  BUS_DATA_BYTES * burst_len * max_bursts;
+      int throughput = (num_bytes/(cycles*PERIOD))/1000/1000;
       std::cout << cycles << " cycles for " << max_bursts << " bursts of length "
-          << burst_len << " (" << ((64*burst_len*max_bursts)/1024) << " KiB)\n";
-      std::cout << " MB/s\n";
+          << burst_len << " (" << (num_bytes/1024) << " KiB)\n";
+      std::cout << "D_R[0]: " << throughput << " MB/s\n";
     }
   }
 
