@@ -177,7 +177,7 @@ architecture Implementation of fletcher_wrapper is
 begin
 
   regs_out_en(MM_REG_OFFSET_BENCH_RS + MM_BENCH_REGS - 1 downto MM_REG_OFFSET_BENCH_RS) <= "011000000010";
-  bench_r : BusReadBenchmarker
+  bench_rs : BusReadBenchmarker
     generic map (
       BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
       BUS_DATA_WIDTH              => BUS_DATA_WIDTH,
@@ -235,6 +235,67 @@ begin
           (MM_REG_OFFSET_BENCH_RS+10)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_RS+9)*REG_WIDTH),
       reg_checksum                => regs_out (
           (MM_REG_OFFSET_BENCH_RS+11)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_RS+10)*REG_WIDTH)
+    );
+
+  regs_out_en(MM_REG_OFFSET_BENCH_RR + MM_BENCH_REGS - 1 downto MM_REG_OFFSET_BENCH_RR) <= "011000000010";
+  bench_rs : BusReadBenchmarker
+    generic map (
+      BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
+      BUS_DATA_WIDTH              => BUS_DATA_WIDTH,
+      BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
+      BUS_MAX_BURST_LENGTH        => BUS_BURST_MAX_LEN,
+      PATTERN                     => "RANDOM"
+    )
+    port map (
+      bus_clk                     => bus_clk,
+      bus_reset                   => bus_reset,
+
+      bus_rreq_valid              => bench_sr.req_valid,
+      bus_rreq_ready              => bench_sr.req_ready,
+      bus_rreq_addr               => bench_sr.req_addr,
+      bus_rreq_len                => bench_sr.req_len,
+      bus_rdat_valid              => bench_sr.dat_valid,
+      bus_rdat_ready              => bench_sr.dat_ready,
+      bus_rdat_data               => bench_sr.dat_data,
+      bus_rdat_last               => bench_sr.dat_last,
+      
+      -- Control / status registers
+      reg_control                 => regs_in (
+          (MM_REG_OFFSET_BENCH_RR+1)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_RR+0)*REG_WIDTH),
+      reg_status                  => regs_out (
+          (MM_REG_OFFSET_BENCH_RR+2)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_RR+1)*REG_WIDTH),
+
+      -- Configuration registers
+      
+      -- Burst length
+      reg_burst_length            => regs_in (
+          (MM_REG_OFFSET_BENCH_RR+3)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_RR+2)*REG_WIDTH),
+      
+      -- Maximum number of bursts
+      reg_max_bursts              => regs_in (
+          (MM_REG_OFFSET_BENCH_RR+4)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_RR+3)*REG_WIDTH),
+      
+      -- Base addresse
+      reg_base_addr_lo            => regs_in (
+          (MM_REG_OFFSET_BENCH_RR+5)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_RR+4)*REG_WIDTH),
+      reg_base_addr_hi            => regs_in (
+          (MM_REG_OFFSET_BENCH_RR+6)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_RR+5)*REG_WIDTH),
+      
+      -- Address mask
+      reg_addr_mask_lo            => regs_in (
+          (MM_REG_OFFSET_BENCH_RR+7)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_RR+6)*REG_WIDTH),
+      reg_addr_mask_hi            => regs_in (
+          (MM_REG_OFFSET_BENCH_RR+8)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_RR+7)*REG_WIDTH),
+      
+      -- Number of cycles to absorb a word, set 0 to always accept immediately
+      reg_cycles_per_word         => regs_in (
+          (MM_REG_OFFSET_BENCH_RR+9)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_RR+8)*REG_WIDTH),
+
+      -- Result registers
+      reg_cycles                  => regs_out (
+          (MM_REG_OFFSET_BENCH_RR+10)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_RR+9)*REG_WIDTH),
+      reg_checksum                => regs_out (
+          (MM_REG_OFFSET_BENCH_RR+11)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_RR+10)*REG_WIDTH)
     );
 
   mm_dir_inst : MMDirector
