@@ -19,7 +19,6 @@ use ieee.numeric_std.all;
 
 library work;
 use work.Utils.all;
-use work.SimUtils.all;
 use work.Interconnect.all;
 use work.Streams.all;
 
