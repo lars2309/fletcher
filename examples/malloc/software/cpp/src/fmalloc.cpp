@@ -18,6 +18,7 @@
  */
 #include <stdlib.h>
 #include <stdint.h>
+#include <unistd.h>
 #include <limits>
 #include <chrono>
 #include <cstdint>
@@ -79,6 +80,8 @@ int main(int argc, char ** argv) {
 //  malloc_sizes.push_back(1024L*1024*1024* 1024); //  1 TB
   int n_mallocs = malloc_sizes.size();
 
+  int benchmark_buffer = 4;
+
   // Initialize FPGA
   std::shared_ptr<fletcher::Platform> platform;
   std::shared_ptr<fletcher::Context> context;
@@ -100,7 +103,7 @@ int main(int argc, char ** argv) {
     platform->deviceMalloc(&maddr[i], malloc_sizes[i]);
     t.stop();
     t_alloc[i] = t.seconds();
-    int throughput = malloc_sizes[i] / t.seconds() / 1024/1024/1024;
+    int throughput = malloc_sizes[i] / t.seconds() / 1000/1000/1000;
     std::cout << "Alloc[" << i << "]: " << throughput << " GB/s";
     std::cout << " (" << malloc_sizes[i] << " B)" << std::endl;
   }
@@ -139,7 +142,7 @@ int main(int argc, char ** argv) {
         t.stop();
         t_write[i] = t.seconds();
         std::cerr << "done" << std::endl;
-        int throughput = malloc_sizes[i] / t.seconds() / 1024/1024;
+        int throughput = malloc_sizes[i] / t.seconds() / 1000/1000;
         std::cout << "H2D[" << i << "]: " << throughput << " MB/s";
         std::cout << " (" << malloc_sizes[i] << " B)" << std::endl;
       }
@@ -173,7 +176,7 @@ int main(int argc, char ** argv) {
         t.stop();
         t_read[i] = t.seconds();
         std::cerr << "done" << std::endl;
-        int throughput = malloc_sizes[i] / t.seconds() / 1024/1024;
+        int throughput = malloc_sizes[i] / t.seconds() / 1000/1000;
         std::cout << "D2H[" << i << "]: " << throughput << " MB/s";
         std::cout << " (" << malloc_sizes[i] << " B)" << std::endl;
         if (memcmp(check_buffers.back(), source_buffers.at(i), malloc_sizes[i])) {
@@ -183,6 +186,65 @@ int main(int argc, char ** argv) {
       }
     } else {
       t_read[i] = 0;
+    }
+  }
+
+  // Use hardware benchmarker
+  if (benchmark_buffer >= 0) {
+    std::cerr << "running device benchmarker...";
+    const int BENCH_REG_OFFSET = 26;
+    uint32_t control = 0;
+    uint32_t status;
+    uint32_t burst_len = 64;
+    uint32_t max_bursts = 10000;
+    uint32_t base_addr_lo = (uint32_t) maddr.at(benchmark_buffer);
+    uint32_t base_addr_hi = (uint32_t) (maddr.at(benchmark_buffer) >> 32);
+    uint64_t addr_mask;
+    for (int i=0; i<64; i++) {
+      if ( (malloc_sizes.at(benchmark_buffer) >> i) == 0) {
+        addr_mask = (~0) >> (64-i);
+        break;
+      }
+    }
+    for (int i=0; i<64; i++) {
+      if ( (burst_len >> i) == 0) {
+        addr_mask &= (~0) << (64-i+9); // 64-i+log2(BUS_DATA_WIDTH)
+        break;
+      }
+    }
+    uint32_t addr_mask_lo = (uint32_t) addr_mask;
+    uint32_t addr_mask_hi = (uint32_t) (addr_mask >> 32);
+    uint32_t cycles_per_word = 0;
+    uint32_t cycles;
+    platform->writeMMIO(BENCH_REG_OFFSET+2, burst_len);
+    platform->writeMMIO(BENCH_REG_OFFSET+3, max_bursts);
+    platform->writeMMIO(BENCH_REG_OFFSET+4, base_addr_lo);
+    platform->writeMMIO(BENCH_REG_OFFSET+5, base_addr_hi);
+    platform->writeMMIO(BENCH_REG_OFFSET+6, addr_mask_lo);
+    platform->writeMMIO(BENCH_REG_OFFSET+7, addr_mask_hi);
+    platform->writeMMIO(BENCH_REG_OFFSET+8, cycles_per_word);
+    // Reset
+    control = 4;
+    platform->writeMMIO(BENCH_REG_OFFSET+0, control);
+    // Start
+    control = 1;
+    platform->writeMMIO(BENCH_REG_OFFSET+0, control);
+    // Deassert start
+    control = 0;
+    platform->writeMMIO(BENCH_REG_OFFSET+0, control);
+    // Wait until done
+    do {
+      usleep(2000);
+      platform->readMMIO(BENCH_REG_OFFSET+1, &status);
+    } while (status == 2);
+    if (status != 4) {
+      std::cerr << "ERROR\n";
+    } else {
+      std::cerr << "finished\n";
+      platform->readMMIO(BENCH_REG_OFFSET+9, &cycles);
+      std::cout << cycles << " cycles for " << max_bursts << " bursts of length "
+          << burst_len << " (" << ((64*burst_len*max_bursts)/1024) << " KiB)\n";
+      std::cout << " MB/s\n";
     }
   }
 
