@@ -23,19 +23,6 @@
 `define   CONTROL_START     32'h00000001
 `define   CONTROL_RESET     32'h00000004
 
-`define REG_RETURN_HI       3
-`define REG_RETURN_LO       2
-
-`define REG_OFF_ADDR_HI     4+3
-`define REG_OFF_ADDR_LO     4+2
-
-`define REG_DATA_ADDR_HI    4+5
-`define REG_DATA_ADDR_LO    4+4
-
-// Registers for first and last (exclusive) row index
-`define REG_FIRST_IDX       4+0
-`define REG_LAST_IDX        4+1
-
 // Memory management interface (H2D, request and answer)
 `define FLETCHER_REG_MM_HDR_ADDR_LO  6
 `define FLETCHER_REG_MM_HDR_ADDR_HI  7
@@ -47,7 +34,9 @@
 `define FLETCHER_REG_MM_HDA_ADDR_HI 13
 `define FLETCHER_REG_MM_HDA_STATUS  14
 
-`define NUM_REGISTERS       25
+`define FLETCHER_REG_BENCH  26
+
+`define NUM_REGISTERS       26+12*2
 
 // Offset buffer address in host memory
 `define HOST_ADDR           64'h0000000000000000
@@ -398,6 +387,36 @@ initial begin
     );
     error_count++;
   end
+  $display("[%t] : Read complete", $realtime);
+
+
+  // ========================
+  // === Device benchmark ===
+  // ========================
+  $display("[%t] : Starting device hardware benchmarker ", $realtime);
+  // Burst length
+  tb.poke_bar1(.addr(4 * (`FLETCHER_REG_BENCH+2)), .data(32'h0000_0004));
+  // Bursts
+  tb.poke_bar1(.addr(4 * (`FLETCHER_REG_BENCH+3)), .data(32'h0000_0002));
+  // Base address
+  tb.poke_bar1(.addr(4 * (`FLETCHER_REG_BENCH+4)), .data(read_data_lo));
+  tb.poke_bar1(.addr(4 * (`FLETCHER_REG_BENCH+5)), .data(read_data_hi));
+  // Mask 0140_0000
+  tb.poke_bar1(.addr(4 * (`FLETCHER_REG_BENCH+6)), .data(32'h00ff_f000));
+  tb.poke_bar1(.addr(4 * (`FLETCHER_REG_BENCH+7)), .data(32'h0000_0000));
+  // Cycles per word
+  tb.poke_bar1(.addr(4 * (`FLETCHER_REG_BENCH+8)), .data(32'h0000_0000));
+  // Start
+  tb.poke_bar1(.addr(4 * (`FLETCHER_REG_BENCH+0)), .data(32'h0000_0004));
+  tb.poke_bar1(.addr(4 * (`FLETCHER_REG_BENCH+0)), .data(32'h0000_0001));
+  tb.poke_bar1(.addr(4 * (`FLETCHER_REG_BENCH+0)), .data(32'h0000_0000));
+  do
+    begin
+      tb.nsec_delay(1000);
+      tb.peek_bar1(.addr(4 * (`FLETCHER_REG_BENCH+1)), .data(read_data));
+      $display("[%t] : Status: %H", $realtime, read_data);
+    end
+  while(read_data[0] !== 1);
   $display("[%t] : Read complete", $realtime);
 
 
