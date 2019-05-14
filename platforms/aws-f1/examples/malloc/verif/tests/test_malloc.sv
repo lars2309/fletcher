@@ -395,9 +395,9 @@ initial begin
   // ========================
   $display("[%t] : Starting device hardware benchmarker ", $realtime);
   // Burst length
-  tb.poke_bar1(.addr(4 * (`FLETCHER_REG_BENCH+2)), .data(32'h0000_0004));
+  tb.poke_bar1(.addr(4 * (`FLETCHER_REG_BENCH+2)), .data(32'h0000_0010)); // 1 KiB
   // Bursts
-  tb.poke_bar1(.addr(4 * (`FLETCHER_REG_BENCH+3)), .data(32'h0000_0002));
+  tb.poke_bar1(.addr(4 * (`FLETCHER_REG_BENCH+3)), .data(32'h0000_000a));
   // Base address
   tb.poke_bar1(.addr(4 * (`FLETCHER_REG_BENCH+4)), .data(read_data_lo));
   tb.poke_bar1(.addr(4 * (`FLETCHER_REG_BENCH+5)), .data(read_data_hi));
@@ -416,7 +416,7 @@ initial begin
       tb.peek_bar1(.addr(4 * (`FLETCHER_REG_BENCH+1)), .data(read_data));
       $display("[%t] : Status: %H", $realtime, read_data);
     end
-  while(read_data[0] !== 1);
+  while(read_data !== 4);
   $display("[%t] : Read complete", $realtime);
 
 
