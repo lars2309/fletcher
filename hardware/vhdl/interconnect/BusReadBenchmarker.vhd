@@ -238,7 +238,7 @@ begin
         
         -- If there is valid data on the bus...
         if bus_rdat_valid = '1' then
-          if v.accept_cycles - 1 /= 0 then
+          if v.accept_cycles /= 0 then
             v.accept_cycles := v.accept_cycles - 1;
             rdat_ready_v := '0';
           else
