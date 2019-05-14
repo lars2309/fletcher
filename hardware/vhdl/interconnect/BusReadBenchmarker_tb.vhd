@@ -91,7 +91,11 @@ begin
     reg_burst_length <= X"00000010";
     reg_max_bursts   <= X"00000004";
     reg_control      <= X"00000001";
-    
+
+    wait until rising_edge(bus_clk);
+
+    reg_control      <= X"00000000";
+
     loop 
       wait until rising_edge(bus_clk);
       exit when reg_status = X"00000004";
