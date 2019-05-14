@@ -212,7 +212,7 @@ package Interconnect is
       BUS_ADDR_WIDTH              : natural := 64;
       BUS_DATA_WIDTH              : natural := 512;
       BUS_LEN_WIDTH               : natural := 9;
-      BUS_MAX_BURST_LENGTH        : natural := 256;
+      BUS_MAX_BURST_LENGTH        : natural := 64;
       BUS_BURST_BOUNDARY          : natural := 4096;
       PATTERN                     : string := "RANDOM"
     );

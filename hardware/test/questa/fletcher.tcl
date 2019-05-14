@@ -96,6 +96,7 @@ proc add_interconnect {{source_dir ""}} {
   add_source $source_dir/interconnect/Interconnect.vhd
   add_source $source_dir/interconnect/BusReadArbiter.vhd
   add_source $source_dir/interconnect/BusReadArbiterVec.vhd
+  add_source $source_dir/interconnect/BusReadBenchmarker.vhd
   add_source $source_dir/interconnect/BusReadBuffer.vhd
   add_source $source_dir/interconnect/BusWriteArbiter.vhd
   add_source $source_dir/interconnect/BusWriteArbiterVec.vhd

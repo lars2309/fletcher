@@ -253,6 +253,13 @@ int main(int argc, char ** argv) {
 
     std::cerr << "running device benchmarker...";
     bench_reg_offset = 26 + 12;
+    platform->writeMMIO(bench_reg_offset+2, burst_len);
+    platform->writeMMIO(bench_reg_offset+3, max_bursts);
+    platform->writeMMIO(bench_reg_offset+4, base_addr_lo);
+    platform->writeMMIO(bench_reg_offset+5, base_addr_hi);
+    platform->writeMMIO(bench_reg_offset+6, addr_mask_lo);
+    platform->writeMMIO(bench_reg_offset+7, addr_mask_hi);
+    platform->writeMMIO(bench_reg_offset+8, cycles_per_word);
     // Reset
     control = 4;
     platform->writeMMIO(bench_reg_offset+0, control);
