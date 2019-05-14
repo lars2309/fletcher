@@ -106,13 +106,26 @@ architecture Implementation of fletcher_wrapper is
   constant MM_REG_OFFSET_BENCH_RS      : natural := 26;
   constant MM_REG_OFFSET_BENCH_RR      : natural := MM_REG_OFFSET_BENCH_RS + MM_BENCH_REGS;
 
+  type bus_req_t is record
+    valid             : std_logic;
+    ready             : std_logic;
+    addr              : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+    len               : std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
+  end record bus_req_t;
+
+  type translate_t is record
+    req               : bus_req_t;
+    resp_valid        : std_logic;
+    resp_ready        : std_logic;
+    resp_data         : std_logic_vector(BUS_ADDR_WIDTH*3-1 downto 0);
+    resp_virt         : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+    resp_phys         : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+    resp_mask         : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+  end record translate_t;
 
   type bus_r_t is record
-    req_valid         : std_logic;
-    req_ready         : std_logic;
-    req_addr          : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-    req_len           : std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
-    req_size          : std_logic_vector(2 downto 0);
+    virt              : bus_req_t;
+    phys              : bus_req_t;
     dat_valid         : std_logic;
     dat_ready         : std_logic;
     dat_data          : std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
@@ -120,11 +133,8 @@ architecture Implementation of fletcher_wrapper is
   end record bus_r_t;
 
   type bus_w_t is record
-    req_valid         : std_logic;
-    req_ready         : std_logic;
-    req_addr          : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-    req_len           : std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
-    req_size          : std_logic_vector(2 downto 0);
+    virt              : bus_req_t;
+    phys              : bus_req_t;
     dat_valid         : std_logic;
     dat_ready         : std_logic;
     dat_data          : std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
@@ -136,6 +146,7 @@ architecture Implementation of fletcher_wrapper is
     resp_resp         : std_logic_vector(1 downto 0);
   end record bus_w_t;
 
+  -- MMDirector commands and response between MMHostInterface and MMDirector.
   signal cmd_region   : std_logic_vector(log2ceil(MEM_REGIONS+1)-1 downto 0);
   signal cmd_addr     : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
   signal cmd_size     : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
@@ -144,36 +155,26 @@ architecture Implementation of fletcher_wrapper is
   signal cmd_realloc  : std_logic;
   signal cmd_valid    : std_logic;
   signal cmd_ready    : std_logic;
-
   signal resp_addr    : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
   signal resp_success : std_logic;
   signal resp_valid   : std_logic;
   signal resp_ready   : std_logic;
 
-  -- Translate request channel
-  signal tr_req_valid              : std_logic;
-  signal tr_req_ready              : std_logic;
-  signal tr_req_addr               : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-  -- Translate response channel
-  signal tr_rsp_valid              : std_logic;
-  signal tr_rsp_ready              : std_logic;
-  signal tr_rsp_virt               : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-  signal tr_rsp_phys               : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-  signal tr_rsp_mask               : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+  -- Request and response between MMU and MMDirector
+  signal tr_mmu       : translate_t;
 
-  signal mmu_req_valid          : std_logic;
-  signal mmu_req_ready          : std_logic;
-  signal mmu_req_addr           : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+  signal translate    : translate_t;
 
-  signal mmu_resp_valid         : std_logic;
-  signal mmu_resp_ready         : std_logic;
-  signal mmu_resp_addr          : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+  signal htr_resp_data : std_logic_vector(BUS_ADDR_WIDTH*3-1 downto 0);
 
-  signal dir_r                  : bus_r_t;
-  signal dir_w                  : bus_w_t;
-  signal mmu_r                  : bus_r_t;
-  signal bench_rs               : bus_r_t;
-  signal bench_rr               : bus_r_t;
+  signal dir_r        : bus_r_t;
+  signal dir_w        : bus_w_t;
+  signal mmu_r        : bus_r_t;
+
+  signal bench_rs     : bus_r_t;
+  signal tr_bench_rs  : translate_t;
+  signal bench_rr     : bus_r_t;
+  signal tr_bench_rr  : translate_t;
 
 begin
 
@@ -190,10 +191,10 @@ begin
       bus_clk                     => bus_clk,
       bus_reset                   => bus_reset,
 
-      bus_rreq_valid              => bench_rs.req_valid,
-      bus_rreq_ready              => bench_rs.req_ready,
-      bus_rreq_addr               => bench_rs.req_addr,
-      bus_rreq_len                => bench_rs.req_len,
+      bus_rreq_valid              => bench_rs.virt.valid,
+      bus_rreq_ready              => bench_rs.virt.ready,
+      bus_rreq_addr               => bench_rs.virt.addr,
+      bus_rreq_len                => bench_rs.virt.len,
       bus_rdat_valid              => bench_rs.dat_valid,
       bus_rdat_ready              => bench_rs.dat_ready,
       bus_rdat_data               => bench_rs.dat_data,
@@ -238,6 +239,43 @@ begin
           (MM_REG_OFFSET_BENCH_RS+11)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_RS+10)*REG_WIDTH)
     );
 
+  bench_rs_translator : MMTranslator
+  generic map (
+    BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
+    BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
+    VM_BASE                     => VM_BASE,
+    PT_ENTRIES_LOG2             => PT_ENTRIES_LOG2,
+    PAGE_SIZE_LOG2              => PAGE_SIZE_LOG2,
+    SLV_SLICES                  => 0,
+    MST_SLICES                  => 0
+  )
+  port map (
+    clk                         => bus_clk,
+    reset                       => bus_reset,
+
+    -- Slave request channel
+    slv_req_valid               => bench_rs.virt.valid,
+    slv_req_ready               => bench_rs.virt.ready,
+    slv_req_addr                => bench_rs.virt.addr,
+    slv_req_len                 => bench_rs.virt.len,
+    -- Master request channel
+    mst_req_valid               => bench_rs.phys.valid,
+    mst_req_ready               => bench_rs.phys.ready,
+    mst_req_addr                => bench_rs.phys.addr,
+    mst_req_len                 => bench_rs.phys.len,
+
+    -- Translate request channel
+    req_valid                   => tr_bench_rs.req.valid,
+    req_ready                   => tr_bench_rs.req.ready,
+    req_addr                    => tr_bench_rs.req.addr,
+    -- Translate response channel
+    resp_valid                  => tr_bench_rs.resp_valid,
+    resp_ready                  => tr_bench_rs.resp_ready,
+    resp_virt                   => tr_bench_rs.resp_virt,
+    resp_phys                   => tr_bench_rs.resp_phys,
+    resp_mask                   => tr_bench_rs.resp_mask
+  );
+
   regs_out_en(MM_REG_OFFSET_BENCH_RR + MM_BENCH_REGS - 1 downto MM_REG_OFFSET_BENCH_RR) <= "011000000010";
   bench_rr_inst : BusReadBenchmarker
     generic map (
@@ -251,10 +289,10 @@ begin
       bus_clk                     => bus_clk,
       bus_reset                   => bus_reset,
 
-      bus_rreq_valid              => bench_rr.req_valid,
-      bus_rreq_ready              => bench_rr.req_ready,
-      bus_rreq_addr               => bench_rr.req_addr,
-      bus_rreq_len                => bench_rr.req_len,
+      bus_rreq_valid              => bench_rr.virt.valid,
+      bus_rreq_ready              => bench_rr.virt.ready,
+      bus_rreq_addr               => bench_rr.virt.addr,
+      bus_rreq_len                => bench_rr.virt.len,
       bus_rdat_valid              => bench_rr.dat_valid,
       bus_rdat_ready              => bench_rr.dat_ready,
       bus_rdat_data               => bench_rr.dat_data,
@@ -299,6 +337,43 @@ begin
           (MM_REG_OFFSET_BENCH_RR+11)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_RR+10)*REG_WIDTH)
     );
 
+  bench_rr_translator : MMTranslator
+  generic map (
+    BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
+    BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
+    VM_BASE                     => VM_BASE,
+    PT_ENTRIES_LOG2             => PT_ENTRIES_LOG2,
+    PAGE_SIZE_LOG2              => PAGE_SIZE_LOG2,
+    SLV_SLICES                  => 0,
+    MST_SLICES                  => 0
+  )
+  port map (
+    clk                         => bus_clk,
+    reset                       => bus_reset,
+
+    -- Slave request channel
+    slv_req_valid               => bench_rr.virt.valid,
+    slv_req_ready               => bench_rr.virt.ready,
+    slv_req_addr                => bench_rr.virt.addr,
+    slv_req_len                 => bench_rr.virt.len,
+    -- Master request channel
+    mst_req_valid               => bench_rr.phys.valid,
+    mst_req_ready               => bench_rr.phys.ready,
+    mst_req_addr                => bench_rr.phys.addr,
+    mst_req_len                 => bench_rr.phys.len,
+
+    -- Translate request channel
+    req_valid                   => tr_bench_rr.req.valid,
+    req_ready                   => tr_bench_rr.req.ready,
+    req_addr                    => tr_bench_rr.req.addr,
+    -- Translate response channel
+    resp_valid                  => tr_bench_rr.resp_valid,
+    resp_ready                  => tr_bench_rr.resp_ready,
+    resp_virt                   => tr_bench_rr.resp_virt,
+    resp_phys                   => tr_bench_rr.resp_phys,
+    resp_mask                   => tr_bench_rr.resp_mask
+  );
+
   mm_dir_inst : MMDirector
     generic map (
       PAGE_SIZE_LOG2              => PAGE_SIZE_LOG2,
@@ -328,28 +403,28 @@ begin
       resp_valid                  => resp_valid,
       resp_ready                  => resp_ready,
 
-      mmu_req_valid               => mmu_req_valid,
-      mmu_req_ready               => mmu_req_ready,
-      mmu_req_addr                => mmu_req_addr,
+      mmu_req_valid               => tr_mmu.req.valid,
+      mmu_req_ready               => tr_mmu.req.ready,
+      mmu_req_addr                => tr_mmu.req.addr,
 
-      mmu_resp_valid              => mmu_resp_valid,
-      mmu_resp_ready              => mmu_resp_ready,
-      mmu_resp_addr               => mmu_resp_addr,
+      mmu_resp_valid              => tr_mmu.resp_valid,
+      mmu_resp_ready              => tr_mmu.resp_ready,
+      mmu_resp_addr               => tr_mmu.resp_phys,
 
-      bus_wreq_valid              => dir_w.req_valid,
-      bus_wreq_ready              => dir_w.req_ready,
-      bus_wreq_addr               => dir_w.req_addr,
-      bus_wreq_len                => dir_w.req_len,
+      bus_wreq_valid              => dir_w.phys.valid,
+      bus_wreq_ready              => dir_w.phys.ready,
+      bus_wreq_addr               => dir_w.phys.addr,
+      bus_wreq_len                => dir_w.phys.len,
       bus_wdat_valid              => dir_w.dat_valid,
       bus_wdat_ready              => dir_w.dat_ready,
       bus_wdat_data               => dir_w.dat_data,
       bus_wdat_strobe             => dir_w.dat_strobe,
       bus_wdat_last               => dir_w.dat_last,
 
-      bus_rreq_valid              => dir_r.req_valid,
-      bus_rreq_ready              => dir_r.req_ready,
-      bus_rreq_addr               => dir_r.req_addr,
-      bus_rreq_len                => dir_r.req_len,
+      bus_rreq_valid              => dir_r.phys.valid,
+      bus_rreq_ready              => dir_r.phys.ready,
+      bus_rreq_addr               => dir_r.phys.addr,
+      bus_rreq_len                => dir_r.phys.len,
       bus_rdat_valid              => dir_r.dat_valid,
       bus_rdat_ready              => dir_r.dat_ready,
       bus_rdat_data               => dir_r.dat_data,
@@ -407,10 +482,10 @@ begin
       reset                       => bus_reset,
 
       -- Read address channel
-      bus_rreq_addr               => mmu_r.req_addr,
-      bus_rreq_len                => mmu_r.req_len,
-      bus_rreq_valid              => mmu_r.req_valid,
-      bus_rreq_ready              => mmu_r.req_ready,
+      bus_rreq_addr               => mmu_r.phys.addr,
+      bus_rreq_len                => mmu_r.phys.len,
+      bus_rreq_valid              => mmu_r.phys.valid,
+      bus_rreq_ready              => mmu_r.phys.ready,
 
       -- Read data channel
       bus_rdat_data               => mmu_r.dat_data,
@@ -419,24 +494,89 @@ begin
       bus_rdat_ready              => mmu_r.dat_ready,
 
       -- Translate request channel
-      req_valid                   => htr_req_valid,
-      req_ready                   => htr_req_ready,
-      req_addr                    => htr_req_addr,
+      req_valid                   => translate.req.valid,
+      req_ready                   => translate.req.ready,
+      req_addr                    => translate.req.addr,
       -- Translate response channel
-      resp_valid                  => htr_resp_valid,
-      resp_ready                  => htr_resp_ready,
-      resp_virt                   => htr_resp_virt,
-      resp_phys                   => htr_resp_phys,
-      resp_mask                   => htr_resp_mask,
+      resp_valid                  => translate.resp_valid,
+      resp_ready                  => translate.resp_ready,
+      resp_virt                   => translate.resp_virt,
+      resp_phys                   => translate.resp_phys,
+      resp_mask                   => translate.resp_mask,
 
-      dir_req_valid               => mmu_req_valid,
-      dir_req_ready               => mmu_req_ready,
-      dir_req_addr                => mmu_req_addr,
+      dir_req_valid               => tr_mmu.req.valid,
+      dir_req_ready               => tr_mmu.req.ready,
+      dir_req_addr                => tr_mmu.req.addr,
 
-      dir_resp_valid              => mmu_resp_valid,
-      dir_resp_ready              => mmu_resp_ready,
-      dir_resp_addr               => mmu_resp_addr
+      dir_resp_valid              => tr_mmu.resp_valid,
+      dir_resp_ready              => tr_mmu.resp_ready,
+      dir_resp_addr               => tr_mmu.resp_phys
     );
+
+  tr_req_arb_inst : BusReadArbiter
+  generic map (
+    BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
+    BUS_LEN_WIDTH               => 1,
+    BUS_DATA_WIDTH              => BUS_ADDR_WIDTH * 3,
+    NUM_SLAVE_PORTS             => 3,
+    ARB_METHOD                  => "ROUND-ROBIN",
+    MAX_OUTSTANDING             => 2,
+    SLV_REQ_SLICES              => true,
+    MST_REQ_SLICE               => true,
+    MST_DAT_SLICE               => true,
+    SLV_DAT_SLICES              => true
+  )
+  port map (
+    bus_clk                     => bus_clk,
+    bus_reset                   => bus_reset,
+
+    mst_rreq_valid              => translate.req.valid,
+    mst_rreq_ready              => translate.req.ready,
+    mst_rreq_addr               => translate.req.addr,
+    mst_rdat_valid              => translate.resp_valid,
+    mst_rdat_ready              => translate.resp_ready,
+    mst_rdat_data               => translate.resp_data,
+    mst_rdat_last               => '1',
+
+    bs00_rreq_valid             => htr_req_valid,
+    bs00_rreq_ready             => htr_req_ready,
+    bs00_rreq_addr              => htr_req_addr,
+    bs00_rreq_len               => "1",
+    bs00_rdat_valid             => htr_resp_valid,
+    bs00_rdat_ready             => htr_resp_ready,
+    bs00_rdat_data              => htr_resp_data,
+
+    bs01_rreq_valid             => tr_bench_rs.req.valid,
+    bs01_rreq_ready             => tr_bench_rs.req.ready,
+    bs01_rreq_addr              => tr_bench_rs.req.addr,
+    bs01_rreq_len               => "1",
+    bs01_rdat_valid             => tr_bench_rs.resp_valid,
+    bs01_rdat_ready             => tr_bench_rs.resp_ready,
+    bs01_rdat_data              => tr_bench_rs.resp_data,
+
+    bs02_rreq_valid             => tr_bench_rr.req.valid,
+    bs02_rreq_ready             => tr_bench_rr.req.ready,
+    bs02_rreq_addr              => tr_bench_rr.req.addr,
+    bs02_rreq_len               => "1",
+    bs02_rdat_valid             => tr_bench_rr.resp_valid,
+    bs02_rdat_ready             => tr_bench_rr.resp_ready,
+    bs02_rdat_data              => tr_bench_rr.resp_data
+  );
+
+  translate.resp_data   <= translate.resp_virt & translate.resp_phys & translate.resp_mask;
+
+  htr_resp_virt         <= EXTRACT(htr_resp_data, BUS_ADDR_WIDTH*2, BUS_ADDR_WIDTH);
+  htr_resp_phys         <= EXTRACT(htr_resp_data, BUS_ADDR_WIDTH*1, BUS_ADDR_WIDTH);
+  htr_resp_mask         <= EXTRACT(htr_resp_data, BUS_ADDR_WIDTH*0, BUS_ADDR_WIDTH);
+
+  tr_bench_rs.resp_virt <= EXTRACT(tr_bench_rs.resp_data, BUS_ADDR_WIDTH*2, BUS_ADDR_WIDTH);
+  tr_bench_rs.resp_phys <= EXTRACT(tr_bench_rs.resp_data, BUS_ADDR_WIDTH*1, BUS_ADDR_WIDTH);
+  tr_bench_rs.resp_mask <= EXTRACT(tr_bench_rs.resp_data, BUS_ADDR_WIDTH*0, BUS_ADDR_WIDTH);
+
+  tr_bench_rr.resp_virt <= EXTRACT(tr_bench_rr.resp_data, BUS_ADDR_WIDTH*2, BUS_ADDR_WIDTH);
+  tr_bench_rr.resp_phys <= EXTRACT(tr_bench_rr.resp_data, BUS_ADDR_WIDTH*1, BUS_ADDR_WIDTH);
+  tr_bench_rr.resp_mask <= EXTRACT(tr_bench_rr.resp_data, BUS_ADDR_WIDTH*0, BUS_ADDR_WIDTH);
+
 
   bus_read_arb_inst : BusReadArbiter
     generic map (
@@ -464,37 +604,37 @@ begin
       mst_rdat_data             => mst_rdat_data,
       mst_rdat_last             => mst_rdat_last,
 
-      bs00_rreq_valid           => mmu_r.req_valid,
-      bs00_rreq_ready           => mmu_r.req_ready,
-      bs00_rreq_addr            => mmu_r.req_addr,
-      bs00_rreq_len             => mmu_r.req_len,
+      bs00_rreq_valid           => mmu_r.phys.valid,
+      bs00_rreq_ready           => mmu_r.phys.ready,
+      bs00_rreq_addr            => mmu_r.phys.addr,
+      bs00_rreq_len             => mmu_r.phys.len,
       bs00_rdat_valid           => mmu_r.dat_valid,
       bs00_rdat_ready           => mmu_r.dat_ready,
       bs00_rdat_data            => mmu_r.dat_data,
       bs00_rdat_last            => mmu_r.dat_last,
 
-      bs01_rreq_valid           => dir_r.req_valid,
-      bs01_rreq_ready           => dir_r.req_ready,
-      bs01_rreq_addr            => dir_r.req_addr,
-      bs01_rreq_len             => dir_r.req_len,
+      bs01_rreq_valid           => dir_r.phys.valid,
+      bs01_rreq_ready           => dir_r.phys.ready,
+      bs01_rreq_addr            => dir_r.phys.addr,
+      bs01_rreq_len             => dir_r.phys.len,
       bs01_rdat_valid           => dir_r.dat_valid,
       bs01_rdat_ready           => dir_r.dat_ready,
       bs01_rdat_data            => dir_r.dat_data,
       bs01_rdat_last            => dir_r.dat_last,
 
-      bs02_rreq_valid           => bench_rs.req_valid,
-      bs02_rreq_ready           => bench_rs.req_ready,
-      bs02_rreq_addr            => bench_rs.req_addr,
-      bs02_rreq_len             => bench_rs.req_len,
+      bs02_rreq_valid           => bench_rs.phys.valid,
+      bs02_rreq_ready           => bench_rs.phys.ready,
+      bs02_rreq_addr            => bench_rs.phys.addr,
+      bs02_rreq_len             => bench_rs.phys.len,
       bs02_rdat_valid           => bench_rs.dat_valid,
       bs02_rdat_ready           => bench_rs.dat_ready,
       bs02_rdat_data            => bench_rs.dat_data,
       bs02_rdat_last            => bench_rs.dat_last,
 
-      bs03_rreq_valid           => bench_rr.req_valid,
-      bs03_rreq_ready           => bench_rr.req_ready,
-      bs03_rreq_addr            => bench_rr.req_addr,
-      bs03_rreq_len             => bench_rr.req_len,
+      bs03_rreq_valid           => bench_rr.phys.valid,
+      bs03_rreq_ready           => bench_rr.phys.ready,
+      bs03_rreq_addr            => bench_rr.phys.addr,
+      bs03_rreq_len             => bench_rr.phys.len,
       bs03_rdat_valid           => bench_rr.dat_valid,
       bs03_rdat_ready           => bench_rr.dat_ready,
       bs03_rdat_data            => bench_rr.dat_data,
@@ -535,10 +675,10 @@ begin
       mst_resp_ready            => mst_resp_ready,
       mst_resp_ok               => mst_resp_ok,
 
-      bs00_wreq_valid           => dir_w.req_valid,
-      bs00_wreq_ready           => dir_w.req_ready,
-      bs00_wreq_addr            => dir_w.req_addr,
-      bs00_wreq_len             => dir_w.req_len,
+      bs00_wreq_valid           => dir_w.phys.valid,
+      bs00_wreq_ready           => dir_w.phys.ready,
+      bs00_wreq_addr            => dir_w.phys.addr,
+      bs00_wreq_len             => dir_w.phys.len,
       bs00_wdat_valid           => dir_w.dat_valid,
       bs00_wdat_ready           => dir_w.dat_ready,
       bs00_wdat_data            => dir_w.dat_data,
