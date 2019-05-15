@@ -571,6 +571,7 @@ begin
            rolodex_insert_ready, rolodex_delete_ready,
            my_bus_wreq, my_bus_wdat,
            my_bus_rreq, my_bus_rdat,
+           mmu_bus_wreq,
            mmu_req_valid, mmu_req_addr, mmu_resp_ready) is
     variable v : reg_type;
     variable handshake : std_logic;
@@ -748,7 +749,7 @@ begin
       -- Clear the frames utilization bitmap.
       dir_frames_cmd_valid  <= '1';
       dir_frames_cmd_action <= MM_FRAMES_CLEAR;
-      if frames_cmd_ready = '1' then
+      if dir_frames_cmd_ready = '1' then
         v.state_stack(0) := CLEAR_FRAMES_CHECK;
       end if;
 
@@ -1520,7 +1521,7 @@ begin
       v.byte_buffer(int(PT_BITMAP_IDX(v.addr_pt) mod BYTE_SIZE)) := '0';
       if my_bus_wreq.ready = '1' then
         -- TODO: make this work for bitmaps > BUS_DATA_WIDTH
-        if BIT_COUNT(my_bus_rdat.data(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH) downto 0)) = 1 then
+        if BIT_COUNT(my_bus_rdat.data(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH)-1 downto 0)) = 1 then
           -- This was the last page table in the frame, delete it.
           v.state_stack(0) := PT_DEL_ROLODEX;
         else
