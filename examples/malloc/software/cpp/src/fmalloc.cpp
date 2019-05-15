@@ -73,7 +73,8 @@ uint64_t get_addr_mask(uint64_t buffer_size, int burst_len) {
   return addr_mask;
 }
 
-uint32_t device_bench(int reg_offset, uint32_t burst_len, uint32_t bursts,
+uint32_t device_bench(std::shared_ptr<fletcher::Platform> platform, 
+    int reg_offset, uint32_t burst_len, uint32_t bursts,
     uint64_t base_addr, uint64_t addr_mask) {
   std::cerr << "running device benchmarker...";
   uint32_t control = 0;
@@ -268,52 +269,52 @@ int main(int argc, char ** argv) {
     uint32_t burst_len = 1;
     uint32_t bursts = 1;
     uint64_t addr_mask = get_addr_mask(malloc_sizes.at(benchmark_buffer), burst_len);
-    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
-    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
 
     std::cerr << "Performing sequential reads with decrementing burst sizes." << std::endl;
 
     burst_len = 64;
     bursts = test_size/BUS_DATA_BYTES/burst_len;
     addr_mask = get_addr_mask(malloc_sizes.at(benchmark_buffer), burst_len);
-    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
-    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
 
     burst_len = 32;
     bursts = test_size/BUS_DATA_BYTES/burst_len;
     addr_mask = get_addr_mask(malloc_sizes.at(benchmark_buffer), burst_len);
-    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
-    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
 
     burst_len = 16;
     bursts = test_size/BUS_DATA_BYTES/burst_len;
     addr_mask = get_addr_mask(malloc_sizes.at(benchmark_buffer), burst_len);
-    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
-    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
 
     burst_len = 8;
     bursts = test_size/BUS_DATA_BYTES/burst_len;
     addr_mask = get_addr_mask(malloc_sizes.at(benchmark_buffer), burst_len);
-    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
-    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
 
     burst_len = 4;
     bursts = test_size/BUS_DATA_BYTES/burst_len;
     addr_mask = get_addr_mask(malloc_sizes.at(benchmark_buffer), burst_len);
-    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
-    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
 
     burst_len = 2;
     bursts = test_size/BUS_DATA_BYTES/burst_len;
     addr_mask = get_addr_mask(malloc_sizes.at(benchmark_buffer), burst_len);
-    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
-    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
 
     burst_len = 1;
     bursts = test_size/BUS_DATA_BYTES/burst_len;
     addr_mask = get_addr_mask(malloc_sizes.at(benchmark_buffer), burst_len);
-    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
-    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
 
     std::cerr << "Performing random reads with decrementing burst sizes." << std::endl;
     bench_reg_offset = 26 + 12;
@@ -321,44 +322,44 @@ int main(int argc, char ** argv) {
     burst_len = 64;
     bursts = test_size/BUS_DATA_BYTES/burst_len;
     addr_mask = get_addr_mask(malloc_sizes.at(benchmark_buffer), burst_len);
-    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
-    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
 
     burst_len = 32;
     bursts = test_size/BUS_DATA_BYTES/burst_len;
     addr_mask = get_addr_mask(malloc_sizes.at(benchmark_buffer), burst_len);
-    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
-    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
 
     burst_len = 16;
     bursts = test_size/BUS_DATA_BYTES/burst_len;
     addr_mask = get_addr_mask(malloc_sizes.at(benchmark_buffer), burst_len);
-    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
-    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
 
     burst_len = 8;
     bursts = test_size/BUS_DATA_BYTES/burst_len;
     addr_mask = get_addr_mask(malloc_sizes.at(benchmark_buffer), burst_len);
-    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
-    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
 
     burst_len = 4;
     bursts = test_size/BUS_DATA_BYTES/burst_len;
     addr_mask = get_addr_mask(malloc_sizes.at(benchmark_buffer), burst_len);
-    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
-    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
 
     burst_len = 2;
     bursts = test_size/BUS_DATA_BYTES/burst_len;
     addr_mask = get_addr_mask(malloc_sizes.at(benchmark_buffer), burst_len);
-    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
-    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
 
     burst_len = 1;
     bursts = test_size/BUS_DATA_BYTES/burst_len;
     addr_mask = get_addr_mask(malloc_sizes.at(benchmark_buffer), burst_len);
-    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
-    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(platform, bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
   }
 
 
