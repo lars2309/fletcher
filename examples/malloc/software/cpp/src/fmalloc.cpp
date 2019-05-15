@@ -57,16 +57,16 @@ uint32_t calc_sum(const std::vector<uint32_t> &values) {
 }
 
 uint64_t get_addr_mask(uint64_t buffer_size, int burst_len) {
-  uint64_t addr_mask;
+  uint64_t addr_mask = ~ 0L;
   for (int i=0; i<64; i++) {
-    if ( (buffer_size >> i) == 0) {
-      addr_mask = (~0) >> (64-i);
+    if ( ((buffer_size-1) >> i) == 0 ) {
+      addr_mask >>= (64-i);
       break;
     }
   }
   for (int i=0; i<64; i++) {
-    if ( (burst_len >> i) == 0) {
-      addr_mask &= (~0) << (64-i+9); // 64-i+log2(BUS_DATA_BYTES)
+    if ( ((burst_len*BUS_DAT_BYTES-1) >> i) == 0) {
+      addr_mask &= (~ 0L) << i;
       break;
     }
   }
