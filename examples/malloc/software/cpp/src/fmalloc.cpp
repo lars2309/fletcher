@@ -65,7 +65,7 @@ uint64_t get_addr_mask(uint64_t buffer_size, int burst_len) {
     }
   }
   for (int i=0; i<64; i++) {
-    if ( ((burst_len*BUS_DAT_BYTES-1) >> i) == 0) {
+    if ( ((burst_len*BUS_DATA_BYTES-1) >> i) == 0) {
       addr_mask &= (~ 0L) << i;
       break;
     }
