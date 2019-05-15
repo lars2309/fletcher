@@ -43,6 +43,8 @@
 #define PRINT_INT(X, S) std::cout << std::dec << (X) << " " << (S) << std::endl << std::flush
 
 #define FLETCHER_ALIGNMENT 4096
+#define BUS_DATA_BYTES 64
+#define PERIOD 0.000000004
 
 using fletcher::Timer;
 
@@ -52,6 +54,53 @@ double calc_sum(const std::vector<double> &values) {
 
 uint32_t calc_sum(const std::vector<uint32_t> &values) {
   return static_cast<uint32_t>(accumulate(values.begin(), values.end(), 0.0));
+}
+
+uint32_t device_bench(int reg_offset, uint32_t burst_len, uint32_t bursts,
+    uint64_t base_addr, uint64_t addr_mask) {
+  std::cerr << "running device benchmarker...";
+  uint32_t control = 0;
+  uint32_t status;
+  uint32_t base_addr_lo = (uint32_t) base_addr;
+  uint32_t base_addr_hi = (uint32_t) (base_addr >> 32);
+  uint32_t addr_mask_lo = (uint32_t) addr_mask;
+  uint32_t addr_mask_hi = (uint32_t) (addr_mask >> 32);
+  uint32_t cycles_per_word = 0;
+  uint32_t cycles;
+  platform->writeMMIO(reg_offset+2, burst_len);
+  platform->writeMMIO(reg_offset+3, bursts);
+  platform->writeMMIO(reg_offset+4, base_addr_lo);
+  platform->writeMMIO(reg_offset+5, base_addr_hi);
+  platform->writeMMIO(reg_offset+6, addr_mask_lo);
+  platform->writeMMIO(reg_offset+7, addr_mask_hi);
+  platform->writeMMIO(reg_offset+8, cycles_per_word);
+  // Reset
+  control = 4;
+  platform->writeMMIO(reg_offset+0, control);
+  // Start
+  control = 1;
+  platform->writeMMIO(reg_offset+0, control);
+  // Deassert start
+  control = 0;
+  platform->writeMMIO(reg_offset+0, control);
+  // Wait until done
+  do {
+    usleep(2000);
+    platform->readMMIO(reg_offset+1, &status);
+  } while (status == 2);
+  if (status != 4) {
+    std::cerr << "ERROR\n";
+    std::cerr << std::flush;
+  } else {
+    std::cerr << "finished\n";
+    std::cerr << std::flush;
+    platform->readMMIO(reg_offset+9, &cycles);
+    uint64_t num_bytes =  BUS_DATA_BYTES * burst_len * max_bursts;
+    int throughput = (num_bytes/(cycles*PERIOD))/1000/1000;
+    std::cout << cycles << " cycles for " << max_bursts << " bursts of length "
+        << burst_len << " (" << (num_bytes/1024) << " KiB)\n";
+    std::cout << "D_R: " << throughput << " MB/s\n";
+  }
 }
 
 /**
@@ -191,16 +240,6 @@ int main(int argc, char ** argv) {
 
   // Use hardware benchmarker
   if (benchmark_buffer >= 0) {
-    std::cerr << "running device benchmarker...";
-    int bench_reg_offset = 26;
-    const int BUS_DATA_BYTES = 512/8;
-    const double PERIOD = 0.000000004;
-    uint32_t control = 0;
-    uint32_t status;
-    uint32_t burst_len = 64;
-    uint32_t max_bursts = 10000;
-    uint32_t base_addr_lo = (uint32_t) maddr.at(benchmark_buffer);
-    uint32_t base_addr_hi = (uint32_t) (maddr.at(benchmark_buffer) >> 32);
     uint64_t addr_mask;
     for (int i=0; i<64; i++) {
       if ( (malloc_sizes.at(benchmark_buffer) >> i) == 0) {
@@ -214,78 +253,93 @@ int main(int argc, char ** argv) {
         break;
       }
     }
-    uint32_t addr_mask_lo = (uint32_t) addr_mask;
-    uint32_t addr_mask_hi = (uint32_t) (addr_mask >> 32);
-    uint32_t cycles_per_word = 0;
-    uint32_t cycles;
-    platform->writeMMIO(bench_reg_offset+2, burst_len);
-    platform->writeMMIO(bench_reg_offset+3, max_bursts);
-    platform->writeMMIO(bench_reg_offset+4, base_addr_lo);
-    platform->writeMMIO(bench_reg_offset+5, base_addr_hi);
-    platform->writeMMIO(bench_reg_offset+6, addr_mask_lo);
-    platform->writeMMIO(bench_reg_offset+7, addr_mask_hi);
-    platform->writeMMIO(bench_reg_offset+8, cycles_per_word);
-    // Reset
-    control = 4;
-    platform->writeMMIO(bench_reg_offset+0, control);
-    // Start
-    control = 1;
-    platform->writeMMIO(bench_reg_offset+0, control);
-    // Deassert start
-    control = 0;
-    platform->writeMMIO(bench_reg_offset+0, control);
-    // Wait until done
-    do {
-      usleep(2000);
-      platform->readMMIO(bench_reg_offset+1, &status);
-    } while (status == 2);
-    if (status != 4) {
-      std::cerr << "ERROR\n";
-    } else {
-      std::cerr << "finished\n";
-      platform->readMMIO(bench_reg_offset+9, &cycles);
-      uint64_t num_bytes =  BUS_DATA_BYTES * burst_len * max_bursts;
-      int throughput = (num_bytes/(cycles*PERIOD))/1000/1000;
-      std::cout << cycles << " cycles for " << max_bursts << " bursts of length "
-          << burst_len << " (" << (num_bytes/1024) << " KiB)\n";
-      std::cout << "D_R[0]: " << throughput << " MB/s\n";
-    }
 
-    std::cerr << "running device benchmarker...";
+    uint64_t dev_raw = 1024L*1024L*1024L; // 1 GiB offset into device memory
+    int test_size = 1024*1024*512; // 512 MiB
+
+    int bench_reg_offset = 26;
+
+    std::cerr << "Performing latency measurement" << std:endl;
+
+    uint32_t burst_len = 1;
+    uint32_t bursts = 1;
+    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+
+    std::cerr << "Performing sequential reads with decrementing burst sizes." << std::endl;
+
+    burst_len = 64;
+    bursts = test_size/BUS_DATA_BYTES/burst_len;
+    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+
+    burst_len = 32;
+    bursts = test_size/BUS_DATA_BYTES/burst_len;
+    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+
+    burst_len = 16;
+    bursts = test_size/BUS_DATA_BYTES/burst_len;
+    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+
+    burst_len = 8;
+    bursts = test_size/BUS_DATA_BYTES/burst_len;
+    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+
+    burst_len = 4;
+    bursts = test_size/BUS_DATA_BYTES/burst_len;
+    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+
+    burst_len = 2;
+    bursts = test_size/BUS_DATA_BYTES/burst_len;
+    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+
+    burst_len = 1;
+    bursts = test_size/BUS_DATA_BYTES/burst_len;
+    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+
+    std::cerr << "Performing random reads with decrementing burst sizes." << std::endl;
     bench_reg_offset = 26 + 12;
-    platform->writeMMIO(bench_reg_offset+2, burst_len);
-    platform->writeMMIO(bench_reg_offset+3, max_bursts);
-    platform->writeMMIO(bench_reg_offset+4, base_addr_lo);
-    platform->writeMMIO(bench_reg_offset+5, base_addr_hi);
-    platform->writeMMIO(bench_reg_offset+6, addr_mask_lo);
-    platform->writeMMIO(bench_reg_offset+7, addr_mask_hi);
-    platform->writeMMIO(bench_reg_offset+8, cycles_per_word);
-    // Reset
-    control = 4;
-    platform->writeMMIO(bench_reg_offset+0, control);
-    // Start
-    control = 1;
-    platform->writeMMIO(bench_reg_offset+0, control);
-    // Deassert start
-    control = 0;
-    platform->writeMMIO(bench_reg_offset+0, control);
-    // Wait until done
-    do {
-      usleep(2000);
-      platform->readMMIO(bench_reg_offset+1, &status);
-    } while (status == 2);
-    if (status != 4) {
-      std::cerr << "ERROR\n";
-    } else {
-      std::cerr << "finished\n";
-      platform->readMMIO(bench_reg_offset+9, &cycles);
-      uint64_t num_bytes =  BUS_DATA_BYTES * burst_len * max_bursts;
-      int throughput = (num_bytes/(cycles*PERIOD))/1000/1000;
-      std::cout << cycles << " cycles for " << max_bursts << " bursts of length "
-          << burst_len << " (" << (num_bytes/1024) << " KiB)\n";
-      std::cout << "D_R[0]: " << throughput << " MB/s\n";
-    }
 
+    burst_len = 64;
+    bursts = test_size/BUS_DATA_BYTES/burst_len;
+    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+
+    burst_len = 32;
+    bursts = test_size/BUS_DATA_BYTES/burst_len;
+    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+
+    burst_len = 16;
+    bursts = test_size/BUS_DATA_BYTES/burst_len;
+    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+
+    burst_len = 8;
+    bursts = test_size/BUS_DATA_BYTES/burst_len;
+    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+
+    burst_len = 4;
+    bursts = test_size/BUS_DATA_BYTES/burst_len;
+    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+
+    burst_len = 2;
+    bursts = test_size/BUS_DATA_BYTES/burst_len;
+    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+
+    burst_len = 1;
+    bursts = test_size/BUS_DATA_BYTES/burst_len;
+    device_bench(bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+    device_bench(bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
   }
 
 
