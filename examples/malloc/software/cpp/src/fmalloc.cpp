@@ -264,7 +264,7 @@ int main(int argc, char ** argv) {
 
     int bench_reg_offset = 26;
 
-    std::cerr << "Performing latency measurement" << std:endl;
+    std::cerr << "Performing latency measurement" << std::endl;
 
     uint32_t burst_len = 1;
     uint32_t bursts = 1;
