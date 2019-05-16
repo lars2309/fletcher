@@ -246,8 +246,8 @@ begin
     VM_BASE                     => VM_BASE,
     PT_ENTRIES_LOG2             => PT_ENTRIES_LOG2,
     PAGE_SIZE_LOG2              => PAGE_SIZE_LOG2,
-    SLV_SLICES                  => 0,
-    MST_SLICES                  => 0
+    SLV_SLICES                  => 2,
+    MST_SLICES                  => 2
   )
   port map (
     clk                         => bus_clk,
@@ -344,8 +344,8 @@ begin
     VM_BASE                     => VM_BASE,
     PT_ENTRIES_LOG2             => PT_ENTRIES_LOG2,
     PAGE_SIZE_LOG2              => PAGE_SIZE_LOG2,
-    SLV_SLICES                  => 0,
-    MST_SLICES                  => 0
+    SLV_SLICES                  => 2,
+    MST_SLICES                  => 2
   )
   port map (
     clk                         => bus_clk,
@@ -586,10 +586,10 @@ begin
       NUM_SLAVE_PORTS           => 4,
       ARB_METHOD                => "FIXED",
       MAX_OUTSTANDING           => 32,
-      SLV_REQ_SLICES            => false,
-      MST_REQ_SLICE             => false,
-      MST_DAT_SLICE             => false,
-      SLV_DAT_SLICES            => false
+      SLV_REQ_SLICES            => true,
+      MST_REQ_SLICE             => true,
+      MST_DAT_SLICE             => true,
+      SLV_DAT_SLICES            => true
     )
     port map (
       bus_clk                   => bus_clk,
@@ -651,12 +651,12 @@ begin
       ARB_METHOD                => "FIXED",
       MAX_DATA_LAG              => 2,
       MAX_OUTSTANDING           => 32,
-      SLV_REQ_SLICES            => false,
-      MST_REQ_SLICE             => false,
-      MST_DAT_SLICE             => false,
-      SLV_DAT_SLICES            => false,
-      MST_RSP_SLICE             => false,
-      SLV_RSP_SLICES            => false
+      SLV_REQ_SLICES            => true,
+      MST_REQ_SLICE             => true,
+      MST_DAT_SLICE             => true,
+      SLV_DAT_SLICES            => true,
+      MST_RSP_SLICE             => true,
+      SLV_RSP_SLICES            => true
     )
     port map (
       bus_clk                   => bus_clk,

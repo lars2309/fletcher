@@ -1970,7 +1970,7 @@ begin
   gapfinder : MMGapFinder
     generic map (
       MASK_WIDTH                  => BUS_DATA_WIDTH / PTE_WIDTH,
-      SLV_SLICE                   => false,
+      SLV_SLICE                   => true,
       MST_SLICE                   => true
     )
     port map (
@@ -2020,10 +2020,10 @@ begin
       NUM_SLAVE_PORTS             => 2,
       ARB_METHOD                  => "FIXED",
       MAX_OUTSTANDING             => 2,
-      SLV_REQ_SLICES              => false,
-      MST_REQ_SLICE               => false,
-      MST_DAT_SLICE               => false,
-      SLV_DAT_SLICES              => false
+      SLV_REQ_SLICES              => true,
+      MST_REQ_SLICE               => true,
+      MST_DAT_SLICE               => true,
+      SLV_DAT_SLICES              => true
     )
     port map (
       bus_clk                     => clk,
@@ -2163,14 +2163,14 @@ begin
       --ELEMENT_COUNT_MAX           => BUS_DATA_WIDTH / PTE_WIDTH,
       --ELEMENT_COUNT_WIDTH         => log2ceil(BUS_DATA_WIDTH / PTE_WIDTH),
 
-      CMD_IN_SLICE                => false,
-      BUS_REQ_SLICE               => false,
-      CMD_OUT_SLICE               => false,
-      UNLOCK_SLICE                => false,
-      SHR2GB_SLICE                => false,
-      GB2FIFO_SLICE               => false,
-      FIFO2POST_SLICE             => false,
-      OUT_SLICE                   => false
+      CMD_IN_SLICE                => true,
+      BUS_REQ_SLICE               => true,
+      CMD_OUT_SLICE               => true,
+      UNLOCK_SLICE                => true,
+      SHR2GB_SLICE                => true,
+      GB2FIFO_SLICE               => true,
+      FIFO2POST_SLICE             => true,
+      OUT_SLICE                   => true
     )
     port map (
       bus_clk                     => clk,
@@ -2210,12 +2210,12 @@ begin
       NUM_SLAVE_PORTS             => 2,
       ARB_METHOD                  => "FIXED",
       MAX_OUTSTANDING             => MAX_OUTSTANDING_TRANSACTIONS,
-      SLV_REQ_SLICES              => false,
-      MST_REQ_SLICE               => false,
-      MST_DAT_SLICE               => false,
-      SLV_DAT_SLICES              => false,
-      MST_RSP_SLICE               => false,
-      SLV_RSP_SLICES              => false
+      SLV_REQ_SLICES              => true,
+      MST_REQ_SLICE               => true,
+      MST_DAT_SLICE               => true,
+      SLV_DAT_SLICES              => true,
+      MST_RSP_SLICE               => true,
+      SLV_RSP_SLICES              => true
     )
     port map (
       bus_clk                   => clk,
@@ -2269,10 +2269,10 @@ begin
       NUM_SLAVE_PORTS             => 3,
       ARB_METHOD                  => "FIXED",
       MAX_OUTSTANDING             => 2,
-      SLV_REQ_SLICES              => false,
+      SLV_REQ_SLICES              => true,
       MST_REQ_SLICE               => BUS_RREQ_SLICE,
       MST_DAT_SLICE               => BUS_RDAT_SLICE,
-      SLV_DAT_SLICES              => false
+      SLV_DAT_SLICES              => true
     )
     port map (
       bus_clk                     => clk,
