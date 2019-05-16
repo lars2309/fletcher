@@ -73,7 +73,7 @@ uint64_t get_addr_mask(uint64_t buffer_size, int burst_len) {
   return addr_mask;
 }
 
-uint32_t device_bench(std::shared_ptr<fletcher::Platform> platform, 
+void device_bench(std::shared_ptr<fletcher::Platform> platform, 
     int reg_offset, uint32_t burst_len, uint32_t bursts,
     uint64_t base_addr, uint64_t addr_mask) {
   std::cerr << "running device benchmarker...";
