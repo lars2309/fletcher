@@ -405,6 +405,13 @@ architecture Behavioral of MMDirector is
   signal gap_a_offset           : std_logic_vector(log2ceil(BUS_DATA_WIDTH / PTE_WIDTH + 1) - 1 downto 0);
   signal gap_a_size             : std_logic_vector(log2ceil(BUS_DATA_WIDTH / PTE_WIDTH + 1) - 1 downto 0);
 
+  signal gap_pt_q_valid         : std_logic;
+  signal gap_pt_q_ready         : std_logic;
+  signal gap_pt_q_holes         : std_logic_vector(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH)-1 downto 0);
+  signal gap_pt_a_valid         : std_logic;
+  signal gap_pt_a_ready         : std_logic;
+  signal gap_pt_a_offset        : std_logic_vector(log2ceil(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH)+1)-1 downto 0);
+
   signal rolodex_entry_valid    : std_logic;
   signal rolodex_entry_ready    : std_logic;
   signal rolodex_entry_mark     : std_logic;
@@ -450,7 +457,8 @@ architecture Behavioral of MMDirector is
       PT_DEL, PT_DEL_MARK_BM_ADDR, PT_DEL_MARK_BM_DATA,
       PT_DEL_ROLODEX, PT_DEL_FRAME, PT_DEL_FRAME_CHECK,
 
-      PT_NEW, PT_NEW_REQ_BM, PT_NEW_CHECK_BM, PT_NEW_MARK_BM_ADDR,
+      PT_NEW,
+      PT_NEW_REQ_BM, PT_NEW_CHECK_BM_TX, PT_NEW_CHECK_BM_RX, PT_NEW_MARK_BM_ADDR,
       PT_NEW_FRAME, PT_NEW_FRAME_CHECK,
       PT_NEW_MARK_BM_DATA, PT_NEW_CLEAR_ADDR, PT_NEW_CLEAR_DATA,
 
@@ -567,6 +575,7 @@ begin
            dir_frames_cmd_ready,
            dir_frames_resp_addr, dir_frames_resp_success, dir_frames_resp_valid,
            gap_a_valid, gap_a_size, gap_a_offset, gap_q_ready,
+           gap_pt_a_valid, gap_pt_a_offset, gap_pt_q_ready,
            rolodex_entry_valid, rolodex_entry_marked, rolodex_entry,
            rolodex_insert_ready, rolodex_delete_ready,
            my_bus_wreq, my_bus_wdat,
@@ -715,8 +724,8 @@ begin
         report "state: PT_NEW" severity note;
       when PT_NEW_REQ_BM =>
         report "state: PT_NEW_REQ_BM" severity note;
-      when PT_NEW_CHECK_BM =>
-        report "state: PT_NEW_CHECK_BM" severity note;
+      when PT_NEW_CHECK_BM_TX =>
+        report "state: PT_NEW_CHECK_BM_TX" severity note;
       when PT_NEW_MARK_BM_ADDR =>
         report "state: PT_NEW_MARK_BM_ADDR" severity note;
       when PT_NEW_FRAME =>
@@ -1597,7 +1606,7 @@ begin
         else
           my_bus_rreq.valid <= '1';
           if my_bus_rreq.ready = '1' then
-            v.state_stack(0) := PT_NEW_CHECK_BM;
+            v.state_stack(0) := PT_NEW_CHECK_BM_TX;
           end if;
         end if;
       end if;
@@ -1623,37 +1632,42 @@ begin
         end if;
       end if;
 
-    when PT_NEW_CHECK_BM =>
-      -- Load the adjacent bitmap bits before marking a bit.
-      -- We need this, because the write strobe has byte granularity.
-      my_bus_rdat.ready <= '1';
-      if my_bus_rdat.valid = '1' then
-        for i in 0 to work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH) loop
-          if i = work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH) then
-            -- All checked places are occupied in this frame
-            -- Try next entry in rolodex
-            rolodex_entry_ready <= '1';
-            v.state_stack(0) := PT_NEW_REQ_BM;
-            exit;
-          end if;
-          if my_bus_rdat.data(i) = '0' then
-            -- Bit 0 refers to the first possible page table in this frame.
-            v.state_stack(0) := PT_NEW_MARK_BM_ADDR;
-            v.addr           := OVERLAY(
+    when PT_NEW_CHECK_BM_TX =>
+      gap_pt_q_holes         <= my_bus_rdat.data(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH)-1 downto 0);
+      gap_pt_q_valid         <= my_bus_rdat.valid;
+      handshake              := gap_pt_q_ready and my_bus_rdat.valid;
+      if handshake = '1' then
+        v.state_stack(0)     := PT_NEW_CHECK_BM_RX;
+      end if;
+
+    when PT_NEW_CHECK_BM_RX =>
+      gap_pt_a_ready         <= '1';
+      if gap_pt_a_valid = '1' then
+        my_bus_rdat.ready    <= '1';
+        if gap_pt_a_offset(gap_pt_a_offset'high) = '1' then
+          -- No gap was found.
+          rolodex_entry_ready <= '1';
+          v.state_stack(0)   := PT_NEW_REQ_BM;
+        else
+          v.state_stack(0)   := PT_NEW_MARK_BM_ADDR;
+          -- Bit 0 refers to the first possible page table in this frame.
+          v.addr             := OVERLAY(
                                     shift_left(
-                                        to_unsigned(i+PT_FIRST_NR, PAGE_SIZE_LOG2),
+                                        resize(
+                                          u(gap_pt_a_offset) + PT_FIRST_NR,
+                                          PAGE_SIZE_LOG2),
                                         PT_SIZE_LOG2),
                                     PAGE_BASE(v.addr));
-            -- Save the byte that needs to be written
-            v.byte_buffer    := EXTRACT(
-                                    unsigned(my_bus_rdat.data),
-                                    (i/BYTE_SIZE)*BYTE_SIZE,
-                                    BYTE_SIZE
-                                  );
-            v.byte_buffer(i mod BYTE_SIZE) := '1';
-            exit;
-          end if;
-        end loop;
+          -- Save the byte that needs to be written
+          v.byte_buffer      := EXTRACT(
+                                  unsigned(my_bus_rdat.data),
+                                  int(mul(
+                                    div_floor(u(gap_pt_a_offset), BYTE_SIZE),
+                                    BYTE_SIZE)),
+                                  BYTE_SIZE
+                                );
+          v.byte_buffer(int(u(gap_pt_a_offset) mod BYTE_SIZE)) := '1';
+        end if;
       end if;
 
     when PT_NEW_MARK_BM_ADDR =>
@@ -1967,7 +1981,7 @@ begin
       delete_entry                => rolodex_delete_entry
     );
 
-  gapfinder : MMGapFinder
+  gapfinder_pte : MMGapFinder
     generic map (
       MASK_WIDTH                  => BUS_DATA_WIDTH / PTE_WIDTH,
       SLV_SLICE                   => true,
@@ -1986,6 +2000,26 @@ begin
       gap_ready                   => gap_a_ready,
       gap_offset                  => gap_a_offset,
       gap_size                    => gap_a_size
+    );
+
+  gapfinder_pt : MMGapFinder
+    generic map (
+      MASK_WIDTH                  => work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH),
+      SLV_SLICE                   => true,
+      MST_SLICE                   => true
+    )
+    port map (
+      clk                         => clk,
+      reset                       => reset,
+
+      req_valid                   => gap_pt_q_valid,
+      req_ready                   => gap_pt_q_ready,
+      req_holes                   => gap_pt_q_holes,
+      req_size                    => slv(to_unsigned(1, log2ceil(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH)+1))),
+
+      gap_valid                   => gap_pt_a_valid,
+      gap_ready                   => gap_pt_a_ready,
+      gap_offset                  => gap_pt_a_offset
     );
 
   framestore : MMFrames
