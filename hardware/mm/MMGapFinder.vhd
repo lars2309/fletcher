@@ -44,8 +44,8 @@ end MMGapFinder;
 
 architecture Behavioral of MMGapFinder is
   constant REI : nat_array := cumulative((
-    1 => MASK_WIDTH,
-    0 => log2ceil(MASK_WIDTH+1)
+    1 => log2ceil(MASK_WIDTH+1),
+    0 => MASK_WIDTH
   ));
   constant GAI : nat_array := cumulative((
     1 => log2ceil(MASK_WIDTH+1),
