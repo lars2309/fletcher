@@ -233,8 +233,8 @@ begin
     port map (
       clk                         => clk,
       reset                       => reset,
-      in_valid                    => int_slv_req.valid,
-      in_ready                    => int_slv_req.ready,
+      in_valid(0)                 => int_slv_req.valid,
+      in_ready(0)                 => int_slv_req.ready,
       out_valid(0)                => req_queue_in.valid,
       out_valid(1)                => req_valid,
       out_ready(0)                => req_queue_in.ready,
