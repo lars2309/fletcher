@@ -251,7 +251,8 @@ package MM is
       USER_WIDTH                  : natural := 1;
       SLV_SLICES                  : natural := 0;
       MST_SLICES                  : natural := 0;
-      MAX_OUTSTANDING_LOG2        : natural := 0
+      MAX_OUTSTANDING             : positive := 1;
+      CACHE_SIZE                  : natural := 1
     );
     port (
       clk                         : in  std_logic;

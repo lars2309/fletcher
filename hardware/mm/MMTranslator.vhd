@@ -32,7 +32,8 @@ entity MMTranslator is
     USER_WIDTH                  : natural := 1;
     SLV_SLICES                  : natural := 0;
     MST_SLICES                  : natural := 0;
-    MAX_OUTSTANDING_LOG2        : natural := 0
+    MAX_OUTSTANDING             : positive := 1;
+    CACHE_SIZE                  : natural := 1
   );
   port (
     clk                         : in  std_logic;
@@ -69,6 +70,17 @@ architecture Behavioral of MMTranslator is
   constant VM_SIZE_LOG2 : natural := PAGE_SIZE_LOG2 + PT_ENTRIES_LOG2 * 2;
   constant VM_MASK      : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0)
       := slv(shift_left(unsigned(to_signed(-1, BUS_ADDR_WIDTH)), VM_SIZE_LOG2));
+
+  type map_type is record
+    valid : std_logic;
+    virt  : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+    phys  : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+    mask  : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+  end record;
+
+  type cache_type is array (CACHE_SIZE-1 downto 0) of map_type;
+  signal cache  : cache_type;
+  signal dcache : cache_type;
 
   constant ABI : nat_array := cumulative((
     3 => 1,
@@ -121,9 +133,27 @@ architecture Behavioral of MMTranslator is
   signal req_enable          : std_logic;
 begin
 
-  req_proc : process(int_slv_req, req_queue_in, req_queue_out, int_mst_req,
-      req_ready, resp_valid, resp_virt, resp_phys, resp_mask) is
+  clk_proc : process(clk) is
   begin
+    if rising_edge(clk) then
+      cache <= dcache;
+      if reset = '1' then
+        for cidx in 0 to CACHE_SIZE-1 loop
+          cache(cidx).valid <= '0';
+        end loop;
+      end if;
+    end if;
+  end process;
+
+  req_proc : process(int_slv_req, req_queue_in, req_queue_out, int_mst_req,
+      req_ready, resp_valid, resp_virt, resp_phys, resp_mask, cache) is
+    variable lcache    : cache_type;
+    variable in_cache  : boolean;
+    variable handshake : std_logic;
+  begin
+    lcache   := cache_type;
+    in_cache := false;
+
     -- Make request if necessary.
     req_queue_in.concat      <= int_slv_req.concat;
     req_queue_in             <= REQUEST_DESER(req_queue_in);
@@ -131,8 +161,25 @@ begin
     if int_slv_req.valid = '1' then
       if u(int_slv_req.addr and VM_MASK) = VM_BASE then
         -- Address is in virtual space, request translation.
-        req_enable           <= '1';
-        req_queue_in.virt    <= '1';
+
+        -- Check cache.
+        for cidx in 0 to CACHE_SIZE-1 loop
+          if cache(cidx).valid = '1'
+            and (int_slv_req.addr and cache(cidx).mask) = cache(cidx).virt
+          then
+            in_cache := true;
+            req_queue_in.addr <= cache(cidx).phys or (int_slv_req.addr and not cache(cidx).mask);
+          end if;
+        end loop;
+
+        if in_cache then
+          -- Mark new address as a physical address.
+          req_queue_in.virt    <= '0';
+        else
+          -- Not found in cache, forward request for page table walk.
+          req_enable           <= '1';
+          req_queue_in.virt    <= '1';
+        end if;
       else
         -- Address is outside virtual space, do not request translation.
         req_enable           <= '0';
@@ -150,16 +197,32 @@ begin
     if req_queue_out.valid = '1' then
       if req_queue_out.virt = '1' then
         -- This request needs a translation response.
+        handshake            := resp_valid and int_mst_req.ready;
         int_mst_req.valid    <= resp_valid;
-        req_queue_out.ready  <= resp_valid and int_mst_req.ready;
+        req_queue_out.ready  <= handshake;
         resp_ready           <= int_mst_req.ready;
         int_mst_req.addr     <= resp_phys or (req_queue_out.addr and not resp_mask);
+
+        -- Cache the response.
+        if handshake = '1' then
+          -- Shift all cached responses to make room.
+          for cidx in 1 to CACHE_SIZE-1 loop
+            lcache(cidx)     := lcache(cidx-1);
+          end loop;
+          -- Save response at position 0.
+          lcache(0).valid    := '1';
+          lcache(0).virt     := resp_virt;
+          lcache(0).phys     := resp_phys;
+          lcache(0).mask     := resp_mask;
+        end if;
       else
         -- This request can be passed on as is.
         int_mst_req.valid    <= '1';
         req_queue_out.ready  <= '1';
       end if;
     end if;
+
+    dcache <= lcache;
   end process;
 
   sync_fifo_req : StreamSync
@@ -182,16 +245,14 @@ begin
 
   req_queue_in        <= REQUEST_SER(req_queue_in);
   req_queue_out       <= REQUEST_DESER(req_queue_out);
-  resp_queue : StreamFIFO
+  resp_queue : StreamBuffer
     generic map (
-      DEPTH_LOG2                  => OUTSTANDING_LOG2,
+      MIN_DEPTH                   => MAX_OUTSTANDING,
       DATA_WIDTH                  => ABI(ABI'high)
     )
     port map (
-      in_clk                      => clk,
-      in_reset                    => reset,
-      out_clk                     => clk,
-      out_reset                   => reset,
+      clk                         => clk,
+      reset                       => reset,
       in_valid                    => req_queue_in.valid,
       in_ready                    => req_queue_in.ready,
       in_data                     => req_queue_in.concat,
