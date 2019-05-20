@@ -88,185 +88,180 @@ architecture Behavioral of MMTranslator is
   signal d : reg_type;
 
   constant ABI : nat_array := cumulative((
+    3 => 1,
     2 => USER_WIDTH,
     1 => BUS_LEN_WIDTH,
     0 => BUS_ADDR_WIDTH
   ));
 
-  signal int_slv_req_valid      : std_logic;
-  signal int_slv_req_ready      : std_logic;
-  signal int_slv_req_addr       : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-  signal int_slv_req_len        : std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
-  signal int_slv_req_user       : std_logic_vector(USER_WIDTH-1 downto 0);
-  signal slv_data               : std_logic_vector(ABI(ABI'high)-1 downto 0);
-  signal int_slv_data           : std_logic_vector(ABI(ABI'high)-1 downto 0);
+  type request_type is record
+    valid  : std_logic;
+    ready  : std_logic;
+    addr   : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+    len    : std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
+    user   : std_logic_vector(USER_WIDTH-1 downto 0);
+    virt   : std_logic;
+    concat : std_logic_vector(ABI(ABI'high)-1 downto 0);
+  end record;
 
-  signal int_mst_req_valid      : std_logic;
-  signal int_mst_req_ready      : std_logic;
-  signal int_mst_req_addr       : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-  signal int_mst_req_len        : std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
-  signal int_mst_req_user       : std_logic_vector(USER_WIDTH-1 downto 0);
-  signal int_mst_data           : std_logic_vector(ABI(ABI'high)-1 downto 0);
-  signal mst_data               : std_logic_vector(ABI(ABI'high)-1 downto 0);
+  function REQUEST_SER(x : request_type)
+      return request_type is
+    variable t : request_type;
+  begin
+    t := x;
+    t.concat(ABI(1)-1 downto ABI(0)) := x.addr;
+    t.concat(ABI(2)-1 downto ABI(1)) := x.len;
+    t.concat(ABI(3)-1 downto ABI(2)) := x.user;
+    t.concat(ABI(3))                 := x.virt;
+    return t;
+  end REQUEST_SER;
+
+  function REQUEST_DESER(x : request_type)
+      return request_type is
+    variable t : request_type;
+  begin
+    t      := x;
+    t.addr := x.concat(ABI(1)-1 downto ABI(0));
+    t.len  := x.concat(ABI(2)-1 downto ABI(1));
+    t.user := x.concat(ABI(3)-1 downto ABI(2));
+    t.virt := x.concat(ABI(3));
+    return t;
+  end REQUEST_DESER;
+
+  signal slv_req             : request_type;
+  signal mst_req             : request_type;
+  signal int_slv_req         : request_type;
+  signal int_mst_req         : request_type;
+  signal req_queue_in        : request_type;
+  signal req_queue_out       : request_type;
+
+  signal req_enable          : std_logic;
 begin
 
-  reg_proc: process (clk) is
+  req_proc : process(int_slv_req, req_queue_in, req_queue_out, int_mst_req,
+      req_ready, resp_valid, resp_virt, resp_phys, resp_mask) is
   begin
-    if rising_edge(clk) then
-      r <= d;
+    -- Make request if necessary.
+    req_queue_in.concat      <= int_slv_req.concat;
+    req_queue_in             <= REQUEST_DESER(req_queue_in);
+    req_addr                 <= int_slv_req.addr;
+    if int_slv_req.valid = '1' then
+      if u(int_slv_req.addr and VM_MASK) = VM_BASE then
+        -- Address is in virtual space, request translation.
+        req_enable           <= '1';
+        req_queue_in.virt    <= '1';
+      else
+        -- Address is outside virtual space, do not request translation.
+        req_enable           <= '0';
+        req_queue_in.virt    <= '0';
+      end if;
+    end if;
 
-      if reset = '1' then
-        r.req_cur        <= '0';
-        r.req_next       <= '0';
-        r.do_req_next    <= '0';
-        r.map_cur.valid  <= '0';
-        r.map_next.valid <= '0';
+    -- Wait for response if necessary.
+    int_mst_req.concat       <= req_queue_out.concat;
+    int_mst_req              <= REQUEST_DESER(int_mst_req);
+    int_mst_req.virt         <= '0';
+    int_mst_req.valid        <= '0';
+    req_queue_out.ready      <= '0';
+    resp_ready               <= '0';
+    if req_queue_out.valid = '1' then
+      if req_queue_out.virt = '1' then
+        -- This request needs a translation response.
+        int_mst_req.valid    <= resp_valid;
+        req_queue_out.ready  <= resp_valid and int_mst_req.ready;
+        resp_ready           <= int_mst_req.ready;
+        int_mst_req.addr     <= resp_phys or (req_queue_out.addr and not resp_mask);
+      else
+        -- This request can be passed on as is.
+        int_mst_req.valid    <= '1';
+        req_queue_out.ready  <= '1';
       end if;
     end if;
   end process;
 
+  sync_fifo_req : StreamSync
+    generic map (
+      NUM_INPUTS                  => 1,
+      NUM_OUTPUTS                 => 2
+    )
+    port map (
+      clk                         => clk,
+      reset                       => reset,
+      in_valid                    => int_slv_req.valid,
+      in_ready                    => int_slv_req.ready,
+      out_valid(0)                => req_queue_in.valid,
+      out_valid(1)                => req_valid,
+      out_ready(0)                => req_queue_in.ready,
+      out_ready(1)                => req_ready,
+      out_enable(0)               => '1',
+      out_enable(1)               => req_enable
+    );
+
+  req_queue_in        <= REQUEST_SER(req_queue_in);
+  req_queue_out       <= REQUEST_DESER(req_queue_out);
+  resp_queue : StreamFIFO
+    generic map (
+      DEPTH_LOG2                  => 5,
+      DATA_WIDTH                  => ABI(ABI'high)
+    )
+    port map (
+      in_clk                      => clk,
+      in_reset                    => reset,
+      out_clk                     => clk,
+      out_reset                   => reset,
+      in_valid                    => req_queue_in.valid,
+      in_ready                    => req_queue_in.ready,
+      in_data                     => req_queue_in.concat,
+      out_valid                   => req_queue_out.valid,
+      out_ready                   => req_queue_out.ready,
+      out_data                    => req_queue_out.concat
+    );
+
+  slv_req.valid  <= slv_req_valid;
+  slv_req_ready  <= slv_req.ready;
+  slv_req.addr   <= slv_req_addr;
+  slv_req.len    <= slv_req_len;
+  slv_req.user   <= slv_req_user;
+  slv_req        <= REQUEST_SER(slv_req);
+  int_slv_req    <= REQUEST_DESER(int_slv_req);
   slv_slice: StreamBuffer
     generic map (
       MIN_DEPTH               => SLV_SLICES,
-      DATA_WIDTH              => int_slv_data'length
+      DATA_WIDTH              => ABI(ABI'high)
     )
     port map (
       clk                     => clk,
       reset                   => reset,
-      in_valid                => slv_req_valid,
-      in_ready                => slv_req_ready,
-      in_data                 => slv_data,
-      out_valid               => int_slv_req_valid,
-      out_ready               => int_slv_req_ready,
-      out_data                => int_slv_data
+      in_valid                => slv_req.valid,
+      in_ready                => slv_req.ready,
+      in_data                 => slv_req.concat,
+      out_valid               => int_slv_req.valid,
+      out_ready               => int_slv_req.ready,
+      out_data                => int_slv_req.concat
     );
-  slv_data(ABI(1)-1 downto ABI(0)) <= slv_req_addr;
-  slv_data(ABI(2)-1 downto ABI(1)) <= slv_req_len;
-  slv_data(ABI(3)-1 downto ABI(2)) <= slv_req_user;
-  int_slv_req_addr <= int_slv_data(ABI(1)-1 downto ABI(0));
-  int_slv_req_len  <= int_slv_data(ABI(2)-1 downto ABI(1));
-  int_slv_req_user <= int_slv_data(ABI(3)-1 downto ABI(2));
 
+  mst_req_valid  <= mst_req.valid;
+  mst_req.ready  <= mst_req_ready;
+  mst_req_addr   <= mst_req.addr;
+  mst_req_len    <= mst_req.len;
+  mst_req_user   <= mst_req.user;
+  mst_req        <= REQUEST_DESER(mst_req);
+  int_mst_req    <= REQUEST_SER(int_mst_req);
   mst_slice: StreamBuffer
     generic map (
       MIN_DEPTH               => MST_SLICES,
-      DATA_WIDTH              => mst_data'length
+      DATA_WIDTH              => ABI(ABI'high)
     )
     port map (
       clk                     => clk,
       reset                   => reset,
-      in_valid                => int_mst_req_valid,
-      in_ready                => int_mst_req_ready,
-      in_data                 => int_mst_data,
-      out_valid               => mst_req_valid,
-      out_ready               => mst_req_ready,
-      out_data                => mst_data
+      in_valid                => int_mst_req.valid,
+      in_ready                => int_mst_req.ready,
+      in_data                 => int_mst_req.concat,
+      out_valid               => mst_req.valid,
+      out_ready               => mst_req.ready,
+      out_data                => mst_req.concat
     );
-  int_mst_data(ABI(1)-1 downto ABI(0)) <= int_mst_req_addr;
-  int_mst_data(ABI(2)-1 downto ABI(1)) <= int_mst_req_len;
-  int_mst_data(ABI(3)-1 downto ABI(2)) <= int_mst_req_user;
-  mst_req_addr <= mst_data(ABI(1)-1 downto ABI(0));
-  mst_req_len  <= mst_data(ABI(2)-1 downto ABI(1));
-  mst_req_user <= mst_data(ABI(3)-1 downto ABI(2));
 
-  comb_proc: process(r, int_mst_req_ready,
-      int_slv_req_valid, int_slv_req_addr, int_slv_req_len, int_slv_req_user,
-      req_ready, resp_valid, resp_virt, resp_phys, resp_mask) is
-    variable v: reg_type;
-  begin
-    v := r;
-
-    int_mst_req_valid    <= '0';
-    int_mst_req_addr     <= (others => 'U');
-    int_mst_req_len      <= int_slv_req_len;
-    int_mst_req_user     <= int_slv_req_user;
-
-    int_slv_req_ready    <= '0';
-
-    req_valid            <= '0';
-    req_addr             <= (others => 'U');
-
-    resp_ready           <= '1';
-
-    -- Handle lookup responses.
-    if resp_valid = '1' then
-      if v.req_cur = '1' then
-        v.req_cur        := '0';
-
-        v.map_cur.valid  := '1';
-        v.map_cur.virt   := resp_virt;
-        v.map_cur.phys   := resp_phys;
-        v.map_cur.mask   := resp_mask;
-      else
-        v.req_next       := '0';
-        v.do_req_next    := '0';
-
-        v.map_next.valid := '1';
-        v.map_next.virt  := resp_virt;
-        v.map_next.phys  := resp_phys;
-        v.map_next.mask  := resp_mask;
-      end if;
-    end if;
-
-    -- Preemptively request table walk for next page.
-    if v.do_req_next = '1' and v.req_next = '0' then
-      req_valid          <= '1';
-      req_addr           <= slv(u(v.map_cur.virt) + u(not v.map_cur.mask) + 1);
-      if req_ready = '1' then
-        v.req_next       := '1';
-      end if;
-    end if;
-
-    -- Translate bus requests.
-    if int_slv_req_valid = '1' then
-      if u(int_slv_req_addr and VM_MASK) /= VM_BASE then
-        -- Pass through address not within virtual address space.
-        int_mst_req_addr  <= int_slv_req_addr;
-        int_mst_req_valid <= '1';
-        int_slv_req_ready <= int_mst_req_ready;
-      elsif v.map_cur.valid = '1'
-        and (int_slv_req_addr and v.map_cur.mask) = v.map_cur.virt
-      then
-        -- Match on stored current map
-        int_mst_req_addr  <= v.map_cur.phys or (int_slv_req_addr and not v.map_cur.mask);
-        int_mst_req_valid <= '1';
-        int_slv_req_ready <= int_mst_req_ready;
-
-        -- Close to edge of current map? -> Look up next page.
-        -- When current translation is the highest page in the current mapping.
-        -- Create new mask with '1' bits indicating the address bits that have
-        -- to be '1' for the address to be in the highest page of the current
-        -- mapping. Then check whether these bits are indeed '1' (inverted check).
-        if v.map_next.valid = '0'
-          and ( 0 = (
-            align_beq(u(not v.map_cur.mask), PREFETCH_LOG2) and u(not int_slv_req_addr) ) )
-        then
-          --v.do_req_next  := '1';
-        end if;
-
-      elsif v.map_next.valid = '1'
-        and (int_slv_req_addr and v.map_next.mask) = v.map_next.virt
-      then
-        -- Match on next stored map, move to current map.
-        v.map_cur         := v.map_next;
-        v.map_next.valid  := '0';
-        int_mst_req_addr  <= v.map_cur.phys or (int_slv_req_addr and not v.map_cur.mask);
-        int_mst_req_valid <= '1';
-        int_slv_req_ready <= int_mst_req_ready;
-
-      elsif v.req_cur = '0' and v.do_req_next = '0' then
-        -- No match, request table walk.
-        -- Check on do_req_next is required to prevent this from changing
-        -- an ongoing request.
-        req_valid        <= '1';
-        req_addr         <= int_slv_req_addr;
-        if req_ready = '1' then
-          v.req_cur      := '1';
-        end if;
-      end if;
-    end if;
-
-    d <= v;
-  end process;
 end architecture;
 
