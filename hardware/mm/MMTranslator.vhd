@@ -70,24 +70,6 @@ architecture Behavioral of MMTranslator is
   constant VM_MASK      : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0)
       := slv(shift_left(unsigned(to_signed(-1, BUS_ADDR_WIDTH)), VM_SIZE_LOG2));
 
-  type map_type is record
-    valid : std_logic;
-    virt  : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-    phys  : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-    mask  : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
-  end record;
-
-  type reg_type is record
-    req_cur     : std_logic;
-    req_next    : std_logic;
-    do_req_next : std_logic;
-    map_cur     : map_type;
-    map_next    : map_type;
-  end record;
-
-  signal r : reg_type;
-  signal d : reg_type;
-
   constant ABI : nat_array := cumulative((
     3 => 1,
     2 => USER_WIDTH,
