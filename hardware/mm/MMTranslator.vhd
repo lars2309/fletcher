@@ -31,7 +31,8 @@ entity MMTranslator is
     BUS_LEN_WIDTH               : natural := 8;
     USER_WIDTH                  : natural := 1;
     SLV_SLICES                  : natural := 0;
-    MST_SLICES                  : natural := 0
+    MST_SLICES                  : natural := 0;
+    MAX_OUTSTANDING_LOG2        : natural := 0
   );
   port (
     clk                         : in  std_logic;
@@ -201,7 +202,7 @@ begin
   req_queue_out       <= REQUEST_DESER(req_queue_out);
   resp_queue : StreamFIFO
     generic map (
-      DEPTH_LOG2                  => 5,
+      DEPTH_LOG2                  => OUTSTANDING_LOG2,
       DATA_WIDTH                  => ABI(ABI'high)
     )
     port map (
