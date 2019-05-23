@@ -20,7 +20,7 @@ library work;
 use work.Utils.all;
 use work.Streams.all;
 
-entity MMGapFinder is
+entity MMGapFinderStep is
   generic (
     MASK_WIDTH                  : natural := 8;
     MAX_SIZE                    : natural := 8;
@@ -42,9 +42,9 @@ entity MMGapFinder is
     gap_offset                  : out std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0);
     gap_size                    : out std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0)
   );
-end MMGapFinder;
+end MMGapFinderStep;
 
-architecture Behavioral of MMGapFinder is
+architecture Behavioral of MMGapFinderStep is
   constant REI : nat_array := cumulative((
     2 => 1,
     1 => log2ceil(MAX_SIZE+1),
@@ -83,7 +83,89 @@ architecture Behavioral of MMGapFinder is
 
 begin
 
+  reg_proc : process(clk) is
+  begin
+    if rising_edge(clk) then
+      r <= d;
+      if reset = '1' then
+        r.step   <= (others => '0');
+        r.size   <= (others => '0');
+        r.offset <= (others => '0');
+        r.send   <= '0';
+        r.sent   <= '0';
+      end if;
+    end if;
+  end process;
 
+  comb_proc: process(r,
+      int_req_valid, int_req_holes, int_req_size, int_gap_ready) is
+    variable v : reg_type;
+  begin
+    v := r;
+
+    if int_req_valid = '1' and v.sent = '0' then
+      -- Search for gap in current mask.
+      for N in 0 to MASK_WIDTH-1 loop
+        -- The gap is already big enough, stop searching.
+        exit when v.size = u(int_req_size);
+        if int_req_holes(N) = '0' then
+          -- Continue the gap.
+          v.size             := v.size + 1;
+        else
+          -- Must start a new gap at the next position.
+          v.size             := (others => '0');
+          v.offset           := to_unsigned(N + 1, v.offset'length);
+          if MAX_SIZE > MASK_WIDTH then
+            -- Add the previous inputs to the offset as well.
+            v.offset         := v.offset + mul(
+                                   resize(v.step, v.offset'length),
+                                   MASK_WIDTH
+                                 );
+          end if;
+        end if;
+      end loop;
+      v.step                 := v.step + 1;
+
+      -- Push the gap when found.
+      if v.size = u(int_req_size) or int_req_last = '1' then
+        v.send               := '1';
+      end if;
+
+    end if;
+
+    -- Set the outputs
+    int_gap_valid            <= v.send;
+    if v.send = '1' then
+      if int_gap_ready = '1' then
+        -- Output handshaked, do not keep valid high on next cycle.
+        v.send               := '0';
+        v.sent               := '1';
+      end if;
+    end if;
+    int_gap_size             <= slv(v.size);
+    int_gap_offset           <= slv(v.offset);
+
+    if int_req_last = '1' then
+      -- For the last word, wait until the output has been sent.
+      if v.sent = '1' then
+        int_req_ready        <= '1';
+        if int_req_valid = '1' then
+          -- The last word is accepted, reset for the next search.
+          v.size             := (others => '0');
+          v.offset           := (others => '0');
+          v.step             := (others => '0');
+          v.sent             := '0';
+        end if;
+      else
+        int_req_ready        <= '0';
+      end if;
+    else
+      -- Accept input every cycle.
+      int_req_ready          <= '1';
+    end if;
+
+    d <= v;
+  end process;
 
   input_slice_gen: if SLV_SLICE generate
   begin
