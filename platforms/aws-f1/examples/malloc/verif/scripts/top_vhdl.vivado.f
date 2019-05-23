@@ -77,6 +77,7 @@ ${FLETCHER_HARDWARE_DIR}/mm/MMBarrier.vhd
 ${FLETCHER_HARDWARE_DIR}/mm/MMDirector.vhd
 ${FLETCHER_HARDWARE_DIR}/mm/MMFrames.vhd
 ${FLETCHER_HARDWARE_DIR}/mm/MMGapFinder.vhd
+${FLETCHER_HARDWARE_DIR}/mm/MMGapFinderStep.vhd
 ${FLETCHER_HARDWARE_DIR}/mm/MMHostInterface.vhd
 ${FLETCHER_HARDWARE_DIR}/mm/MMRolodex.vhd
 ${FLETCHER_HARDWARE_DIR}/mm/MMTranslator.vhd

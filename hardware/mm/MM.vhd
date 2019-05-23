@@ -373,6 +373,30 @@ package MM is
     );
   end component;
 
+  component MMGapFinderStep is
+    generic (
+      MASK_WIDTH                  : natural := 8;
+      MAX_SIZE                    : natural := 8;
+      SLV_SLICE                   : boolean := false;
+      MST_SLICE                   : boolean := true
+    );
+    port (
+      clk                         : in  std_logic;
+      reset                       : in  std_logic;
+
+      req_valid                   : in  std_logic;
+      req_ready                   : out std_logic;
+      req_holes                   : in  std_logic_vector(MASK_WIDTH-1 downto 0);
+      req_size                    : in  std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0);
+      req_last                    : in  std_logic := '1';
+
+      gap_valid                   : out std_logic;
+      gap_ready                   : in  std_logic;
+      gap_offset                  : out std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0);
+      gap_size                    : out std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0)
+    );
+  end component;
+
   component MMRolodex is
     generic (
       MAX_ENTRIES                 : natural;
