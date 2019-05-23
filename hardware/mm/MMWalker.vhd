@@ -146,7 +146,7 @@ architecture Behavioral of MMWalker is
     virt       : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
     phys       : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
     use_dir    : std_logic;
-    concat     : std_logic_vector(BUS_ADDR_WIDTH*2-1 downto 0);
+    concat     : std_logic_vector(BUS_ADDR_WIDTH*2 downto 0);
   end record;
 
   signal queue_l1_in     : request_type;
@@ -160,76 +160,99 @@ architecture Behavioral of MMWalker is
   signal bus_l2          : bus_r_type;
 begin
 
-  process (bus_l1, bus_l2, req_addr, dir_resp_addr) is
-    variable addr_pt     : unsigned(BUS_ADDR_WIDTH-1 downto 0);
+  process (bus_l1, bus_l2, req_addr)
   begin
-
     -- Step 1: Request L1 page table entry.
     bus_l1.req_len           <= slv(to_unsigned(1, BUS_LEN_WIDTH));
     bus_l1.req_addr          <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(PT_ADDR, u(req_addr), 1)));
     queue_l1_in.virt         <= req_addr;
+  end process;
 
+  process (queue_l1_out, bus_l1) is
+    variable addr_pt : unsigned(BUS_ADDR_WIDTH-1 downto 0);
+  begin
     -- Step 2: Request L2 page table entry based on L1 entry.
     queue_l2_in.virt         <= queue_l1_out.virt;
+
+    -- Check on valid is not necessary, but avoids some simulator warnings about metavalues.
+    if queue_l1_out.valid = '1' then
     -- Select the right PTE from the data bus
     -- and use the resulting address to request the L2 entry.
-    addr_pt := align_beq(
-        EXTRACT(
-          unsigned(bus_l1.dat_data),
-          BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, queue_l1_out.virt, 1))),
-          BYTE_SIZE * PTE_SIZE
-        ),
-        PT_SIZE_LOG2
-      );
-    bus_l2.req_addr          <= slv(
+      addr_pt := align_beq(
+          EXTRACT(
+            unsigned(bus_l1.dat_data),
+            BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, u(queue_l1_out.virt), 1))),
+            BYTE_SIZE * PTE_SIZE
+          ),
+          PT_SIZE_LOG2
+        );
+      bus_l2.req_addr        <= slv(
                                ADDR_BUS_ALIGN(
                                  VA_TO_PTE(
                                    addr_pt,
-                                   queue_l1_out.virt,
+                                   u(queue_l1_out.virt),
                                    2)));
-    bus_l2.req_len           <= slv(to_unsigned(1, BUS_LEN_WIDTH));
+    else
+      bus_l2.req_addr        <= (others => 'U');
+    end if;
 
+    bus_l2.req_len           <= slv(to_unsigned(1, BUS_LEN_WIDTH));
+  end process;
+
+  process (queue_l2_out, bus_l2)
+  begin
     -- Step 3: Resolve address or pass on to MMDirector.
     queue_dir_in.virt        <= queue_l2_out.virt;
     dir_req_addr             <= queue_l2_out.virt;
+
+    -- Check on valid is not necessary, but avoids some simulator warnings about metavalues.
+    if queue_l2_out.valid = '1' then
     -- Use PT_ADDR instead of the real `addr_pt'. This is allowable, 
     -- because the address offset into the data bus will be the same for these.
-    queue_dir_in.phys        <= slv(align_beq(
-        EXTRACT(
-          unsigned(bus_l2.dat_data),
-          BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, queue_l2_out.virt, 2))),
-          BYTE_SIZE * PTE_SIZE
-        ),
-        PAGE_SIZE_LOG2
-      ));
-    if EXTRACT(
-          unsigned(bus_l2.dat_data),
-          BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, queue_l2_out.virt, 2))) + PTE_PRESENT,
-          1
-        ) = "1"
-      and EXTRACT(
-          unsigned(bus_l2.dat_data),
-          BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, queue_l2_out.virt, 2))) + PTE_MAPPED,
-          1
-        ) = "1"
-    then
-      -- Page is mapped and present. Physical address is now known.
-      queue_dir_in.use_dir   <= '0';
+      queue_dir_in.phys      <= slv(align_beq(
+          EXTRACT(
+            unsigned(bus_l2.dat_data),
+            BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, u(queue_l2_out.virt), 2))),
+            BYTE_SIZE * PTE_SIZE
+          ),
+          PAGE_SIZE_LOG2
+        ));
+      if slv(EXTRACT(
+            unsigned(bus_l2.dat_data),
+            BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, u(queue_l2_out.virt), 2))) + PTE_PRESENT,
+            1
+          )) = "1"
+        and slv(EXTRACT(
+            unsigned(bus_l2.dat_data),
+            BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, u(queue_l2_out.virt), 2))) + PTE_MAPPED,
+            1
+          )) = "1"
+      then
+        -- Page is mapped and present. Physical address is now known.
+        queue_dir_in.use_dir <= '0';
+      else
+        -- Page is not mapped or not present, let MMDirector figure this one out.
+        queue_dir_in.use_dir <= '1';
+      end if;
     else
-      -- Page is not mapped or present, let MMDirector figure this one out.
-      queue_dir_in.use_dir   <= '1';
+      queue_dir_in.phys      <= (others => 'U');
+      queue_dir_in.use_dir   <= 'U';
     end if;
+  end process;
 
+  process (queue_dir_out, dir_resp_addr)
+  begin
     -- Step 4: Optionally wait for MMDirector response.
     resp_virt                <= queue_dir_out.virt;
-    dir_resp_use             <= queue_dir_out.use_dir;
     if queue_dir_out.use_dir = '1' then
       resp_phys              <= dir_resp_addr;
     else
       resp_phys              <= queue_dir_out.phys;
     end if;
     -- Create mask for single page
-    resp_mask                <= slv(shift_left(to_signed(-1, BUS_ADDR_WIDTH), PAGE_SIZE_LOG2));
+    resp_mask                <= slv(shift_left(
+                                  u(std_logic_vector(to_signed(-1, BUS_ADDR_WIDTH))),
+                                  PAGE_SIZE_LOG2));
 
   end process;
 
@@ -246,7 +269,7 @@ begin
       out_valid(0)                => queue_l1_in.valid,
       out_valid(1)                => bus_l1.req_valid,
       out_ready(0)                => queue_l1_in.ready,
-      out_ready(1)                => bus_l1.req_ready,
+      out_ready(1)                => bus_l1.req_ready
     );
 
   queue_l1_inst : StreamBuffer
@@ -276,7 +299,7 @@ begin
       in_valid(0)                 => queue_l1_out.valid,
       in_valid(1)                 => bus_l1.dat_valid,
       in_ready(0)                 => queue_l1_out.ready,
-      in_ready(1)                 => bus_l2.dat_ready,
+      in_ready(1)                 => bus_l1.dat_ready,
       out_valid(0)                => queue_l2_in.valid,
       out_valid(1)                => bus_l2.req_valid,
       out_ready(0)                => queue_l2_in.ready,
@@ -370,7 +393,7 @@ begin
       SLV_REQ_SLICES              => false,
       MST_REQ_SLICE               => false,
       MST_DAT_SLICE               => false,
-      SLV_DAT_SLICES              => false
+      SLV_DAT_SLICES              => true  --TODO: insert slice before queue_l2 instead
     )
     port map (
       bus_clk                     => clk,
@@ -388,10 +411,11 @@ begin
       bs00_rreq_valid             => bus_l2.req_valid,
       bs00_rreq_ready             => bus_l2.req_ready,
       bs00_rreq_addr              => bus_l2.req_addr,
-      bs00_rreq_len               => bus_l2_req_len,
-      bs00_rdat_valid             => bus_l2_dat_valid,
-      bs00_rdat_ready             => bus_l2_dat_ready,
-      bs00_rdat_data              => bus_l2_dat_data,
+      bs00_rreq_len               => bus_l2.req_len,
+      bs00_rdat_valid             => bus_l2.dat_valid,
+      bs00_rdat_ready             => bus_l2.dat_ready,
+      bs00_rdat_data              => bus_l2.dat_data,
+      bs00_rdat_last              => bus_l2.dat_last,
 
       bs01_rreq_valid             => bus_l1.req_valid,
       bs01_rreq_ready             => bus_l1.req_ready,
@@ -399,7 +423,8 @@ begin
       bs01_rreq_len               => bus_l1.req_len,
       bs01_rdat_valid             => bus_l1.dat_valid,
       bs01_rdat_ready             => bus_l1.dat_ready,
-      bs01_rdat_data              => bus_l1.dat_data
+      bs01_rdat_data              => bus_l1.dat_data,
+      bs01_rdat_last              => bus_l1.dat_last
     );
 
 end architecture;

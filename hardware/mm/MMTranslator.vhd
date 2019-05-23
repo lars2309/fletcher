@@ -89,33 +89,35 @@ architecture Behavioral of MMTranslator is
     0 => BUS_ADDR_WIDTH
   ));
 
-  type request_type is record
-    valid  : std_logic;
-    ready  : std_logic;
+  type request_d_type is record
     addr   : std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
     len    : std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
     user   : std_logic_vector(USER_WIDTH-1 downto 0);
     virt   : std_logic;
+  end record;
+
+  type request_type is record
+    valid  : std_logic;
+    ready  : std_logic;
+    d      : request_d_type;
     concat : std_logic_vector(ABI(ABI'high)-1 downto 0);
   end record;
 
   function REQUEST_SER(x : request_type)
-      return request_type is
-    variable t : request_type;
+      return std_logic_vector is
+    variable t : std_logic_vector(ABI(ABI'high)-1 downto 0);
   begin
-    t := x;
-    t.concat(ABI(1)-1 downto ABI(0)) := x.addr;
-    t.concat(ABI(2)-1 downto ABI(1)) := x.len;
-    t.concat(ABI(3)-1 downto ABI(2)) := x.user;
-    t.concat(ABI(3))                 := x.virt;
+    t(ABI(1)-1 downto ABI(0)) := x.d.addr;
+    t(ABI(2)-1 downto ABI(1)) := x.d.len;
+    t(ABI(3)-1 downto ABI(2)) := x.d.user;
+    t(ABI(3))                 := x.d.virt;
     return t;
   end REQUEST_SER;
 
   function REQUEST_DESER(x : request_type)
-      return request_type is
-    variable t : request_type;
+      return request_d_type is
+    variable t : request_d_type;
   begin
-    t      := x;
     t.addr := x.concat(ABI(1)-1 downto ABI(0));
     t.len  := x.concat(ABI(2)-1 downto ABI(1));
     t.user := x.concat(ABI(3)-1 downto ABI(2));
@@ -151,57 +153,58 @@ begin
     variable in_cache  : boolean;
     variable handshake : std_logic;
   begin
-    lcache   := cache_type;
+    lcache   := cache;
     in_cache := false;
 
+    req_enable               <= '0';
+
     -- Make request if necessary.
-    req_queue_in.concat      <= int_slv_req.concat;
-    req_queue_in             <= REQUEST_DESER(req_queue_in);
-    req_addr                 <= int_slv_req.addr;
+    req_queue_in.d           <= int_slv_req.d;
+    req_addr                 <= int_slv_req.d.addr;
     if int_slv_req.valid = '1' then
-      if u(int_slv_req.addr and VM_MASK) = VM_BASE then
+      if (int_slv_req.d.addr and VM_MASK) = slv(resize(VM_BASE, VM_MASK'length)) then
         -- Address is in virtual space, request translation.
 
         -- Check cache.
         for cidx in 0 to CACHE_SIZE-1 loop
           if cache(cidx).valid = '1'
-            and (int_slv_req.addr and cache(cidx).mask) = cache(cidx).virt
+            and (int_slv_req.d.addr and cache(cidx).mask) = cache(cidx).virt
           then
             in_cache := true;
-            req_queue_in.addr <= cache(cidx).phys or (int_slv_req.addr and not cache(cidx).mask);
+            req_queue_in.d.addr <= cache(cidx).phys or (int_slv_req.d.addr and not cache(cidx).mask);
           end if;
         end loop;
 
         if in_cache then
           -- Mark new address as a physical address.
-          req_queue_in.virt    <= '0';
+          req_enable           <= '0';
+          req_queue_in.d.virt  <= '0';
         else
           -- Not found in cache, forward request for page table walk.
           req_enable           <= '1';
-          req_queue_in.virt    <= '1';
+          req_queue_in.d.virt  <= '1';
         end if;
       else
         -- Address is outside virtual space, do not request translation.
-        req_enable           <= '0';
-        req_queue_in.virt    <= '0';
+        req_enable             <= '0';
+        req_queue_in.d.virt    <= '0';
       end if;
     end if;
 
     -- Wait for response if necessary.
-    int_mst_req.concat       <= req_queue_out.concat;
-    int_mst_req              <= REQUEST_DESER(int_mst_req);
-    int_mst_req.virt         <= '0';
+    int_mst_req.d            <= req_queue_out.d;
+    int_mst_req.d.virt       <= '0';
     int_mst_req.valid        <= '0';
     req_queue_out.ready      <= '0';
     resp_ready               <= '0';
     if req_queue_out.valid = '1' then
-      if req_queue_out.virt = '1' then
+      if req_queue_out.d.virt = '1' then
         -- This request needs a translation response.
         handshake            := resp_valid and int_mst_req.ready;
         int_mst_req.valid    <= resp_valid;
         req_queue_out.ready  <= handshake;
         resp_ready           <= int_mst_req.ready;
-        int_mst_req.addr     <= resp_phys or (req_queue_out.addr and not resp_mask);
+        int_mst_req.d.addr   <= resp_phys or (req_queue_out.d.addr and not resp_mask);
 
         -- Cache the response.
         if handshake = '1' then
@@ -211,7 +214,7 @@ begin
           end loop;
           -- Save response at position 0.
           lcache(0).valid    := '1';
-          lcache(0).virt     := resp_virt;
+          lcache(0).virt     := resp_virt and resp_mask;
           lcache(0).phys     := resp_phys;
           lcache(0).mask     := resp_mask;
         end if;
@@ -243,8 +246,6 @@ begin
       out_enable(1)               => req_enable
     );
 
-  req_queue_in        <= REQUEST_SER(req_queue_in);
-  req_queue_out       <= REQUEST_DESER(req_queue_out);
   resp_queue : StreamBuffer
     generic map (
       MIN_DEPTH                   => MAX_OUTSTANDING,
@@ -260,14 +261,15 @@ begin
       out_ready                   => req_queue_out.ready,
       out_data                    => req_queue_out.concat
     );
+  req_queue_in.concat        <= REQUEST_SER(req_queue_in);
+  req_queue_out.d            <= REQUEST_DESER(req_queue_out);
 
-  slv_req.valid  <= slv_req_valid;
-  slv_req_ready  <= slv_req.ready;
-  slv_req.addr   <= slv_req_addr;
-  slv_req.len    <= slv_req_len;
-  slv_req.user   <= slv_req_user;
-  slv_req        <= REQUEST_SER(slv_req);
-  int_slv_req    <= REQUEST_DESER(int_slv_req);
+  slv_req.valid    <= slv_req_valid;
+  slv_req_ready    <= slv_req.ready;
+  slv_req.d.addr   <= slv_req_addr;
+  slv_req.d.len    <= slv_req_len;
+  slv_req.d.user   <= slv_req_user;
+
   slv_slice: StreamBuffer
     generic map (
       MIN_DEPTH               => SLV_SLICES,
@@ -283,14 +285,9 @@ begin
       out_ready               => int_slv_req.ready,
       out_data                => int_slv_req.concat
     );
+  slv_req.concat             <= REQUEST_SER(slv_req);
+  int_slv_req.d              <= REQUEST_DESER(int_slv_req);
 
-  mst_req_valid  <= mst_req.valid;
-  mst_req.ready  <= mst_req_ready;
-  mst_req_addr   <= mst_req.addr;
-  mst_req_len    <= mst_req.len;
-  mst_req_user   <= mst_req.user;
-  mst_req        <= REQUEST_DESER(mst_req);
-  int_mst_req    <= REQUEST_SER(int_mst_req);
   mst_slice: StreamBuffer
     generic map (
       MIN_DEPTH               => MST_SLICES,
@@ -306,6 +303,14 @@ begin
       out_ready               => mst_req.ready,
       out_data                => mst_req.concat
     );
+  int_mst_req.concat         <= REQUEST_SER(int_mst_req);
+  mst_req.d                  <= REQUEST_DESER(mst_req);
+
+  mst_req_valid  <= mst_req.valid;
+  mst_req.ready  <= mst_req_ready;
+  mst_req_addr   <= mst_req.d.addr;
+  mst_req_len    <= mst_req.d.len;
+  mst_req_user   <= mst_req.d.user;
 
 end architecture;
 

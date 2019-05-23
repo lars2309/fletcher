@@ -611,6 +611,10 @@ begin
     gap_q_size        <= (others => 'U');
     gap_a_ready       <= '0';
 
+    gap_pt_q_valid    <= '0';
+    gap_pt_q_holes    <= (others => 'U');
+    gap_pt_a_ready    <= '0';
+
     rolodex_entry_ready  <= '0';
     rolodex_entry_mark   <= '0';
     rolodex_insert_valid <= '0';
@@ -1981,9 +1985,10 @@ begin
       delete_entry                => rolodex_delete_entry
     );
 
-  gapfinder_pte : MMGapFinder
+  gapfinder_pte : MMGapFinderStep
     generic map (
       MASK_WIDTH                  => BUS_DATA_WIDTH / PTE_WIDTH,
+      MAX_SIZE                    => BUS_DATA_WIDTH / PTE_WIDTH,
       SLV_SLICE                   => true,
       MST_SLICE                   => true
     )
@@ -2002,9 +2007,10 @@ begin
       gap_size                    => gap_a_size
     );
 
-  gapfinder_pt : MMGapFinder
+  gapfinder_pt : MMGapFinderStep
     generic map (
       MASK_WIDTH                  => work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH),
+      MAX_SIZE                    => work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH),
       SLV_SLICE                   => true,
       MST_SLICE                   => true
     )
