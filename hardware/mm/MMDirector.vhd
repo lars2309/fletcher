@@ -1523,6 +1523,8 @@ begin
       -- Set address for marking bit in bitmap
       my_bus_wreq.valid <= my_bus_rdat.valid;
       my_bus_rdat.ready <= my_bus_wreq.ready;
+      handshake         := my_bus_rdat.valid and my_bus_wreq.ready;
+
       my_bus_wreq.addr  <= slv(PAGE_BASE(v.addr_pt) + div_floor(PT_BITMAP_IDX(v.addr_pt), BUS_DATA_WIDTH));
       my_bus_wreq.len   <= slv(to_unsigned(1, my_bus_wreq.len'length));
       -- Copy the byte that has to be written back.
@@ -1532,7 +1534,8 @@ begin
           BYTE_SIZE);
       -- Mark PT as unused in bitmap's byte.
       v.byte_buffer(int(PT_BITMAP_IDX(v.addr_pt) mod BYTE_SIZE)) := '0';
-      if my_bus_wreq.ready = '1' then
+
+      if handshake = '1' then
         -- TODO: make this work for bitmaps > BUS_DATA_WIDTH
         if BIT_COUNT(my_bus_rdat.data(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH)-1 downto 0)) = 1 then
           -- This was the last page table in the frame, delete it.
