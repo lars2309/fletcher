@@ -157,6 +157,8 @@ begin
     reg_burst_length,
     reg_base_addr_lo,
     reg_base_addr_hi,
+    reg_addr_mask_lo,
+    reg_addr_mask_hi,
     reg_cycles_per_word,
     prng_valid,
     prng_data
@@ -172,6 +174,8 @@ begin
     bus_rreq_len   <= slv(r.burst_length(BUS_LEN_WIDTH-1 downto 0));
     prng_ready     <= '0';
     reg_status     <= (others => '0');
+    bus_rreq_addr  <= (others => 'U');
+    reg_cycles     <= (others => 'U');
     
     rdat_ready_v := '0';
     
