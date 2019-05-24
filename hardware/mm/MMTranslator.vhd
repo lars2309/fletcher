@@ -129,10 +129,11 @@ architecture Behavioral of MMTranslator is
   signal mst_req             : request_type;
   signal int_slv_req         : request_type;
   signal int_mst_req         : request_type;
+  signal cache_result_in     : request_type;
+  signal cache_result_out    : request_type;
   signal req_queue_in        : request_type;
   signal req_queue_out       : request_type;
 
-  signal req_enable          : std_logic;
 begin
 
   clk_proc : process(clk) is
@@ -147,7 +148,7 @@ begin
     end if;
   end process;
 
-  req_proc : process(int_slv_req, req_queue_in, req_queue_out, int_mst_req,
+  req_proc : process(int_slv_req, req_queue_out, int_mst_req, cache_result_in,
       req_ready, resp_valid, resp_virt, resp_phys, resp_mask, cache) is
     variable lcache    : cache_type;
     variable in_cache  : boolean;
@@ -156,53 +157,47 @@ begin
     lcache   := cache;
     in_cache := false;
 
-    req_enable               <= '0';
-
     -- Make request if necessary.
-    req_queue_in.d           <= int_slv_req.d;
+    cache_result_in.valid    <= int_slv_req.valid;
+    int_slv_req.ready        <= cache_result_in.ready;
+    cache_result_in.d        <= int_slv_req.d;
     req_addr                 <= int_slv_req.d.addr;
-    if int_slv_req.valid = '1' then
-      if (int_slv_req.d.addr and VM_MASK) = slv(resize(VM_BASE, VM_MASK'length)) then
-        -- Address is in virtual space, request translation.
+    if (int_slv_req.d.addr and VM_MASK) = slv(resize(VM_BASE, VM_MASK'length)) then
+      -- Address is in virtual space, request translation.
 
-        -- Check cache.
-        for cidx in 0 to CACHE_SIZE-1 loop
-          if cache(cidx).valid = '1'
-            and (int_slv_req.d.addr and cache(cidx).mask) = cache(cidx).virt
-          then
-            in_cache := true;
-            req_queue_in.d.addr <= cache(cidx).phys or (int_slv_req.d.addr and not cache(cidx).mask);
-          end if;
-        end loop;
-
-        if in_cache then
-          -- Mark new address as a physical address.
-          req_enable           <= '0';
-          req_queue_in.d.virt  <= '0';
-        else
-          -- Not found in cache, forward request for page table walk.
-          req_enable           <= '1';
-          req_queue_in.d.virt  <= '1';
+      -- Check cache.
+      for cidx in 0 to CACHE_SIZE-1 loop
+        if cache(cidx).valid = '1'
+          and (int_slv_req.d.addr and cache(cidx).mask) = cache(cidx).virt
+        then
+          in_cache := true;
+          cache_result_in.d.addr <= cache(cidx).phys or (int_slv_req.d.addr and not cache(cidx).mask);
         end if;
+      end loop;
+
+      if in_cache then
+        -- Mark new address as a physical address.
+        cache_result_in.d.virt   <= '0';
       else
-        -- Address is outside virtual space, do not request translation.
-        req_enable             <= '0';
-        req_queue_in.d.virt    <= '0';
+        -- Not found in cache, forward request for page table walk.
+        cache_result_in.d.virt   <= '1';
       end if;
+    else
+      -- Address is outside virtual space, do not request translation.
+      cache_result_in.d.virt     <= '0';
     end if;
 
     -- Wait for response if necessary.
     int_mst_req.d            <= req_queue_out.d;
     int_mst_req.d.virt       <= '0';
     int_mst_req.valid        <= '0';
-    req_queue_out.ready      <= '0';
     resp_ready               <= '0';
+    handshake                := '0';
     if req_queue_out.valid = '1' then
       if req_queue_out.d.virt = '1' then
         -- This request needs a translation response.
         handshake            := resp_valid and int_mst_req.ready;
         int_mst_req.valid    <= resp_valid;
-        req_queue_out.ready  <= handshake;
         resp_ready           <= int_mst_req.ready;
         int_mst_req.d.addr   <= resp_phys or (req_queue_out.d.addr and not resp_mask);
 
@@ -221,12 +216,35 @@ begin
       else
         -- This request can be passed on as is.
         int_mst_req.valid    <= '1';
-        req_queue_out.ready  <= '1';
+        handshake            := int_mst_req.ready;
       end if;
     end if;
+    req_queue_out.ready      <= handshake;
 
     dcache <= lcache;
   end process;
+
+
+  -- This slice is needed to latch the output of the cache lookup, before valid
+  -- is asserted on the request channel. Since the cache contents can change
+  -- concurrently, changing the data while valid is hish, which is illegal.
+  cache_slice : StreamSlice
+    generic map (
+      DATA_WIDTH                  => cache_result_in.concat'length
+    )
+    port map (
+      clk                         => clk,
+      reset                       => reset,
+      in_valid                    => cache_result_in.valid,
+      in_ready                    => cache_result_in.ready,
+      in_data                     => cache_result_in.concat,
+      out_valid                   => cache_result_out.valid,
+      out_ready                   => cache_result_out.ready,
+      out_data                    => cache_result_out.concat
+    );
+  cache_result_in.concat     <= REQUEST_SER(cache_result_in);
+  cache_result_out.d         <= REQUEST_DESER(cache_result_out);
+  req_queue_in.d             <= cache_result_out.d;
 
   sync_fifo_req : StreamSync
     generic map (
@@ -236,14 +254,14 @@ begin
     port map (
       clk                         => clk,
       reset                       => reset,
-      in_valid(0)                 => int_slv_req.valid,
-      in_ready(0)                 => int_slv_req.ready,
+      in_valid(0)                 => cache_result_out.valid,
+      in_ready(0)                 => cache_result_out.ready,
       out_valid(0)                => req_queue_in.valid,
       out_valid(1)                => req_valid,
       out_ready(0)                => req_queue_in.ready,
       out_ready(1)                => req_ready,
       out_enable(0)               => '1',
-      out_enable(1)               => req_enable
+      out_enable(1)               => req_queue_in.d.virt
     );
 
   resp_queue : StreamBuffer
