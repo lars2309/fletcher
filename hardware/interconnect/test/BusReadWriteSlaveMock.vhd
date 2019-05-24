@@ -248,7 +248,11 @@ begin
           -- Check the last signal
           if i = len-1 then
             assert wdat_last = '1'
-              report "Last was not asserted."
+              report "Last should be asserted."
+              severity failure;
+          else
+            assert wdat_last = '0'
+              report "Last should not be asserted."
               severity failure;
           end if;
 
