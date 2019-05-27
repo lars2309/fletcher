@@ -25,7 +25,7 @@ entity MMGapFinderStep is
     MASK_WIDTH                  : natural := 8;
     MAX_SIZE                    : natural := 8;
     SLV_SLICE                   : boolean := false;
-    MST_SLICE                   : boolean := true
+    MST_SLICE                   : boolean := false
   );
   port (
     clk                         : in  std_logic;
@@ -71,8 +71,8 @@ architecture Behavioral of MMGapFinderStep is
   signal gap_data                : std_logic_vector(GAI(GAI'high)-1 downto 0);
 
   type reg_type is record
-    size              : unsigned(log2ceil(MASK_WIDTH+1)-1 downto 0);
-    offset            : unsigned(log2ceil(MASK_WIDTH+1)-1 downto 0);
+    size              : unsigned(log2ceil(MAX_SIZE+1)-1 downto 0);
+    offset            : unsigned(log2ceil(MAX_SIZE+1)-1 downto 0);
     step              : unsigned(log2ceil((MAX_SIZE+MASK_WIDTH-1)/MASK_WIDTH+1)-1 downto 0);
     send              : std_logic;
     sent              : std_logic;

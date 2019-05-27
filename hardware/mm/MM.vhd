@@ -354,6 +354,8 @@ package MM is
   component MMGapFinder is
     generic (
       MASK_WIDTH                  : natural := 8;
+      MASK_WIDTH_INTERNAL         : natural := 64;
+      MAX_SIZE                    : natural := 8;
       SLV_SLICE                   : boolean := false;
       MST_SLICE                   : boolean := false
     );
@@ -365,6 +367,7 @@ package MM is
       req_ready                   : out std_logic;
       req_holes                   : in  std_logic_vector(MASK_WIDTH-1 downto 0);
       req_size                    : in  std_logic_vector(log2ceil(MASK_WIDTH+1)-1 downto 0);
+      req_last                    : in  std_logic := '1';
 
       gap_valid                   : out std_logic;
       gap_ready                   : in  std_logic;
@@ -378,7 +381,7 @@ package MM is
       MASK_WIDTH                  : natural := 8;
       MAX_SIZE                    : natural := 8;
       SLV_SLICE                   : boolean := false;
-      MST_SLICE                   : boolean := true
+      MST_SLICE                   : boolean := false
     );
     port (
       clk                         : in  std_logic;

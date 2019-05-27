@@ -19,13 +19,16 @@ use ieee.numeric_std.all;
 library work;
 use work.Utils.all;
 use work.Streams.all;
+use work.MM.all;
 
 entity MMGapFinder is
   generic (
+    -- Must be a multiple of the internal width when the `last' signal is used.
     MASK_WIDTH                  : natural := 8;
+    MASK_WIDTH_INTERNAL         : natural := 64;
     MAX_SIZE                    : natural := 8;
     SLV_SLICE                   : boolean := false;
-    MST_SLICE                   : boolean := true
+    MST_SLICE                   : boolean := false
   );
   port (
     clk                         : in  std_logic;
@@ -45,45 +48,99 @@ entity MMGapFinder is
 end MMGapFinder;
 
 architecture Behavioral of MMGapFinder is
+  constant SIZE_WIDTH : natural := log2ceil(MAX_SIZE+1);
+  -- Mask width that will be evaluated sequentially by the subcomponent.
+  constant MASK_WIDTH_SUB : natural := work.Utils.min(MASK_WIDTH, MASK_WIDTH_INTERNAL);
+  -- Find multiple of MASK_WIDTH_SUB to cover the original mask.
+  constant MASK_WIDTH_MUL : natural := ((MASK_WIDTH+MASK_WIDTH_SUB-1)/MASK_WIDTH_SUB)*MASK_WIDTH_SUB;
+
   constant REI : nat_array := cumulative((
     2 => 1,
-    1 => log2ceil(MAX_SIZE+1),
+    1 => SIZE_WIDTH,
     0 => MASK_WIDTH
-  ));
-  constant GAI : nat_array := cumulative((
-    1 => log2ceil(MAX_SIZE+1),
-    0 => log2ceil(MAX_SIZE+1)
   ));
 
   signal int_req_valid           : std_logic;
   signal int_req_ready           : std_logic;
   signal int_req_last            : std_logic;
   signal int_req_holes           : std_logic_vector(MASK_WIDTH-1 downto 0);
-  signal int_req_size            : std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0);
+  signal int_req_size            : std_logic_vector(SIZE_WIDTH-1 downto 0);
   signal int_req_data            : std_logic_vector(REI(REI'high)-1 downto 0);
   signal req_data                : std_logic_vector(REI(REI'high)-1 downto 0);
 
-  signal int_gap_valid           : std_logic;
-  signal int_gap_ready           : std_logic;
-  signal int_gap_offset          : std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0);
-  signal int_gap_size            : std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0);
-  signal int_gap_data            : std_logic_vector(GAI(GAI'high)-1 downto 0);
-  signal gap_data                : std_logic_vector(GAI(GAI'high)-1 downto 0);
-
-  type reg_type is record
-    size              : unsigned(log2ceil(MASK_WIDTH+1)-1 downto 0);
-    offset            : unsigned(log2ceil(MASK_WIDTH+1)-1 downto 0);
-    step              : unsigned(log2ceil((MAX_SIZE+MASK_WIDTH-1)/MASK_WIDTH+1)-1 downto 0);
-    send              : std_logic;
-    sent              : std_logic;
-  end record;
-
-  signal r : reg_type;
-  signal d : reg_type;
+  signal sub_req_valid           : std_logic;
+  signal sub_req_ready           : std_logic;
+  signal sub_req_last            : std_logic;
+  signal sub_req_holes           : std_logic_vector(MASK_WIDTH_SUB-1 downto 0);
+  signal sub_req_size            : std_logic_vector(SIZE_WIDTH-1 downto 0);
+  signal sub_req_data            : std_logic_vector(REI(REI'high)-1 downto 0);
 
 begin
 
+  gapfinder_inst : MMGapFinderStep
+    generic map (
+      MASK_WIDTH                  => MASK_WIDTH_SUB,
+      MAX_SIZE                    => MAX_SIZE,
+      SLV_SLICE                   => false,
+      MST_SLICE                   => MST_SLICE
+    )
+    port map (
+      clk                         => clk,
+      reset                       => reset,
+      req_valid                   => sub_req_valid,
+      req_ready                   => sub_req_ready,
+      req_holes                   => sub_req_holes,
+      req_size                    => sub_req_size,
+      req_last                    => sub_req_last,
 
+      gap_valid                   => gap_valid,
+      gap_ready                   => gap_ready,
+      gap_offset                  => gap_offset,
+      gap_size                    => gap_size
+    );
+
+  serializer_gen: if MASK_WIDTH /= MASK_WIDTH_SUB generate
+      signal in_data  : std_logic_vector(MASK_WIDTH_MUL + SIZE_WIDTH - 1 downto 0);
+      signal out_data : std_logic_vector(MASK_WIDTH_SUB + SIZE_WIDTH - 1 downto 0);
+    begin
+    serializer_inst: StreamSerializer
+      generic map (
+        -- Width of the serialized part of the output stream data vector.
+        DATA_WIDTH                  => MASK_WIDTH_SUB,
+        CTRL_WIDTH                  => SIZE_WIDTH,
+        IN_COUNT_MAX                => MASK_WIDTH_MUL/MASK_WIDTH_SUB,
+        IN_COUNT_WIDTH              => log2ceil(MASK_WIDTH/MASK_WIDTH_SUB),
+        OUT_COUNT_MAX               => 1
+      )
+      port map (
+        clk                         => clk,
+        reset                       => reset,
+        in_valid                    => int_req_valid,
+        in_ready                    => int_req_ready,
+        in_data                     => in_data,
+        in_last                     => int_req_last,
+        out_valid                   => sub_req_valid,
+        out_ready                   => sub_req_ready,
+        out_data                    => out_data,
+        out_last                    => sub_req_last
+      );
+      in_data(MASK_WIDTH - 1 downto 0)                               <= int_req_holes;
+      -- Fill remaining bits when input MASK_WIDTH is not a multiple of the
+      -- internal MASK_WIDTH.
+      in_data(MASK_WIDTH_MUL - 1 downto MASK_WIDTH)                  <= (others => '1');
+      in_data(MASK_WIDTH_MUL + SIZE_WIDTH - 1 downto MASK_WIDTH_MUL) <= int_req_size;
+      sub_req_holes <= out_data(MASK_WIDTH_SUB - 1 downto 0);
+      sub_req_size  <= out_data(MASK_WIDTH_SUB + SIZE_WIDTH - 1 downto MASK_WIDTH_SUB);
+  end generate;
+
+  no_serializer_gen: if MASK_WIDTH = MASK_WIDTH_SUB generate
+  begin
+    sub_req_valid            <= int_req_valid;
+    int_req_ready            <= sub_req_ready;
+    sub_req_size             <= int_req_size;
+    sub_req_holes            <= int_req_holes;
+    sub_req_last             <= int_req_last;
+  end generate;
 
   input_slice_gen: if SLV_SLICE generate
   begin
@@ -115,35 +172,6 @@ begin
     int_req_holes <= req_holes;
     int_req_size  <= req_size;
     int_req_last  <= req_last;
-  end generate;
-
-  output_slice_gen: if MST_SLICE generate
-  begin
-    slice_inst: StreamSlice
-      generic map (
-        DATA_WIDTH              => gap_data'length
-      )
-      port map (
-        clk                     => clk,
-        reset                   => reset,
-        in_valid                => int_gap_valid,
-        in_ready                => int_gap_ready,
-        in_data                 => int_gap_data,
-        out_valid               => gap_valid,
-        out_ready               => gap_ready,
-        out_data                => gap_data
-      );
-    int_gap_data(GAI(1)-1 downto GAI(0)) <= int_gap_offset;
-    int_gap_data(GAI(2)-1 downto GAI(1)) <= int_gap_size;
-    gap_offset <= gap_data(GAI(1)-1 downto GAI(0));
-    gap_size   <= gap_data(GAI(2)-1 downto GAI(1));
-  end generate;
-  no_output_slice_gen: if not MST_SLICE generate
-  begin
-    gap_valid     <= int_gap_valid;
-    int_gap_ready <= gap_ready;
-    gap_offset    <= int_gap_offset;
-    gap_size      <= int_gap_size;
   end generate;
 
 end architecture;

@@ -1988,7 +1988,7 @@ begin
       delete_entry                => rolodex_delete_entry
     );
 
-  gapfinder_pte : MMGapFinderStep
+  gapfinder_pte : MMGapFinder
     generic map (
       MASK_WIDTH                  => BUS_DATA_WIDTH / PTE_WIDTH,
       MAX_SIZE                    => BUS_DATA_WIDTH / PTE_WIDTH,
@@ -2010,7 +2010,7 @@ begin
       gap_size                    => gap_a_size
     );
 
-  gapfinder_pt : MMGapFinderStep
+  gapfinder_pt : MMGapFinder
     generic map (
       MASK_WIDTH                  => work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH),
       MAX_SIZE                    => work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH),
