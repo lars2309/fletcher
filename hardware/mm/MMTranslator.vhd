@@ -207,11 +207,13 @@ begin
           for cidx in 1 to CACHE_SIZE-1 loop
             lcache(cidx)     := lcache(cidx-1);
           end loop;
-          -- Save response at position 0.
-          lcache(0).valid    := '1';
-          lcache(0).virt     := resp_virt and resp_mask;
-          lcache(0).phys     := resp_phys;
-          lcache(0).mask     := resp_mask;
+          if CACHE_SIZE /= 0 then
+            -- Save response at position 0.
+            lcache(0).valid    := '1';
+            lcache(0).virt     := resp_virt and resp_mask;
+            lcache(0).phys     := resp_phys;
+            lcache(0).mask     := resp_mask;
+          end if;
         end if;
       else
         -- This request can be passed on as is.
