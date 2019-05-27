@@ -23,7 +23,8 @@ use work.Streams.all;
 entity MMGapFinderStep is
   generic (
     MASK_WIDTH                  : natural := 8;
-    MAX_SIZE                    : natural := 8;
+    SIZE_WIDTH                  : natural := 3;
+    OFFSET_WIDTH                : natural := 3;
     SLV_SLICE                   : boolean := false;
     MST_SLICE                   : boolean := false
   );
@@ -34,46 +35,47 @@ entity MMGapFinderStep is
     req_valid                   : in  std_logic;
     req_ready                   : out std_logic;
     req_holes                   : in  std_logic_vector(MASK_WIDTH-1 downto 0);
-    req_size                    : in  std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0);
+    req_size                    : in  std_logic_vector(SIZE_WIDTH-1 downto 0);
     req_last                    : in  std_logic := '1';
 
     gap_valid                   : out std_logic;
     gap_ready                   : in  std_logic;
-    gap_offset                  : out std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0);
-    gap_size                    : out std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0)
+    gap_offset                  : out std_logic_vector(OFFSET_WIDTH-1 downto 0);
+    gap_size                    : out std_logic_vector(SIZE_WIDTH-1 downto 0)
   );
 end MMGapFinderStep;
 
 architecture Behavioral of MMGapFinderStep is
   constant REI : nat_array := cumulative((
     2 => 1,
-    1 => log2ceil(MAX_SIZE+1),
+    1 => SIZE_WIDTH,
     0 => MASK_WIDTH
   ));
   constant GAI : nat_array := cumulative((
-    1 => log2ceil(MAX_SIZE+1),
-    0 => log2ceil(MAX_SIZE+1)
+    1 => SIZE_WIDTH,
+    0 => OFFSET_WIDTH
   ));
 
   signal int_req_valid           : std_logic;
   signal int_req_ready           : std_logic;
   signal int_req_last            : std_logic;
   signal int_req_holes           : std_logic_vector(MASK_WIDTH-1 downto 0);
-  signal int_req_size            : std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0);
+  signal int_req_size            : std_logic_vector(SIZE_WIDTH-1 downto 0);
   signal int_req_data            : std_logic_vector(REI(REI'high)-1 downto 0);
   signal req_data                : std_logic_vector(REI(REI'high)-1 downto 0);
 
   signal int_gap_valid           : std_logic;
   signal int_gap_ready           : std_logic;
-  signal int_gap_offset          : std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0);
-  signal int_gap_size            : std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0);
+  signal int_gap_offset          : std_logic_vector(OFFSET_WIDTH-1 downto 0);
+  signal int_gap_size            : std_logic_vector(SIZE_WIDTH-1 downto 0);
   signal int_gap_data            : std_logic_vector(GAI(GAI'high)-1 downto 0);
   signal gap_data                : std_logic_vector(GAI(GAI'high)-1 downto 0);
 
   type reg_type is record
-    size              : unsigned(log2ceil(MAX_SIZE+1)-1 downto 0);
-    offset            : unsigned(log2ceil(MAX_SIZE+1)-1 downto 0);
-    step              : unsigned(log2ceil((MAX_SIZE+MASK_WIDTH-1)/MASK_WIDTH+1)-1 downto 0);
+    size              : unsigned(SIZE_WIDTH-1 downto 0);
+    offset            : unsigned(OFFSET_WIDTH-1 downto 0);
+    -- Make sure to have a large enough step count register.
+    step              : unsigned(OFFSET_WIDTH - log2floor(MASK_WIDTH) downto 0);
     send              : std_logic;
     sent              : std_logic;
   end record;
@@ -115,7 +117,7 @@ begin
           -- Must start a new gap at the next position.
           v.size             := (others => '0');
           v.offset           := to_unsigned(N + 1, v.offset'length);
-          if MAX_SIZE > MASK_WIDTH then
+          if OFFSET_WIDTH > log2ceil(MASK_WIDTH) then
             -- Add the previous inputs to the offset as well.
             v.offset         := v.offset + mul(
                                    resize(v.step, v.offset'length),

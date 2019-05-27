@@ -353,9 +353,11 @@ package MM is
 
   component MMGapFinder is
     generic (
+      -- Must be a multiple of the internal width when the `last' signal is used.
       MASK_WIDTH                  : natural := 8;
-      MASK_WIDTH_INTERNAL         : natural := 64;
-      MAX_SIZE                    : natural := 8;
+      MASK_WIDTH_INTERNAL         : natural := 32;
+      SIZE_WIDTH                  : natural := 3;
+      OFFSET_WIDTH                : natural := 3;
       SLV_SLICE                   : boolean := false;
       MST_SLICE                   : boolean := false
     );
@@ -366,20 +368,21 @@ package MM is
       req_valid                   : in  std_logic;
       req_ready                   : out std_logic;
       req_holes                   : in  std_logic_vector(MASK_WIDTH-1 downto 0);
-      req_size                    : in  std_logic_vector(log2ceil(MASK_WIDTH+1)-1 downto 0);
+      req_size                    : in  std_logic_vector(SIZE_WIDTH-1 downto 0);
       req_last                    : in  std_logic := '1';
 
       gap_valid                   : out std_logic;
       gap_ready                   : in  std_logic;
-      gap_offset                  : out std_logic_vector(log2ceil(MASK_WIDTH+1)-1 downto 0);
-      gap_size                    : out std_logic_vector(log2ceil(MASK_WIDTH+1)-1 downto 0)
+      gap_offset                  : out std_logic_vector(OFFSET_WIDTH-1 downto 0);
+      gap_size                    : out std_logic_vector(SIZE_WIDTH-1 downto 0)
     );
   end component;
 
   component MMGapFinderStep is
     generic (
       MASK_WIDTH                  : natural := 8;
-      MAX_SIZE                    : natural := 8;
+      SIZE_WIDTH                  : natural := 3;
+      OFFSET_WIDTH                : natural := 3;
       SLV_SLICE                   : boolean := false;
       MST_SLICE                   : boolean := false
     );
@@ -390,13 +393,13 @@ package MM is
       req_valid                   : in  std_logic;
       req_ready                   : out std_logic;
       req_holes                   : in  std_logic_vector(MASK_WIDTH-1 downto 0);
-      req_size                    : in  std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0);
+      req_size                    : in  std_logic_vector(SIZE_WIDTH-1 downto 0);
       req_last                    : in  std_logic := '1';
 
       gap_valid                   : out std_logic;
       gap_ready                   : in  std_logic;
-      gap_offset                  : out std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0);
-      gap_size                    : out std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0)
+      gap_offset                  : out std_logic_vector(OFFSET_WIDTH-1 downto 0);
+      gap_size                    : out std_logic_vector(SIZE_WIDTH-1 downto 0)
     );
   end component;
 

@@ -1991,7 +1991,8 @@ begin
   gapfinder_pte : MMGapFinder
     generic map (
       MASK_WIDTH                  => BUS_DATA_WIDTH / PTE_WIDTH,
-      MAX_SIZE                    => BUS_DATA_WIDTH / PTE_WIDTH,
+      SIZE_WIDTH                  => log2ceil(BUS_DATA_WIDTH / PTE_WIDTH + 1),
+      OFFSET_WIDTH                => log2ceil(BUS_DATA_WIDTH / PTE_WIDTH + 1),
       SLV_SLICE                   => true,
       MST_SLICE                   => true
     )
@@ -2013,7 +2014,9 @@ begin
   gapfinder_pt : MMGapFinder
     generic map (
       MASK_WIDTH                  => work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH),
-      MAX_SIZE                    => work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH),
+      SIZE_WIDTH                  => 1,
+      OFFSET_WIDTH                => log2ceil(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH)),
+      MASK_WIDTH_INTERNAL         => work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH),
       SLV_SLICE                   => true,
       MST_SLICE                   => true
     )
@@ -2024,7 +2027,7 @@ begin
       req_valid                   => gap_pt_q_valid,
       req_ready                   => gap_pt_q_ready,
       req_holes                   => gap_pt_q_holes,
-      req_size                    => slv(to_unsigned(1, log2ceil(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH)+1))),
+      req_size                    => "1",
 
       gap_valid                   => gap_pt_a_valid,
       gap_ready                   => gap_pt_a_ready,

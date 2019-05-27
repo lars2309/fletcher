@@ -25,8 +25,9 @@ entity MMGapFinder is
   generic (
     -- Must be a multiple of the internal width when the `last' signal is used.
     MASK_WIDTH                  : natural := 8;
-    MASK_WIDTH_INTERNAL         : natural := 64;
-    MAX_SIZE                    : natural := 8;
+    MASK_WIDTH_INTERNAL         : natural := 32;
+    SIZE_WIDTH                  : natural := 3;
+    OFFSET_WIDTH                : natural := 3;
     SLV_SLICE                   : boolean := false;
     MST_SLICE                   : boolean := false
   );
@@ -37,18 +38,17 @@ entity MMGapFinder is
     req_valid                   : in  std_logic;
     req_ready                   : out std_logic;
     req_holes                   : in  std_logic_vector(MASK_WIDTH-1 downto 0);
-    req_size                    : in  std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0);
+    req_size                    : in  std_logic_vector(SIZE_WIDTH-1 downto 0);
     req_last                    : in  std_logic := '1';
 
     gap_valid                   : out std_logic;
     gap_ready                   : in  std_logic;
-    gap_offset                  : out std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0);
-    gap_size                    : out std_logic_vector(log2ceil(MAX_SIZE+1)-1 downto 0)
+    gap_offset                  : out std_logic_vector(OFFSET_WIDTH-1 downto 0);
+    gap_size                    : out std_logic_vector(SIZE_WIDTH-1 downto 0)
   );
 end MMGapFinder;
 
 architecture Behavioral of MMGapFinder is
-  constant SIZE_WIDTH : natural := log2ceil(MAX_SIZE+1);
   -- Mask width that will be evaluated sequentially by the subcomponent.
   constant MASK_WIDTH_SUB : natural := work.Utils.min(MASK_WIDTH, MASK_WIDTH_INTERNAL);
   -- Find multiple of MASK_WIDTH_SUB to cover the original mask.
@@ -80,7 +80,8 @@ begin
   gapfinder_inst : MMGapFinderStep
     generic map (
       MASK_WIDTH                  => MASK_WIDTH_SUB,
-      MAX_SIZE                    => MAX_SIZE,
+      SIZE_WIDTH                  => SIZE_WIDTH,
+      OFFSET_WIDTH                => OFFSET_WIDTH,
       SLV_SLICE                   => false,
       MST_SLICE                   => MST_SLICE
     )
