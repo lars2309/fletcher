@@ -348,7 +348,12 @@ fstatus_t platformDeviceMalloc(da_t *device_address, int64_t size) {
 
   // Check status of returned allocation
   if ((regval & FLETCHER_REG_MM_STATUS_OK) == 0) {
+    // Allocation failed
     *device_address = D_NULLPTR;
+
+    // Acknowledge that response was read
+    platformWriteMMIO(FLETCHER_REG_MM_HDA_STATUS, FLETCHER_REG_MM_HDA_STATUS_ACK);
+
     return FLETCHER_STATUS_ERROR;
 
   } else {
@@ -370,8 +375,37 @@ fstatus_t platformDeviceMalloc(da_t *device_address, int64_t size) {
 }
 
 fstatus_t platformDeviceFree(da_t device_address) {
-  debug_print("[FLETCHER_AWS] Freeing device memory.       [device] 0x%016lX : NOT IMPLEMENTED.\n", device_address);
-  return FLETCHER_STATUS_OK;
+  bool success;
+  debug_print("[FLETCHER_AWS] Freeing device memory.       [device] 0x%016lX.\n", device_address);
+
+  // Set address
+  platformWriteMMIO(FLETCHER_REG_MM_HDR_ADDR_LO, device_address);
+  platformWriteMMIO(FLETCHER_REG_MM_HDR_ADDR_HI, device_address >> 32);
+
+  // Free
+  platformWriteMMIO(FLETCHER_REG_MM_HDR_CMD, FLETCHER_REG_MM_CMD_FREE);
+
+  // Wait for completion
+  do {
+//    usleep(1);
+    platformReadMMIO(FLETCHER_REG_MM_HDA_STATUS, &regval);
+  } while ((regval & FLETCHER_REG_MM_STATUS_DONE) == 0);
+
+  // Check status
+  if ((regval & FLETCHER_REG_MM_STATUS_OK) == 0) {
+    success = false;
+  } else {
+    success = true;
+  }
+
+  // Acknowledge that response was read
+  platformWriteMMIO(FLETCHER_REG_MM_HDA_STATUS, FLETCHER_REG_MM_HDA_STATUS_ACK);
+
+  if (success) {
+    return FLETCHER_STATUS_OK;
+  } else {
+    return FLETCHER_STATUS_ERROR;
+  }
 }
 
 fstatus_t platformPrepareHostBuffer(const uint8_t *host_source, da_t *device_destination, int64_t size, int *alloced) {
