@@ -85,6 +85,7 @@ ${FLETCHER_HARDWARE_DIR}/mm/MMWalker.vhd
 
 # Fletcher to AWS glue
 
+$FLETCHER_EXAMPLES_DIR/malloc/hardware/ReactDelayCounter.vhd
 $FLETCHER_EXAMPLES_DIR/malloc/hardware/fletcher_wrapper.vhd
 $FLETCHER_EXAMPLES_DIR/malloc/hardware/axi_top.vhd
 $FLETCHER_EXAMPLES_DIR/malloc/hardware/f1_top.vhd

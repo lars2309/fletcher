@@ -99,12 +99,31 @@ entity fletcher_wrapper is
 end fletcher_wrapper;
 
 architecture Implementation of fletcher_wrapper is
+  component ReactDelayCounter is
+    generic (
+      COUNT_WIDTH                 : natural := 32
+    );
+    port (
+      clk                         : in  std_logic;
+      reset                       : in  std_logic;
+
+      req_valid                   : in  std_logic;
+      req_ready                   : in  std_logic;
+
+      resp_valid                  : in  std_logic;
+      resp_ready                  : in  std_logic;
+
+      delay                       : out std_logic_vector(COUNT_WIDTH-1 downto 0)
+    );
+  end component;
+
   constant PT_ADDR_INTERM              : unsigned(BUS_ADDR_WIDTH-1 downto 0) := MEM_MAP_BASE;
   constant PT_ADDR                     : unsigned(BUS_ADDR_WIDTH-1 downto 0) := PT_ADDR_INTERM + 2**PT_ENTRIES_LOG2 * ( (PTE_BITS+BYTE_SIZE-1) / BYTE_SIZE);
 
   constant MM_BENCH_REGS               : natural := 12;
   constant MM_REG_OFFSET_BENCH_RS      : natural := 26;
   constant MM_REG_OFFSET_BENCH_RR      : natural := MM_REG_OFFSET_BENCH_RS + MM_BENCH_REGS;
+  constant MM_REG_CMD_DELAY            : natural := MM_REG_OFFSET_BENCH_RR + MM_BENCH_REGS;
 
   type bus_req_t is record
     valid             : std_logic;
@@ -436,6 +455,21 @@ begin
       bus_resp_ready              => dir_w.resp_ready,
       bus_resp_ok                 => dir_w.resp_ok
     );
+
+  mm_hif_delay_cntr_inst : ReactDelayCounter
+    generic map (
+      COUNT_WIDTH                 => 32
+    )
+    port map (
+      clk                         => bus_clk,
+      reset                       => bus_reset,
+      req_valid                   => cmd_valid,
+      req_ready                   => cmd_ready,
+      resp_valid                  => resp_valid,
+      resp_ready                  => resp_ready,
+      delay                       => regs_out((MM_REG_CMD_DELAY+1)*REG_WIDTH-1 downto MM_REG_CMD_DELAY*REG_WIDTH)
+    );
+  regs_out_en(MM_REG_CMD_DELAY)   <= '1';
 
   mm_hif_inst : MMHostInterface
     generic map (
