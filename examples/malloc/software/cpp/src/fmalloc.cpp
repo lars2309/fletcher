@@ -129,6 +129,9 @@ void device_bench(std::shared_ptr<fletcher::Platform> platform,
 int main(int argc, char ** argv) {
   int status = EXIT_SUCCESS;
 
+  // Maximum for page size 2^18 and 2^13 page table entries. (16TiB)
+  const int64_t alloc_max = 1024L*1024*1024* 16384;
+
   std::vector<uint64_t> malloc_sizes;
   malloc_sizes.push_back(1024L*1024 *1);         //  1 MB, sub-page
   malloc_sizes.push_back(1024L*1024 *4);         //  4 MB, page
@@ -143,8 +146,9 @@ int main(int argc, char ** argv) {
   malloc_sizes.push_back(1024L*1024*1024* 64);
   malloc_sizes.push_back(1024L*1024*1024* 128);
   malloc_sizes.push_back(1024L*1024*1024* 256);
-//  malloc_sizes.push_back(1024L*1024*1024* 512);
-//  malloc_sizes.push_back(1024L*1024*1024* 1024); //  1 TB
+  malloc_sizes.push_back(1024L*1024*1024* 512);
+  malloc_sizes.push_back(1024L*1024*1024* 1024); //  1 TB
+
   int n_mallocs = malloc_sizes.size();
 
   int benchmark_buffer = 4;
@@ -362,6 +366,32 @@ int main(int argc, char ** argv) {
     device_bench(platform, bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
   }
 
+  // Free device buffers
+  std::cerr << "Freeing device buffers." << std::endl;
+  for (int i = 0; i < n_mallocs; i++) {
+    platform->deviceFree(maddr.at(i));
+  }
+
+  // Test allocation speed
+  std::cerr << "Measuring allocation latency." << std::endl;
+  int64_t alloc_addr;
+  int32_t cycles;
+  int64_t alloc_size = 1024*1024;
+  while(alloc_size <= alloc_max) {
+    platform->deviceMalloc(alloc_addr, alloc_size);
+    platform->readMMIO(50, &cycles);
+    std::cout << "Alloc of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl;
+    platform->deviceFree(alloc_addr);
+    if (alloc_size < 1024*1024*128) { // 128 MiB
+      alloc_size += 1024*1024; // 1 MiB
+    } else if (alloc_size < 1024L*1024L*1024L) { // 1 GiB
+      alloc_size += 1024*1024*128; // 128 MiB
+    } else if (alloc_size < 1024L*1024L*1024L*128L) { // 128 GiB
+      alloc_size += 1024*1024*128; // 1 GiB
+    } else {
+      alloc_size *= 2;
+    }
+  }
 
   // Report the run times:
   PRINT_TIME(calc_sum(t_alloc), "allocation");
