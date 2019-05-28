@@ -410,7 +410,8 @@ architecture Behavioral of MMDirector is
   signal gap_pt_q_holes         : std_logic_vector(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH)-1 downto 0);
   signal gap_pt_a_valid         : std_logic;
   signal gap_pt_a_ready         : std_logic;
-  signal gap_pt_a_offset        : std_logic_vector(log2ceil(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH)+1)-1 downto 0);
+  signal gap_pt_a_offset        : std_logic_vector(log2ceil(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH))-1 downto 0);
+  signal gap_pt_a_size          : std_logic_vector(0 downto 0);
 
   signal rolodex_entry_valid    : std_logic;
   signal rolodex_entry_ready    : std_logic;
@@ -575,7 +576,7 @@ begin
            dir_frames_cmd_ready,
            dir_frames_resp_addr, dir_frames_resp_success, dir_frames_resp_valid,
            gap_a_valid, gap_a_size, gap_a_offset, gap_q_ready,
-           gap_pt_a_valid, gap_pt_a_offset, gap_pt_q_ready,
+           gap_pt_a_valid, gap_pt_a_offset, gap_pt_a_size, gap_pt_q_ready,
            rolodex_entry_valid, rolodex_entry_marked, rolodex_entry,
            rolodex_insert_ready, rolodex_delete_ready,
            my_bus_wreq, my_bus_wdat,
@@ -1651,7 +1652,7 @@ begin
       gap_pt_a_ready         <= '1';
       if gap_pt_a_valid = '1' then
         my_bus_rdat.ready    <= '1';
-        if gap_pt_a_offset(gap_pt_a_offset'high) = '1' then
+        if u(gap_pt_a_size) = 0 then
           -- No gap was found.
           rolodex_entry_ready <= '1';
           v.state_stack(0)   := PT_NEW_REQ_BM;
@@ -2031,7 +2032,8 @@ begin
 
       gap_valid                   => gap_pt_a_valid,
       gap_ready                   => gap_pt_a_ready,
-      gap_offset                  => gap_pt_a_offset
+      gap_offset                  => gap_pt_a_offset,
+      gap_size                    => gap_pt_a_size
     );
 
   framestore : MMFrames
