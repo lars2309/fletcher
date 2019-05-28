@@ -378,7 +378,7 @@ int main(int argc, char ** argv) {
   uint32_t cycles;
   uint64_t alloc_size = 1024*1024;
   while(alloc_size <= alloc_max) {
-    platform->deviceMalloc(alloc_addr, alloc_size);
+    platform->deviceMalloc(&alloc_addr, alloc_size);
     platform->readMMIO(50, &cycles);
     std::cout << "Alloc of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl;
     platform->deviceFree(alloc_addr);
