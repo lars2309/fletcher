@@ -2017,7 +2017,7 @@ begin
       MASK_WIDTH                  => work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH),
       SIZE_WIDTH                  => 1,
       OFFSET_WIDTH                => log2ceil(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH)),
-      MASK_WIDTH_INTERNAL         => work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH),
+      MASK_WIDTH_INTERNAL         => 32,
       SLV_SLICE                   => true,
       MST_SLICE                   => true
     )
