@@ -75,7 +75,7 @@ uint64_t get_addr_mask(uint64_t buffer_size, int burst_len) {
 
 void device_bench(std::shared_ptr<fletcher::Platform> platform, 
     int reg_offset, uint32_t burst_len, uint32_t bursts,
-    uint64_t base_addr, uint64_t addr_mask) {
+    da_t base_addr, uint64_t addr_mask) {
   std::cerr << "running device benchmarker...";
   uint32_t control = 0;
   uint32_t status;
@@ -166,7 +166,7 @@ int main(int argc, char ** argv) {
   std::vector<double> t_alloc(n_mallocs);
   std::vector<double> t_write(n_mallocs);
   std::vector<double> t_read(n_mallocs);
-  std::vector<uint64_t> maddr(n_mallocs);
+  std::vector<da_t> maddr(n_mallocs);
 
   // Allocate memory on device
   for (int i = 0; i < n_mallocs; i++) {
@@ -263,7 +263,7 @@ int main(int argc, char ** argv) {
   // Use hardware benchmarker
   if (benchmark_buffer >= 0) {
 
-    uint64_t dev_raw = 1024L*1024L*1024L; // 1 GiB offset into device memory
+    da_t dev_raw = 1024L*1024L*1024L; // 1 GiB offset into device memory
     int test_size = 1024*1024*512; // 512 MiB
 
     int bench_reg_offset = 26;
@@ -374,9 +374,9 @@ int main(int argc, char ** argv) {
 
   // Test allocation speed
   std::cerr << "Measuring allocation latency." << std::endl;
-  int64_t alloc_addr;
-  int32_t cycles;
-  int64_t alloc_size = 1024*1024;
+  da_t alloc_addr;
+  uint32_t cycles;
+  uint64_t alloc_size = 1024*1024;
   while(alloc_size <= alloc_max) {
     platform->deviceMalloc(alloc_addr, alloc_size);
     platform->readMMIO(50, &cycles);
