@@ -386,6 +386,7 @@ fstatus_t platformDeviceFree(da_t device_address) {
   platformWriteMMIO(FLETCHER_REG_MM_HDR_CMD, FLETCHER_REG_MM_CMD_FREE);
 
   // Wait for completion
+  uint32_t regval = size;
   do {
 //    usleep(1);
     platformReadMMIO(FLETCHER_REG_MM_HDA_STATUS, &regval);
