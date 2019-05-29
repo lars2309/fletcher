@@ -322,8 +322,8 @@ begin
         DATA_WIDTH                      => 1
       )
       port map (
-        clk                             => bus_clk,
-        reset                           => bus_reset,
+        clk                             => bcd_clk,
+        reset                           => bcd_reset,
 
         in_valid                        => bss_resp_valid(i),
         in_ready                        => bss_resp_ready(i),
@@ -394,8 +394,8 @@ begin
       DATA_WIDTH                        => 1
     )
     port map (
-      clk                               => bus_clk,
-      reset                             => bus_reset,
+      clk                               => bcd_clk,
+      reset                             => bcd_reset,
 
       in_valid                          => mst_resp_valid,
       in_ready                          => mst_resp_ready,
@@ -572,8 +572,8 @@ begin
       RAM_CONFIG                        => RAM_CONFIG
     )
     port map (
-      clk                               => bus_clk,
-      reset                             => bus_reset,
+      clk                               => bcd_clk,
+      reset                             => bcd_reset,
 
       in_valid                          => idxC_valid,
       in_ready                          => idxC_ready,
@@ -607,8 +607,8 @@ begin
       NUM_OUTPUTS                       => NUM_SLAVE_PORTS
     )
     port map (
-      clk                               => bus_clk,
-      reset                             => bus_reset,
+      clk                               => bcd_clk,
+      reset                             => bcd_reset,
 
       in_valid(1)                       => idxD_valid,
       in_valid(0)                       => bms_resp_valid,
