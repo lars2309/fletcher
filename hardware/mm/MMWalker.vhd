@@ -396,8 +396,8 @@ begin
       SLV_DAT_SLICES              => true  --TODO: insert slice before queue_l2 instead
     )
     port map (
-      bus_clk                     => clk,
-      bus_reset                   => reset,
+      bcd_clk                     => clk,
+      bcd_reset                   => reset,
 
       mst_rreq_valid              => bus_rreq_valid,
       mst_rreq_ready              => bus_rreq_ready,

@@ -2074,8 +2074,8 @@ begin
       SLV_DAT_SLICES              => true
     )
     port map (
-      bus_clk                     => clk,
-      bus_reset                   => reset,
+      bcd_clk                     => clk,
+      bcd_reset                   => reset,
 
       mst_rreq_valid              => frames_cmd_valid,
       mst_rreq_ready              => frames_cmd_ready,
@@ -2221,10 +2221,10 @@ begin
       OUT_SLICE                   => true
     )
     port map (
-      bus_clk                     => clk,
-      bus_reset                   => reset,
-      acc_clk                     => clk,
-      acc_reset                   => reset,
+      bcd_clk                     => clk,
+      bcd_reset                   => reset,
+      kcd_clk                     => clk,
+      kcd_reset                   => reset,
 
       cmdIn_valid                 => pt_reader_cmd_valid,
       cmdIn_ready                 => pt_reader_cmd_ready,
@@ -2266,8 +2266,8 @@ begin
       SLV_RSP_SLICES              => true
     )
     port map (
-      bus_clk                   => clk,
-      bus_reset                 => reset,
+      bcd_clk                   => clk,
+      bcd_reset                 => reset,
 
       mst_wreq_valid            => bus_wreq_valid,
       mst_wreq_ready            => bus_wreq_ready,
@@ -2323,8 +2323,8 @@ begin
       SLV_DAT_SLICES              => true
     )
     port map (
-      bus_clk                     => clk,
-      bus_reset                   => reset,
+      bcd_clk                     => clk,
+      bcd_reset                   => reset,
 
       mst_rreq_valid              => bus_rreq_valid,
       mst_rreq_ready              => bus_rreq_ready,

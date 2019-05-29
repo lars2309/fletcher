@@ -51,10 +51,10 @@ entity fletcher_wrapper is
     PTE_BITS                                   : natural
   );
   port(
-    acc_reset                                  : in std_logic;
-    bus_clk                                    : in std_logic;
-    bus_reset                                  : in std_logic;
-    acc_clk                                    : in std_logic;
+    kcd_reset                                  : in std_logic;
+    bcd_clk                                    : in std_logic;
+    bcd_reset                                  : in std_logic;
+    kcd_clk                                    : in std_logic;
     ---------------------------------------------------------------------------
     mst_rreq_valid                             : out std_logic;
     mst_rreq_ready                             : in std_logic;
@@ -207,8 +207,8 @@ begin
       PATTERN                     => "SEQUENTIAL"
     )
     port map (
-      bus_clk                     => bus_clk,
-      bus_reset                   => bus_reset,
+      bcd_clk                     => bcd_clk,
+      bcd_reset                   => bcd_reset,
 
       bus_rreq_valid              => bench_rs.virt.valid,
       bus_rreq_ready              => bench_rs.virt.ready,
@@ -270,8 +270,8 @@ begin
     MST_SLICES                  => 2
   )
   port map (
-    clk                         => bus_clk,
-    reset                       => bus_reset,
+    clk                         => bcd_clk,
+    reset                       => bcd_reset,
 
     -- Slave request channel
     slv_req_valid               => bench_rs.virt.valid,
@@ -306,8 +306,8 @@ begin
       PATTERN                     => "RANDOM"
     )
     port map (
-      bus_clk                     => bus_clk,
-      bus_reset                   => bus_reset,
+      bcd_clk                     => bcd_clk,
+      bcd_reset                   => bcd_reset,
 
       bus_rreq_valid              => bench_rr.virt.valid,
       bus_rreq_ready              => bench_rr.virt.ready,
@@ -369,8 +369,8 @@ begin
     MST_SLICES                  => 2
   )
   port map (
-    clk                         => bus_clk,
-    reset                       => bus_reset,
+    clk                         => bcd_clk,
+    reset                       => bcd_reset,
 
     -- Slave request channel
     slv_req_valid               => bench_rr.virt.valid,
@@ -408,8 +408,8 @@ begin
       PTE_BITS                    => PTE_BITS
     )
     port map (
-      clk                         => bus_clk,
-      reset                       => bus_reset,
+      clk                         => bcd_clk,
+      reset                       => bcd_reset,
       cmd_region                  => cmd_region,
       cmd_addr                    => cmd_addr,
       cmd_size                    => cmd_size,
@@ -461,8 +461,8 @@ begin
       COUNT_WIDTH                 => 32
     )
     port map (
-      clk                         => bus_clk,
-      reset                       => bus_reset,
+      clk                         => bcd_clk,
+      reset                       => bcd_reset,
       req_valid                   => cmd_valid,
       req_ready                   => cmd_ready,
       resp_valid                  => resp_valid,
@@ -476,8 +476,8 @@ begin
       MEM_REGIONS                 => MEM_REGIONS
     )
     port map (
-      clk                         => bus_clk,
-      reset                       => bus_reset,
+      clk                         => bcd_clk,
+      reset                       => bcd_reset,
       cmd_region                  => cmd_region,
       cmd_addr                    => cmd_addr,
       cmd_size                    => cmd_size,
@@ -514,8 +514,8 @@ begin
       BUS_BURST_MAX_LEN           => BUS_BURST_MAX_LEN
     )
     port map (
-      clk                         => bus_clk,
-      reset                       => bus_reset,
+      clk                         => bcd_clk,
+      reset                       => bcd_reset,
 
       -- Read address channel
       bus_rreq_addr               => mmu_r.phys.addr,
@@ -563,8 +563,8 @@ begin
     SLV_DAT_SLICES              => true
   )
   port map (
-    bus_clk                     => bus_clk,
-    bus_reset                   => bus_reset,
+    bcd_clk                     => bcd_clk,
+    bcd_reset                   => bcd_reset,
 
     mst_rreq_valid              => translate.req.valid,
     mst_rreq_ready              => translate.req.ready,
@@ -628,8 +628,8 @@ begin
       SLV_DAT_SLICES            => true
     )
     port map (
-      bus_clk                   => bus_clk,
-      bus_reset                 => bus_reset,
+      bcd_clk                   => bcd_clk,
+      bcd_reset                 => bcd_reset,
 
       mst_rreq_valid            => mst_rreq_valid,
       mst_rreq_ready            => mst_rreq_ready,
@@ -695,8 +695,8 @@ begin
       SLV_RSP_SLICES            => true
     )
     port map (
-      bus_clk                   => bus_clk,
-      bus_reset                 => bus_reset,
+      bcd_clk                   => bcd_clk,
+      bcd_reset                 => bcd_reset,
 
       mst_wreq_valid            => mst_wreq_valid,
       mst_wreq_ready            => mst_wreq_ready,

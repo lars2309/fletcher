@@ -533,10 +533,10 @@ assign arrow_mst.awid           = 0;
 //assign arrow_mst.aruser         = (others => '0');
 
 `ARROW_TOP #() ARROW_TOP_INST (
-   .acc_clk(clk),
-   .bus_clk(clk),
-   .acc_reset(sync_rst),
-   .bus_reset_n(sync_rst_n),
+   .kcd_clk(clk),
+   .bcd_clk(clk),
+   .kcd_reset(sync_rst),
+   .bcd_reset_n(sync_rst_n),
 
     // Master interface
    .m_axi_arvalid(arrow_mst.arvalid),

@@ -56,10 +56,10 @@ entity f1_top is
     NUM_REGS                    : natural := 26 + 12 * 2 + 1
   );
   port (
-    acc_clk                     : in  std_logic;
-    acc_reset                   : in  std_logic;
-    bus_clk                     : in  std_logic;
-    bus_reset_n                 : in  std_logic;
+    kcd_clk                     : in  std_logic;
+    kcd_reset                   : in  std_logic;
+    bcd_clk                     : in  std_logic;
+    bcd_reset_n                 : in  std_logic;
 
     ---------------------------------------------------------------------------
     -- AXI4 master as Device Memory Interface for Fletcher
@@ -246,10 +246,10 @@ architecture Behavorial of f1_top is
       NUM_REGS                    : natural := 10
     );
     port (
-      acc_clk                     : in  std_logic;
-      acc_reset                   : in  std_logic;
-      bus_clk                     : in  std_logic;
-      bus_reset_n                 : in  std_logic;
+      kcd_clk                     : in  std_logic;
+      kcd_reset                   : in  std_logic;
+      bcd_clk                     : in  std_logic;
+      bcd_reset_n                 : in  std_logic;
 
       ---------------------------------------------------------------------------
       -- AXI4 master as Host Memory Interface
@@ -329,7 +329,7 @@ architecture Behavorial of f1_top is
     );
   end component;
 
-  signal bus_reset               : std_logic;
+  signal bcd_reset               : std_logic;
 
   -- Translate request channel
   signal tr_q_valid              : std_logic;
@@ -374,7 +374,7 @@ architecture Behavorial of f1_top is
 begin
 
   -- Active high reset
-  bus_reset <= '1' when bus_reset_n = '0' else '0';
+  bcd_reset <= '1' when bcd_reset_n = '0' else '0';
 
   axi_top_inst : axi_top
   generic map (
@@ -411,10 +411,10 @@ begin
     NUM_REGS                    => NUM_REGS
   )
   port map (
-    acc_clk                     => acc_clk,
-    acc_reset                   => acc_reset,
-    bus_clk                     => bus_clk,
-    bus_reset_n                 => bus_reset_n,
+    kcd_clk                     => kcd_clk,
+    kcd_reset                   => kcd_reset,
+    bcd_clk                     => bcd_clk,
+    bcd_reset_n                 => bcd_reset_n,
 
     ---------------------------------------------------------------------------
     -- AXI4 master as Host Memory Interface
@@ -530,8 +530,8 @@ begin
     MST_SLICES                  => 4
   )
   port map (
-    clk                         => bus_clk,
-    reset                       => bus_reset,
+    clk                         => bcd_clk,
+    reset                       => bcd_reset,
 
     -- Slave request channel
     slv_req_valid               => s_axi_arvalid,
@@ -573,8 +573,8 @@ begin
     MST_SLICES                  => 4
   )
   port map (
-    clk                         => bus_clk,
-    reset                       => bus_reset,
+    clk                         => bcd_clk,
+    reset                       => bcd_reset,
 
     -- Slave request channel
     slv_req_valid               => s_axi_awvalid,
@@ -619,8 +619,8 @@ begin
     SLV_DAT_SLICES              => true
   )
   port map (
-    bus_clk                     => bus_clk,
-    bus_reset                   => bus_reset,
+    bcd_clk                     => bcd_clk,
+    bcd_reset                   => bcd_reset,
 
     mst_rreq_valid              => tr_q_valid,
     mst_rreq_ready              => tr_q_ready,

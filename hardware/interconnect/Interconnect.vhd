@@ -217,8 +217,8 @@ package Interconnect is
       PATTERN                     : string := "RANDOM"
     );
     port (
-      bus_clk                     : in  std_logic;
-      bus_reset                   : in  std_logic;
+      bcd_clk                     : in  std_logic;
+      bcd_reset                   : in  std_logic;
       bus_rreq_valid              : out std_logic;
       bus_rreq_ready              : in  std_logic;
       bus_rreq_addr               : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);

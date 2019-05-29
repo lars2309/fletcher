@@ -35,8 +35,8 @@ entity BusReadBenchmarker is
     PATTERN                     : string := "RANDOM"
   );
   port (
-    bus_clk                     : in  std_logic;
-    bus_reset                   : in  std_logic;
+    bcd_clk                     : in  std_logic;
+    bcd_reset                   : in  std_logic;
 
     bus_rreq_valid              : out std_logic;
     bus_rreq_ready              : in  std_logic;
@@ -127,8 +127,8 @@ begin
         DATA_WIDTH  => BUS_ADDR_WIDTH
       )
       port map (
-        clk         => bus_clk,
-        reset       => bus_reset,
+        clk         => bcd_clk,
+        reset       => bcd_reset,
         seed        => slv(resize(u(X"FEEDBEEF13374242"), BUS_ADDR_WIDTH)),
         out_valid   => prng_valid,
         out_ready   => prng_ready,
@@ -137,10 +137,10 @@ begin
   end generate;
 
   -- State machine sequential part
-  req_seq: process(bus_clk) is begin
-    if rising_edge(bus_clk) then
+  req_seq: process(bcd_clk) is begin
+    if rising_edge(bcd_clk) then
       r <= d;
-      if bus_reset = '1' or reg_control(CONTROL_RESET) = '1' then
+      if bcd_reset = '1' or reg_control(CONTROL_RESET) = '1' then
         r.state <= IDLE;
       end if;
     end if;
