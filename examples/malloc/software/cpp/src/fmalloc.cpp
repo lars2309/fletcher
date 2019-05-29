@@ -377,11 +377,24 @@ int main(int argc, char ** argv) {
   da_t alloc_addr;
   uint32_t cycles;
   uint64_t alloc_size = 1024*1024;
+
   while(alloc_size <= alloc_max) {
-    platform->deviceMalloc(&alloc_addr, alloc_size);
+
+    if (!ok(platform->deviceMalloc(&alloc_addr, alloc_size))) {
+      std::cerr << "ERROR while allocating " << alloc_size << " bytes." << std::endl << std::flush;
+      status = EXIT_FAILURE;
+      break;
+    }
     platform->readMMIO(50, &cycles);
-    std::cout << "Alloc of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl;
-    platform->deviceFree(alloc_addr);
+    std::cout << "Alloc of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
+
+    if (!ok(platform->deviceFree(alloc_addr))) {
+      std::cerr << "ERROR while freeing " << alloc_size << " bytes." << std::endl << std::flush;
+      status = EXIT_FAILURE;
+      break;
+    }
+    std::cout << "Free of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
+
     if (alloc_size < 1024*1024*128) { // 128 MiB
       alloc_size += 1024*1024; // 1 MiB
     } else if (alloc_size < 1024L*1024L*1024L) { // 1 GiB
@@ -392,6 +405,85 @@ int main(int argc, char ** argv) {
       alloc_size *= 2;
     }
   }
+
+  // Test reallocation speed
+  std::cerr << "Measuring reallocation latency." << std::endl;
+  da_t alloc_addr;
+  uint32_t cycles;
+  uint64_t alloc_size = 1024*1024;
+
+  if (!ok(platform->deviceMalloc(&alloc_addr, alloc_size))) {
+    std::cerr << "ERROR while allocating " << alloc_size << " bytes." << std::endl << std::flush;
+    status = EXIT_FAILURE;
+  }
+  platform->readMMIO(50, &cycles);
+  std::cout << "Alloc of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
+
+  while(alloc_size <= alloc_max) {
+
+    {
+      // Set source address
+      platformWriteMMIO(FLETCHER_REG_MM_HDR_ADDR_LO, device_address);
+      platformWriteMMIO(FLETCHER_REG_MM_HDR_ADDR_HI, device_address >> 32);
+
+      // Set size
+      platformWriteMMIO(FLETCHER_REG_MM_HDR_SIZE_LO, alloc_size);
+      platformWriteMMIO(FLETCHER_REG_MM_HDR_SIZE_HI, alloc_size >> 32);
+
+      // Allocate
+      platformWriteMMIO(FLETCHER_REG_MM_HDR_CMD, FLETCHER_REG_MM_CMD_REALLOC);
+
+      // Wait for completion
+      uint32_t regval = 0;
+      do {
+        platformReadMMIO(FLETCHER_REG_MM_HDA_STATUS, &regval);
+      } while ((regval & FLETCHER_REG_MM_STATUS_DONE) == 0);
+
+      // Check status of returned allocation
+      if ((regval & FLETCHER_REG_MM_STATUS_OK) == 0) {
+        // Allocation failed
+        alloc_addr = D_NULLPTR;
+
+        // Acknowledge that response was read
+        platformWriteMMIO(FLETCHER_REG_MM_HDA_STATUS, FLETCHER_REG_MM_HDA_STATUS_ACK);
+
+      } else {
+        // Get address from device
+        platformReadMMIO(FLETCHER_REG_MM_HDA_ADDR_HI, &regval);
+        alloc_addr = regval;
+        platformReadMMIO(FLETCHER_REG_MM_HDA_ADDR_LO, &regval);
+        alloc_addr = (alloc_addr << 32) | regval;
+
+        // Acknowledge that response was read
+        platformWriteMMIO(FLETCHER_REG_MM_HDA_STATUS, FLETCHER_REG_MM_HDA_STATUS_ACK);
+    }
+
+    if (alloc_addr = D_NULLPTR) {
+      std::cerr << "ERROR while reallocating to " << alloc_size << " bytes." << std::endl << std::flush;
+      status = EXIT_FAILURE;
+      break;
+    }
+    platform->readMMIO(50, &cycles);
+    std::cout << "Realloc to " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
+
+    std::cerr << "Device malloc at " << std::setw(12) << std::hex << alloc_addr << std::dec << "." << std::endl << std::flush;
+
+    if (alloc_size < 1024*1024*128) { // 128 MiB
+      alloc_size += 1024*1024; // 1 MiB
+    } else if (alloc_size < 1024L*1024L*1024L) { // 1 GiB
+      alloc_size += 1024*1024*128; // 128 MiB
+    } else if (alloc_size < 1024L*1024L*1024L*128L) { // 128 GiB
+      alloc_size += 1024*1024*128; // 1 GiB
+    } else {
+      alloc_size *= 2;
+    }
+  }
+
+  if (!ok(platform->deviceFree(alloc_addr))) {
+    std::cerr << "ERROR while freeing " << alloc_size << " bytes." << std::endl;
+    status = EXIT_FAILURE;
+  }
+  std::cout << "Free of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl;
 
   // Report the run times:
   PRINT_TIME(calc_sum(t_alloc), "allocation");
