@@ -380,7 +380,7 @@ int main(int argc, char ** argv) {
 
   while(alloc_size <= alloc_max) {
 
-    if (platform->deviceMalloc(&alloc_addr, alloc_size) != FLETCHER_STATUS_OK) {
+    if (!platform->deviceMalloc(&alloc_addr, alloc_size).ok()) {
       std::cerr << "ERROR while allocating " << alloc_size << " bytes." << std::endl << std::flush;
       status = EXIT_FAILURE;
       break;
@@ -388,7 +388,7 @@ int main(int argc, char ** argv) {
     platform->readMMIO(50, &cycles);
     std::cout << "Alloc of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
 
-    if (platform->deviceFree(alloc_addr) != FLETCHER_STATUS_OK) {
+    if (!platform->deviceFree(alloc_addr).ok()) {
       std::cerr << "ERROR while freeing " << alloc_size << " bytes." << std::endl << std::flush;
       status = EXIT_FAILURE;
       break;
@@ -410,7 +410,7 @@ int main(int argc, char ** argv) {
   std::cerr << "Measuring reallocation latency." << std::endl;
   alloc_size = 1024*1024;
 
-  if (platform->deviceMalloc(&alloc_addr, alloc_size) != FLETCHER_STATUS_OK) {
+  if (!platform->deviceMalloc(&alloc_addr, alloc_size).ok()) {
     std::cerr << "ERROR while allocating " << alloc_size << " bytes." << std::endl << std::flush;
     status = EXIT_FAILURE;
   }
@@ -443,7 +443,7 @@ int main(int argc, char ** argv) {
         alloc_addr = D_NULLPTR;
 
         // Acknowledge that response was read
-        platformWriteMMIO(FLETCHER_REG_MM_HDA_STATUS, FLETCHER_REG_MM_HDA_STATUS_ACK);
+        platform->writeMMIO(FLETCHER_REG_MM_HDA_STATUS, FLETCHER_REG_MM_HDA_STATUS_ACK);
 
       } else {
         // Get address from device
@@ -478,7 +478,7 @@ int main(int argc, char ** argv) {
     }
   }
 
-  if (platform->deviceFree(alloc_addr) != FLETCHER_STATUS_OK) {
+  if (!platform->deviceFree(alloc_addr).ok()) {
     std::cerr << "ERROR while freeing " << alloc_size << " bytes." << std::endl;
     status = EXIT_FAILURE;
   }
