@@ -53,6 +53,7 @@ begin
   process (clk) is
   begin
     if rising_edge(clk) then
+      r <= d;
       if reset = '1' then
         r.counting <= '0';
         r.accepted <= '1';
