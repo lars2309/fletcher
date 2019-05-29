@@ -312,9 +312,14 @@ class NullReaderLevel(ReaderLevel):
         return [impl_tv, base_tv, val_tv] + self.child.test_vectors(memory, row_count, commands)
 
 
-def _list_test_vectors(reader, memory, row_count, commands):
+def _list_test_vectors(reader, memory, row_count, commands, lists_per_cycle=None):
     """Test vector generation function shared by ListReaderLevel and
     ListPrimReaderLevel."""
+
+    # We support a lists per cycle field on the interface, but don't support it
+    # outputting anything other than 1 yet.
+    if lists_per_cycle not in [None, 1]:
+        raise NotImplementedError("We only support 1 list per cycle so far")
 
     # Generate on average 4 items per list.
     child_length = row_count * 4
@@ -334,6 +339,8 @@ def _list_test_vectors(reader, memory, row_count, commands):
     # stream for the child.
     base_tv = TestVectors(reader.cmd_idx_base)
     len_tv  = TestVectors(reader.out_length, reader.out_stream.name + "dvalid = '1'")
+    if lists_per_cycle is not None:
+        cnt_tv = TestVectors(reader.out_count, reader.out_stream.name + "dvalid = '1'")
     for start, stop in commands:
         buf_idx = random.randrange(4)
         addr, data = buffers[buf_idx]
@@ -341,8 +348,13 @@ def _list_test_vectors(reader, memory, row_count, commands):
         child_idxs.append(list(zip(data[start:stop], data[start+1:stop+1])))
         base_tv.append(addr)
         len_tv.extend([data[i+1] - data[i] for i in range(start, stop)])
+        if lists_per_cycle is not None:
+            cnt_tv.extend([1 for _ in range(start, stop)])
 
-    return child_length, child_commands, child_idxs, [base_tv, len_tv]
+    tvs = [base_tv, len_tv]
+    if lists_per_cycle is not None:
+        tvs.append(cnt_tv)
+    return child_length, child_commands, child_idxs, tvs
 
 
 class ListReaderLevel(ReaderLevel):
@@ -445,6 +457,7 @@ class ListPrimReaderLevel(ReaderLevel):
         cmd_val_base,
         out_stream,
         out_length,
+        out_count,
         out_el_stream,
         out_el_values,
         out_el_count,
@@ -462,6 +475,7 @@ class ListPrimReaderLevel(ReaderLevel):
         self.cmd_val_base = cmd_val_base
         self.out_stream = out_stream
         self.out_length = out_length
+        self.out_count = out_count
         self.out_el_stream = out_el_stream
         self.out_el_values = out_el_values
         self.out_el_count = out_el_count
@@ -480,6 +494,7 @@ class ListPrimReaderLevel(ReaderLevel):
     def _config_defaults(self):
         return { # NOTE: the defaults here MUST correspond to VHDL defaults.
             "epc":                      1,
+            "lepc":                     1,
             "idx_cmd_in_slice":         False,
             "idx_bus_req_slice":        True,
             "idx_bus_fifo_depth":       16,
@@ -525,7 +540,7 @@ class ListPrimReaderLevel(ReaderLevel):
 
         # Figure out the test vectors for the list.
         child_length, child_commands, child_idxs, tvs = _list_test_vectors(
-            self, memory, row_count, commands)
+            self, memory, row_count, commands, lists_per_cycle=self.lepc)
 
         # Generate memory for 4 buffers of the given child length. We randomly
         # select which buffer to use for each command.
@@ -675,8 +690,10 @@ def _bytes_reader(field, prefix, field_prefix, cmd_stream, cmd_ctrl, out_stream,
     """Internal function which converts a UTF8/bytes field into a ReaderLevel."""
 
     # Add the signals to the existing streams.
+    lepc = field.lists_per_cycle
     cmd_val_base = cmd_ctrl.append(Signal(prefix + "cmd_" + field_prefix + "valBase", BUS_ADDR_WIDTH))
     cmd_idx_base = cmd_ctrl.append(Signal(prefix + "cmd_" + field_prefix + "idxBase", BUS_ADDR_WIDTH))
+    out_count    = out_data.append(Signal(prefix + "out_" + field_prefix + "cnt", lepc))
     out_length   = out_data.append(Signal(prefix + "out_" + field_prefix + "len", INDEX_WIDTH))
 
     # Create a secondary output stream for the list elements.
@@ -701,11 +718,13 @@ def _bytes_reader(field, prefix, field_prefix, cmd_stream, cmd_ctrl, out_stream,
         cmd_val_base,
         out_stream,
         out_length,
+        out_count,
         out_el_stream,
         out_el_values,
         out_el_count,
         **field.get_cfg_dict({
             "bytes_per_cycle":          "epc",
+            "lists_per_cycle":          "lepc",
             "idx_cmd_in_slice":         "idx_cmd_in_slice",
             "idx_bus_req_slice":        "idx_bus_req_slice",
             "idx_bus_fifo_depth":       "idx_bus_fifo_depth",
@@ -968,13 +987,13 @@ entity {camelprefix}ArrayReader is
     ---------------------------------------------------------------------------
     -- Rising-edge sensitive clock and active-high synchronous reset for the
     -- bus and control logic side of the BufferReader.
-    bus_clk                     : in  std_logic;
-    bus_reset                   : in  std_logic;
+    bcd_clk                     : in  std_logic;
+    bcd_reset                   : in  std_logic;
 
     -- Rising-edge sensitive clock and active-high synchronous reset for the
     -- accelerator side.
-    acc_clk                     : in  std_logic;
-    acc_reset                   : in  std_logic;
+    kcd_clk                     : in  std_logic;
+    kcd_reset                   : in  std_logic;
 
     ---------------------------------------------------------------------------
     -- Command streams
@@ -1036,10 +1055,10 @@ begin
       CMD_TAG_WIDTH             => CMD_TAG_WIDTH
     )
     port map (
-      bus_clk                   => bus_clk,
-      bus_reset                 => bus_reset,
-      acc_clk                   => acc_clk,
-      acc_reset                 => acc_reset,
+      bcd_clk                   => bcd_clk,
+      bcd_reset                 => bcd_reset,
+      kcd_clk                   => kcd_clk,
+      kcd_reset                 => kcd_reset,
 
       cmd_valid                 => cmd_valid,
       cmd_ready                 => cmd_ready,
@@ -1084,10 +1103,10 @@ component {camelprefix}ArrayReader is
     CMD_TAG_WIDTH               : natural := 1
   );
   port (
-    bus_clk                     : in  std_logic;
-    bus_reset                   : in  std_logic;
-    acc_clk                     : in  std_logic;
-    acc_reset                   : in  std_logic;
+    bcd_clk                     : in  std_logic;
+    bcd_reset                   : in  std_logic;
+    kcd_clk                     : in  std_logic;
+    kcd_reset                   : in  std_logic;
 
     @cmd_ports
 
@@ -1123,10 +1142,10 @@ uut_template_with_unlock = """
       CMD_TAG_WIDTH             => CMD_TAG_WIDTH
     )
     port map (
-      bus_clk                   => bus_clk,
-      bus_reset                 => bus_reset,
-      acc_clk                   => {acc}_clk,
-      acc_reset                 => {acc}_reset,
+      bcd_clk                   => bcd_clk,
+      bcd_reset                 => bcd_reset,
+      kcd_clk                   => {kcd}_clk,
+      kcd_reset                 => {kcd}_reset,
 
       cmd_valid                 => cmd_valid,
       cmd_ready                 => cmd_ready,
@@ -1170,10 +1189,10 @@ uut_template_without_unlock = """
       CMD_TAG_WIDTH             => CMD_TAG_WIDTH
     )
     port map (
-      bus_clk                   => bus_clk,
-      bus_reset                 => bus_reset,
-      acc_clk                   => {acc}_clk,
-      acc_reset                 => {acc}_reset,
+      bcd_clk                   => bcd_clk,
+      bcd_reset                 => bcd_reset,
+      kcd_clk                   => {kcd}_clk,
+      kcd_reset                 => {kcd}_reset,
 
       cmd_valid                 => cmd_valid,
       cmd_ready                 => cmd_ready,
@@ -1201,7 +1220,7 @@ uut_template_without_unlock = """
 class ArrayReader(object):
     """Represents a ArrayReader."""
 
-    def __init__(self, field, instance_prefix=None, signal_prefix="", bus_clk_prefix="", main_clk_prefix="", **opts):
+    def __init__(self, field, instance_prefix=None, signal_prefix="", bcd_clk_prefix="", main_clk_prefix="", **opts):
         """Generates a ArrayReader for the given Arrow field. prefix
         optionally specifies a name for the ArrayReader, which will be
         prefixed to all signals and instance names in the generated code."""
@@ -1225,9 +1244,9 @@ class ArrayReader(object):
             signal_prefix += "_"
         self.signal_prefix = signal_prefix
 
-        if bus_clk_prefix and not bus_clk_prefix[-1] == "_":
-            bus_clk_prefix += "_"
-        self.bus_clk_prefix = bus_clk_prefix
+        if bcd_clk_prefix and not bcd_clk_prefix[-1] == "_":
+            bcd_clk_prefix += "_"
+        self.bcd_clk_prefix = bcd_clk_prefix
 
         if main_clk_prefix and not main_clk_prefix[-1] == "_":
             main_clk_prefix += "_"
@@ -1329,8 +1348,8 @@ class ArrayReader(object):
         random_bus_rdat_timing = get_param("random_bus_rdat_timing", random.choice([True, False]))
 
         # Generate the testbench wrapper object.
-        acc = "acc" if multi_clk else "bus"
-        tb = Testbench(self._camel_prefix + "ArrayReader_tb", {"bus", acc})
+        kcd = "kcd" if multi_clk else "bcd"
+        tb = Testbench(self._camel_prefix + "ArrayReader_tb", {"bcd", kcd})
 
         # Set constants.
         tb.set_const("BUS_ADDR_WIDTH",      addr_width)
@@ -1343,12 +1362,12 @@ class ArrayReader(object):
         tb.set_const("CMD_TAG_WIDTH",       max(1, tag_width))
 
         # Add the streams.
-        tb.append_input_stream(self.cmd_stream, "bus")
+        tb.append_input_stream(self.cmd_stream, "bcd")
         if tag_width > 0:
-            tb.append_output_stream(self.unlock_stream, "bus")
-        tb.append_output_stream(self.bus_rreq_stream, "bus")
-        tb.append_input_stream(self.bus_rdat_stream, "bus")
-        tb.append_output_stream(self.out_stream, acc)
+            tb.append_output_stream(self.unlock_stream, "bcd")
+        tb.append_output_stream(self.bus_rreq_stream, "bcd")
+        tb.append_input_stream(self.bus_rdat_stream, "bcd")
+        tb.append_output_stream(self.out_stream, kcd)
 
         # Generate a random set of commands.
         commands = []
@@ -1380,7 +1399,7 @@ class ArrayReader(object):
 
         # Generate a memory model.
         memory = Memory()
-        tb.append_memory(memory, self.bus_rreq_stream, self.bus_rdat_stream, "bus",
+        tb.append_memory(memory, self.bus_rreq_stream, self.bus_rdat_stream, "bcd",
                          random_bus_rreq_timing, random_bus_rdat_timing)
 
         # Generate the test vectors for the readers.
@@ -1390,7 +1409,7 @@ class ArrayReader(object):
 
         # Append unit under test.
         template = uut_template_with_unlock if tag_width > 0 else uut_template_without_unlock
-        tb.append_uut(template.format(cfg=self.cfg(), acc=acc))
+        tb.append_uut(template.format(cfg=self.cfg(), kcd=kcd))
 
         # Add documentation.
         doc = []

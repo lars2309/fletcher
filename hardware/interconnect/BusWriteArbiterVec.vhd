@@ -78,8 +78,8 @@ entity BusWriteArbiterVec is
 
     -- Rising-edge sensitive clock and active-high synchronous reset for the
     -- bus and control logic side of the BufferWriter.
-    bus_clk                     : in  std_logic;
-    bus_reset                   : in  std_logic;
+    bcd_clk                     : in  std_logic;
+    bcd_reset                   : in  std_logic;
 
     -- Concatenated master ports.
     bsv_wreq_valid              : in  std_logic_vector(NUM_SLAVE_PORTS-1 downto 0);
@@ -270,8 +270,8 @@ begin
         DATA_WIDTH                      => BQI(BQI'high)
       )
       port map (
-        clk                             => bus_clk,
-        reset                           => bus_reset,
+        clk                             => bcd_clk,
+        reset                           => bcd_reset,
 
         in_valid                        => bs_wreq_valid(i),
         in_ready                        => bs_wreq_ready(i),
@@ -295,8 +295,8 @@ begin
         DATA_WIDTH                      => BPI(BPI'high)
       )
       port map (
-        clk                             => bus_clk,
-        reset                           => bus_reset,
+        clk                             => bcd_clk,
+        reset                           => bcd_reset,
 
         in_valid                        => bs_wdat_valid(i),
         in_ready                        => bs_wdat_ready(i),
@@ -342,8 +342,8 @@ begin
       DATA_WIDTH                        => BQI(BQI'high)
     )
     port map (
-      clk                               => bus_clk,
-      reset                             => bus_reset,
+      clk                               => bcd_clk,
+      reset                             => bcd_reset,
 
       in_valid                          => bms_wreq_valid,
       in_ready                          => bms_wreq_ready,
@@ -367,8 +367,8 @@ begin
       DATA_WIDTH                        => BPI(BPI'high)
     )
     port map (
-      clk                               => bus_clk,
-      reset                             => bus_reset,
+      clk                               => bcd_clk,
+      reset                             => bcd_reset,
 
       in_valid                          => bms_wdat_valid,
       in_ready                          => bms_wdat_ready,
@@ -431,8 +431,8 @@ begin
       ARB_METHOD                        => ARB_METHOD
     )
     port map (
-      clk                               => bus_clk,
-      reset                             => bus_reset,
+      clk                               => bcd_clk,
+      reset                             => bcd_reset,
 
       in_valid                          => arb_in_valid,
       in_ready                          => arb_in_ready,
@@ -455,8 +455,8 @@ begin
       NUM_OUTPUTS                       => 2
     )
     port map (
-      clk                               => bus_clk,
-      reset                             => bus_reset,
+      clk                               => bcd_clk,
+      reset                             => bcd_reset,
       in_valid(0)                       => arb_out_valid,
       in_ready(0)                       => arb_out_ready,
       out_valid(1)                      => bms_wreq_valid,
@@ -473,8 +473,8 @@ begin
       RAM_CONFIG                        => RAM_CONFIG
     )
     port map (
-      clk                               => bus_clk,
-      reset                             => bus_reset,
+      clk                               => bcd_clk,
+      reset                             => bcd_reset,
 
       in_valid                          => idxA_valid,
       in_ready                          => idxA_ready,
@@ -542,8 +542,8 @@ begin
       NUM_OUTPUTS                       => 2
     )
     port map (
-      clk                               => bus_clk,
-      reset                             => bus_reset,
+      clk                               => bcd_clk,
+      reset                             => bcd_reset,
 
       in_valid(1)                       => idxB_valid,
       in_valid(0)                       => mux_wdat_valid,

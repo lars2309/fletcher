@@ -183,6 +183,22 @@ proc add_arrays {{source_dir ""}} {
   add_source $source_dir/arrays/ArrayWriter.vhd
 }
 
+proc add_axi {{source_dir ""}} {
+  echo "- AXI support."
+  set source_dir [source_dir_or_default $source_dir]
+  add_source $source_dir/axi/axi.vhd
+  add_source $source_dir/axi/axi_mmio.vhd
+  add_source $source_dir/axi/axi_write_converter.vhd
+  add_source $source_dir/axi/axi_read_converter.vhd
+}
+
+proc add_axi_tb {{source_dir ""}} {
+  echo "- AXI tests."
+  set source_dir [source_dir_or_default $source_dir]
+  add_source $source_dir/axi/test/axi_mmio_tb.vhd
+}
+
+
 proc add_wrapper {{source_dir ""}} {
   echo "- Wrapper components."
   set source_dir [source_dir_or_default $source_dir]
@@ -208,6 +224,7 @@ proc add_fletcher {{source_dir ""}} {
   add_mm $source_dir
   add_arrays $source_dir
   add_wrapper $source_dir
+  add_axi $source_dir
 }
 
 # Compile all Fletcher simulation sources.
@@ -218,4 +235,5 @@ proc add_fletcher_tb {{source_dir ""}} {
   add_interconnect_tb $source_dir
   add_mm_tb $source_dir
   add_wrapper_tb $source_dir
+  add_axi_tb $source_dir
 }
