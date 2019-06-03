@@ -36,7 +36,7 @@
 #include <arrow/api.h>
 
 // Fletcher
-#include "fletcher/api.h"
+#include <fletcher/api.h>
 
 
 #define PRINT_TIME(X, S) std::cout << std::setprecision(10) << (X) << " " << (S) << std::endl << std::flush
@@ -85,26 +85,26 @@ void device_bench(std::shared_ptr<fletcher::Platform> platform,
   uint32_t addr_mask_hi = (uint32_t) (addr_mask >> 32);
   uint32_t cycles_per_word = 0;
   uint32_t cycles;
-  platform->writeMMIO(reg_offset+2, burst_len);
-  platform->writeMMIO(reg_offset+3, bursts);
-  platform->writeMMIO(reg_offset+4, base_addr_lo);
-  platform->writeMMIO(reg_offset+5, base_addr_hi);
-  platform->writeMMIO(reg_offset+6, addr_mask_lo);
-  platform->writeMMIO(reg_offset+7, addr_mask_hi);
-  platform->writeMMIO(reg_offset+8, cycles_per_word);
+  platform->WriteMMIO(reg_offset+2, burst_len);
+  platform->WriteMMIO(reg_offset+3, bursts);
+  platform->WriteMMIO(reg_offset+4, base_addr_lo);
+  platform->WriteMMIO(reg_offset+5, base_addr_hi);
+  platform->WriteMMIO(reg_offset+6, addr_mask_lo);
+  platform->WriteMMIO(reg_offset+7, addr_mask_hi);
+  platform->WriteMMIO(reg_offset+8, cycles_per_word);
   // Reset
   control = 4;
-  platform->writeMMIO(reg_offset+0, control);
+  platform->WriteMMIO(reg_offset+0, control);
   // Start
   control = 1;
-  platform->writeMMIO(reg_offset+0, control);
+  platform->WriteMMIO(reg_offset+0, control);
   // Deassert start
   control = 0;
-  platform->writeMMIO(reg_offset+0, control);
+  platform->WriteMMIO(reg_offset+0, control);
   // Wait until done
   do {
     usleep(2000);
-    platform->readMMIO(reg_offset+1, &status);
+    platform->ReadMMIO(reg_offset+1, &status);
   } while (status == 2);
   if (status != 4) {
     std::cerr << "ERROR\n";
@@ -112,7 +112,7 @@ void device_bench(std::shared_ptr<fletcher::Platform> platform,
   } else {
     std::cerr << "finished\n";
     std::cerr << std::flush;
-    platform->readMMIO(reg_offset+9, &cycles);
+    platform->ReadMMIO(reg_offset+9, &cycles);
     uint64_t num_bytes =  BUS_DATA_BYTES * burst_len * bursts;
     int throughput = (num_bytes/(cycles*PERIOD))/1000/1000;
     std::cout << cycles << " cycles for " << bursts << " bursts of length "
@@ -160,7 +160,7 @@ int main(int argc, char ** argv) {
   fletcher::Platform::Make(&platform);
   fletcher::Context::Make(&context, platform);
 
-  platform->init();
+  platform->Init();
 
   Timer t;
   std::vector<double> t_alloc(n_mallocs);
@@ -171,7 +171,7 @@ int main(int argc, char ** argv) {
   // Allocate memory on device
   for (int i = 0; i < n_mallocs; i++) {
     t.start();
-    platform->deviceMalloc(&maddr[i], malloc_sizes[i]);
+    platform->DeviceMalloc(&maddr[i], malloc_sizes[i]);
     t.stop();
     t_alloc[i] = t.seconds();
     int throughput = malloc_sizes[i] / t.seconds() / 1000/1000/1000;
@@ -209,7 +209,7 @@ int main(int argc, char ** argv) {
         std::cerr << "copying buffer to device...";
         // Copy data
         t.start();
-        platform->copyHostToDevice(source_buffers.back(), maddr[i], malloc_sizes[i]);
+        platform->CopyHostToDevice(source_buffers.back(), maddr[i], malloc_sizes[i]);
         t.stop();
         t_write[i] = t.seconds();
         std::cerr << "done" << std::endl;
@@ -243,7 +243,7 @@ int main(int argc, char ** argv) {
         // Copy data
         std::cerr << "copying buffer from device...";
         t.start();
-        platform->copyDeviceToHost(maddr[i], check_buffers.back(), malloc_sizes[i]);
+        platform->CopyDeviceToHost(maddr[i], check_buffers.back(), malloc_sizes[i]);
         t.stop();
         t_read[i] = t.seconds();
         std::cerr << "done" << std::endl;
@@ -369,7 +369,7 @@ int main(int argc, char ** argv) {
   // Free device buffers
   std::cerr << "Freeing device buffers." << std::endl;
   for (int i = 0; i < n_mallocs; i++) {
-    platform->deviceFree(maddr.at(i));
+    platform->DeviceFree(maddr.at(i));
   }
 
   // Test allocation speed
@@ -380,15 +380,15 @@ int main(int argc, char ** argv) {
 
   while(alloc_size <= alloc_max) {
 
-    if (!platform->deviceMalloc(&alloc_addr, alloc_size).ok()) {
+    if (!platform->DeviceMalloc(&alloc_addr, alloc_size).ok()) {
       std::cerr << "ERROR while allocating " << alloc_size << " bytes." << std::endl << std::flush;
       status = EXIT_FAILURE;
       break;
     }
-    platform->readMMIO(50, &cycles);
+    platform->ReadMMIO(50, &cycles);
     std::cout << "Alloc of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
 
-    if (!platform->deviceFree(alloc_addr).ok()) {
+    if (!platform->DeviceFree(alloc_addr).ok()) {
       std::cerr << "ERROR while freeing " << alloc_size << " bytes." << std::endl << std::flush;
       status = EXIT_FAILURE;
       break;
@@ -414,27 +414,27 @@ int main(int argc, char ** argv) {
     std::cerr << "ERROR while allocating " << alloc_size << " bytes." << std::endl << std::flush;
     status = EXIT_FAILURE;
   }
-  platform->readMMIO(50, &cycles);
+  platform->ReadMMIO(50, &cycles);
   std::cout << "Alloc of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
 
   while(alloc_size <= alloc_max) {
 
     {
       // Set source address
-      platform->writeMMIO(FLETCHER_REG_MM_HDR_ADDR_LO, alloc_addr);
-      platform->writeMMIO(FLETCHER_REG_MM_HDR_ADDR_HI, alloc_addr >> 32);
+      platform->WriteMMIO(FLETCHER_REG_MM_HDR_ADDR_LO, alloc_addr);
+      platform->WriteMMIO(FLETCHER_REG_MM_HDR_ADDR_HI, alloc_addr >> 32);
 
       // Set size
-      platform->writeMMIO(FLETCHER_REG_MM_HDR_SIZE_LO, alloc_size);
-      platform->writeMMIO(FLETCHER_REG_MM_HDR_SIZE_HI, alloc_size >> 32);
+      platform->WriteMMIO(FLETCHER_REG_MM_HDR_SIZE_LO, alloc_size);
+      platform->WriteMMIO(FLETCHER_REG_MM_HDR_SIZE_HI, alloc_size >> 32);
 
       // Allocate
-      platform->writeMMIO(FLETCHER_REG_MM_HDR_CMD, FLETCHER_REG_MM_CMD_REALLOC);
+      platform->WriteMMIO(FLETCHER_REG_MM_HDR_CMD, FLETCHER_REG_MM_CMD_REALLOC);
 
       // Wait for completion
       uint32_t regval = 0;
       do {
-        platform->readMMIO(FLETCHER_REG_MM_HDA_STATUS, &regval);
+        platform->ReadMMIO(FLETCHER_REG_MM_HDA_STATUS, &regval);
       } while ((regval & FLETCHER_REG_MM_STATUS_DONE) == 0);
 
       // Check status of returned allocation
@@ -443,17 +443,17 @@ int main(int argc, char ** argv) {
         alloc_addr = D_NULLPTR;
 
         // Acknowledge that response was read
-        platform->writeMMIO(FLETCHER_REG_MM_HDA_STATUS, FLETCHER_REG_MM_HDA_STATUS_ACK);
+        platform->WriteMMIO(FLETCHER_REG_MM_HDA_STATUS, FLETCHER_REG_MM_HDA_STATUS_ACK);
 
       } else {
         // Get address from device
-        platform->readMMIO(FLETCHER_REG_MM_HDA_ADDR_HI, &regval);
+        platform->ReadMMIO(FLETCHER_REG_MM_HDA_ADDR_HI, &regval);
         alloc_addr = regval;
-        platform->readMMIO(FLETCHER_REG_MM_HDA_ADDR_LO, &regval);
+        platform->ReadMMIO(FLETCHER_REG_MM_HDA_ADDR_LO, &regval);
         alloc_addr = (alloc_addr << 32) | regval;
 
         // Acknowledge that response was read
-        platform->writeMMIO(FLETCHER_REG_MM_HDA_STATUS, FLETCHER_REG_MM_HDA_STATUS_ACK);
+        platform->WriteMMIO(FLETCHER_REG_MM_HDA_STATUS, FLETCHER_REG_MM_HDA_STATUS_ACK);
       }
     }
 
@@ -462,7 +462,7 @@ int main(int argc, char ** argv) {
       status = EXIT_FAILURE;
       break;
     }
-    platform->readMMIO(50, &cycles);
+    platform->ReadMMIO(50, &cycles);
     std::cout << "Realloc to " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
 
     std::cerr << "Device malloc at " << std::setw(12) << std::hex << alloc_addr << std::dec << "." << std::endl << std::flush;
@@ -478,7 +478,7 @@ int main(int argc, char ** argv) {
     }
   }
 
-  if (!platform->deviceFree(alloc_addr).ok()) {
+  if (!platform->DeviceFree(alloc_addr).ok()) {
     std::cerr << "ERROR while freeing " << alloc_size << " bytes." << std::endl;
     status = EXIT_FAILURE;
   }
