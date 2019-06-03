@@ -107,17 +107,17 @@ void device_bench(std::shared_ptr<fletcher::Platform> platform,
     platform->ReadMMIO(reg_offset+1, &status);
   } while (status == 2);
   if (status != 4) {
-    std::cerr << "ERROR\n";
+    std::cerr << "ERROR" << std::endl;
     std::cerr << std::flush;
   } else {
-    std::cerr << "finished\n";
+    std::cerr << "finished" << std::endl;
     std::cerr << std::flush;
     platform->ReadMMIO(reg_offset+9, &cycles);
     uint64_t num_bytes =  BUS_DATA_BYTES * burst_len * bursts;
     int throughput = (num_bytes/(cycles*PERIOD))/1000/1000;
     std::cout << cycles << " cycles for " << bursts << " bursts of length "
-        << burst_len << " (" << (num_bytes/1024) << " KiB)\n";
-    std::cout << "D_R: " << throughput << " MB/s\n";
+        << burst_len << " (" << (num_bytes/1024) << " KiB)" :: std::endl;
+    std::cout << "D_R: " << throughput << " MB/s" << std::endl << std::flush;
   }
 }
 
@@ -393,6 +393,7 @@ int main(int argc, char ** argv) {
       status = EXIT_FAILURE;
       break;
     }
+    platform->ReadMMIO(50, &cycles);
     std::cout << "Free of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
 
     if (alloc_size < 1024*1024*128) { // 128 MiB
