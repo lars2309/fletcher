@@ -410,7 +410,7 @@ int main(int argc, char ** argv) {
   std::cerr << "Measuring reallocation latency." << std::endl;
   alloc_size = 1024*1024;
 
-  if (!platform->deviceMalloc(&alloc_addr, alloc_size).ok()) {
+  if (!platform->DeviceMalloc(&alloc_addr, alloc_size).ok()) {
     std::cerr << "ERROR while allocating " << alloc_size << " bytes." << std::endl << std::flush;
     status = EXIT_FAILURE;
   }
