@@ -370,7 +370,13 @@ fstatus_t platformDeviceMalloc(da_t *device_address, int64_t size) {
                 (uint64_t) aws_state.buffer_ptr,
                 size);
 
-    return FLETCHER_STATUS_OK;
+    if (*device_address == 0xffffffffffffffffULL) {
+      // Allocation failed (MMIO read returned default value)
+      *device_address = D_NULLPTR;
+      return FLETCHER_STATUS_ERROR;
+    } else {
+      return FLETCHER_STATUS_OK;
+    }
   }
 }
 
