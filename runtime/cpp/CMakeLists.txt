@@ -92,6 +92,7 @@ install(FILES ${HEADERS}
 
 # Headers from common library
 set(COMMON_HEADERS
+    ../../common/c/src/fletcher/fletcher.h
     ../../common/cpp/src/fletcher/common.h
     ../../common/cpp/src/fletcher/logging.h
     ../../common/cpp/src/fletcher/arrow-utils.h
