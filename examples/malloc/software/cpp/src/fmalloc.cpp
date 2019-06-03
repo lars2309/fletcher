@@ -429,7 +429,7 @@ int main(int argc, char ** argv) {
       platform->WriteMMIO(FLETCHER_REG_MM_HDR_SIZE_LO, alloc_size);
       platform->WriteMMIO(FLETCHER_REG_MM_HDR_SIZE_HI, alloc_size >> 32);
 
-      // Allocate
+      // Reallocate
       platform->WriteMMIO(FLETCHER_REG_MM_HDR_CMD, FLETCHER_REG_MM_CMD_REALLOC);
 
       // Wait for completion
@@ -483,7 +483,8 @@ int main(int argc, char ** argv) {
     std::cerr << "ERROR while freeing " << alloc_size << " bytes." << std::endl;
     status = EXIT_FAILURE;
   }
-  std::cout << "Free of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl;
+  platform->ReadMMIO(50, &cycles);
+  std::cout << "Free of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
 
   // Report the run times:
   PRINT_TIME(calc_sum(t_alloc), "allocation");
