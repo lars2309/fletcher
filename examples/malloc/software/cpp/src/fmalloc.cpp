@@ -116,7 +116,7 @@ void device_bench(std::shared_ptr<fletcher::Platform> platform,
     uint64_t num_bytes =  BUS_DATA_BYTES * burst_len * bursts;
     int throughput = (num_bytes/(cycles*PERIOD))/1000/1000;
     std::cout << cycles << " cycles for " << bursts << " bursts of length "
-        << burst_len << " (" << (num_bytes/1024) << " KiB)" :: std::endl;
+        << burst_len << " (" << (num_bytes/1024) << " KiB)" << std::endl;
     std::cout << "D_R: " << throughput << " MB/s" << std::endl << std::flush;
   }
 }
