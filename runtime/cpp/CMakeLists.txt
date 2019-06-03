@@ -21,6 +21,7 @@ set(SOURCES
     src/fletcher/kernel.cc)
 
 set(HEADERS
+    src/fletcher/status.h
     src/fletcher/platform.h
     src/fletcher/context.h
     src/fletcher/kernel.h)
