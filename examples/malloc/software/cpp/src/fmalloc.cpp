@@ -401,7 +401,7 @@ int main(int argc, char ** argv) {
     } else if (alloc_size < 1024L*1024L*1024L) { // 1 GiB
       alloc_size += 1024*1024*128; // 128 MiB
     } else if (alloc_size < 1024L*1024L*1024L*128L) { // 128 GiB
-      alloc_size += 1024*1024*128; // 1 GiB
+      alloc_size += 1024*1024*1024; // 1 GiB
     } else {
       alloc_size *= 1.2;
     }
@@ -473,7 +473,7 @@ int main(int argc, char ** argv) {
     } else if (alloc_size < 1024L*1024L*1024L) { // 1 GiB
       alloc_size += 1024*1024*128; // 128 MiB
     } else if (alloc_size < 1024L*1024L*1024L*128L) { // 128 GiB
-      alloc_size += 1024*1024*128; // 1 GiB
+      alloc_size += 1024*1024*1024; // 1 GiB
     } else {
       alloc_size *= 1.2;
     }
