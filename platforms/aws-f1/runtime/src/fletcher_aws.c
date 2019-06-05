@@ -342,7 +342,7 @@ fstatus_t platformDeviceMalloc(da_t *device_address, int64_t size) {
 
   // Wait for completion
   do {
-//    usleep(1);
+    usleep(2000);
     platformReadMMIO(FLETCHER_REG_MM_HDA_STATUS, &regval);
   } while ((regval & FLETCHER_REG_MM_STATUS_DONE) == 0);
 
@@ -394,7 +394,7 @@ fstatus_t platformDeviceFree(da_t device_address) {
   // Wait for completion
   uint32_t regval = 0;
   do {
-//    usleep(1);
+    usleep(2000);
     platformReadMMIO(FLETCHER_REG_MM_HDA_STATUS, &regval);
   } while ((regval & FLETCHER_REG_MM_STATUS_DONE) == 0);
 
