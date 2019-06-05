@@ -409,14 +409,14 @@ int main(int argc, char ** argv) {
 
   // Test reallocation speed
   std::cerr << "Measuring reallocation latency." << std::endl;
-  alloc_size = 1024*1024;
+  alloc_size = 1024*1024/2;
 
   if (!platform->DeviceMalloc(&alloc_addr, alloc_size).ok()) {
     std::cerr << "ERROR while allocating " << alloc_size << " bytes." << std::endl << std::flush;
     status = EXIT_FAILURE;
   }
   platform->ReadMMIO(50, &cycles);
-  std::cout << "Alloc of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
+  std::cout << "-Alloc of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
 
   while(alloc_size <= alloc_max) {
 
@@ -484,7 +484,7 @@ int main(int argc, char ** argv) {
     status = EXIT_FAILURE;
   }
   platform->ReadMMIO(50, &cycles);
-  std::cout << "Free of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
+  std::cout << "-Free of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
 
   // Report the run times:
   PRINT_TIME(calc_sum(t_alloc), "allocation");
