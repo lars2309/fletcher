@@ -436,14 +436,14 @@ int main(int argc, char ** argv) {
         std::cout << "Free of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
       }
 
-      if (alloc_size < 1024*1024*128) { // 128 MiB
-        alloc_size += 1024*1024; // 1 MiB
-      } else if (alloc_size < 1024L*1024L*1024L) { // 1 GiB
-        alloc_size += 1024*1024*128; // 128 MiB
-      } else if (alloc_size < 1024L*1024L*1024L*128L) { // 128 GiB
-        alloc_size += 1024*1024*1024; // 1 GiB
+      if (alloc_size < 1024L*1024*128) { // 128 MiB
+        alloc_size += 1024L*1024; // 1 MiB
+      } else if (alloc_size < 1024L*1024*1024) { // 1 GiB
+        alloc_size += 1024L*1024*128; // 128 MiB
+      } else if (alloc_size < 1024L*1024*1024*128) { // 128 GiB
+        alloc_size += 1024L*1024*1024; // 1 GiB
       } else {
-        alloc_size *= 1.2;
+        alloc_size += 1024L*1024*1024*32 + 1024*1024; // 32 GiB + 1 MiB
       }
     }
   }
@@ -512,14 +512,14 @@ int main(int argc, char ** argv) {
 
       std::cerr << "Device malloc at " << std::setw(12) << std::hex << alloc_addr << std::dec << "." << std::endl << std::flush;
 
-      if (alloc_size < 1024*1024*128) { // 128 MiB
-        alloc_size += 1024*1024; // 1 MiB
-      } else if (alloc_size < 1024L*1024L*1024L) { // 1 GiB
-        alloc_size += 1024*1024*128; // 128 MiB
-      } else if (alloc_size < 1024L*1024L*1024L*128L) { // 128 GiB
-        alloc_size += 1024*1024*1024; // 1 GiB
+      if (alloc_size < 1024L*1024*128) { // 128 MiB
+        alloc_size += 1024L*1024; // 1 MiB
+      } else if (alloc_size < 1024L*1024*1024) { // 1 GiB
+        alloc_size += 1024L*1024*128; // 128 MiB
+      } else if (alloc_size < 1024L*1024*1024*128) { // 128 GiB
+        alloc_size += 1024L*1024*1024; // 1 GiB
       } else {
-        alloc_size *= 1.2;
+        alloc_size += 1024L*1024*1024*32 + 1024*1024; // 32 GiB + 1 MiB
       }
     }
 
