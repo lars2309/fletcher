@@ -100,7 +100,7 @@ begin
   end process;
 
   comb_proc: process(r,
-      int_req_valid, int_req_holes, int_req_size, int_gap_ready) is
+      int_req_valid, int_req_holes, int_req_size, int_gap_ready, int_req_last) is
     variable v : reg_type;
   begin
     v := r;
