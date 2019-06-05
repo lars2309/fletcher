@@ -135,8 +135,8 @@ int main(int argc, char ** argv) {
   bool bench_dealloc = true;
   bool bench_realloc = true;
 
-  for (int i = 1; i < argc) {
-    if (argc[i] == '0') {
+  for (int i = 1; i < argc; i++) {
+    if (argv[i][0] == '0') {
       switch (i) {
       case 1:
         bench_HD = false; break;
@@ -154,6 +154,7 @@ int main(int argc, char ** argv) {
 
   // Maximum for page size 2^18 and 2^13 page table entries. (16TiB)
   const int64_t alloc_max = 1024L*1024*1024* 16384;
+  const int max_data_size = 1024L*1024*1024; // Max 1GB for data copies.
 
   std::vector<uint64_t> malloc_sizes;
   malloc_sizes.push_back(1024L*1024 *1);         //  1 MB, sub-page
@@ -191,6 +192,9 @@ int main(int argc, char ** argv) {
   std::vector<double> t_read(n_mallocs);
   std::vector<da_t> maddr(n_mallocs);
 
+
+  std::vector<uint8_t*> source_buffers;
+
   if (bench_HD || bench_device) {
     // Allocate memory on device
     for (int i = 0; i < n_mallocs; i++) {
@@ -214,9 +218,7 @@ int main(int argc, char ** argv) {
     }
 
     // Put some data on the device.
-    const int max_data_size = 1024L*1024*1024; // Max 1GB for data copies.
     std::ifstream file("/dev/urandom");
-    std::vector<uint8_t*> source_buffers;
     for (int i = 0; i < n_mallocs; i++) {
       if (malloc_sizes[i] <= max_data_size) {
         void* map = mmap(NULL,
@@ -449,7 +451,9 @@ int main(int argc, char ** argv) {
   if (bench_realloc) {
     // Test reallocation speed
     std::cerr << "Measuring reallocation latency." << std::endl;
-    alloc_size = 1024*1024/2;
+    da_t alloc_addr;
+    uint32_t cycles;
+    uint64_t alloc_size = 1024*1024/2;
 
     if (!platform->DeviceMalloc(&alloc_addr, alloc_size).ok()) {
       std::cerr << "ERROR while allocating " << alloc_size << " bytes." << std::endl << std::flush;
