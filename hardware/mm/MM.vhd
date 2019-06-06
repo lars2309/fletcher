@@ -451,7 +451,8 @@ package body MM is
 
   function BIT_COUNT(arg : in std_logic_vector)
                      return unsigned is
-    variable ret : unsigned(log2ceil(arg'length+1)-1 downto 0) := (others => '0');
+    -- XXX: lenght of `ret' should depend on input vector, but Vivado doesn't do this properly.
+    variable ret : unsigned(log2ceil(512+1)-1 downto 0) := (others => '0');
   begin
     for i in arg'range loop
       ret := ret + u(arg(i));
