@@ -861,8 +861,13 @@ begin
     -- === START OF VREALLOC ROUTINE ===
 
     when VREALLOC =>
-      v.state_stack(0) := VREALLOC_MOVE;
-      v.state_stack    := push_state(v.state_stack, FIND_GAP);
+      -- MMU can update page tables and assign new frames.
+      -- Make sure we see all those writes.
+      -- TODO This could wait indefinitely.
+      if mmu_bus_wreq.dirty = '0' then
+        v.state_stack(0) := VREALLOC_MOVE;
+        v.state_stack    := push_state(v.state_stack, FIND_GAP);
+      end if;
 
     when VREALLOC_MOVE =>
       -- addr_vm  : virtual base address to start at
@@ -1515,8 +1520,11 @@ begin
     when PT_DEL =>
       my_bus_rreq.addr  <= slv(PAGE_BASE(v.addr_pt) + div_floor(PT_BITMAP_IDX(v.addr_pt), BUS_DATA_WIDTH));
       my_bus_rreq.len   <= slv(to_unsigned(1, my_bus_rreq.len'length));
-      my_bus_rreq.valid <= '1';
-      if my_bus_rreq.ready = '1' then
+      -- Make sure any earlier bitmap edit has been written out.
+      my_bus_rreq.valid <= not my_bus_wreq.dirty;
+      handshake         := (not my_bus_wreq.dirty) and my_bus_rreq.ready;
+
+      if handshake = '1' then
         v.state_stack(0) := PT_DEL_MARK_BM_ADDR;
       end if;
 
