@@ -1187,8 +1187,8 @@ begin
 
     when SET_PTE_RANGE_L2_DEALLOC_FRAME_C =>
       -- Mark a mapped frame as unused when deallocating.
-      if  shift_right(v.addr,    VM_SIZE_L2_LOG2 + log2ceil(BUS_DATA_BYTES / PTE_SIZE))
-        = shift_right(v.addr_vm, VM_SIZE_L2_LOG2 + log2ceil(BUS_DATA_BYTES / PTE_SIZE))
+      if  shift_right(v.addr,    VM_SIZE_L2_LOG2 + LOG2STRICT(BUS_DATA_BYTES / PTE_SIZE))
+        = shift_right(v.addr_vm, VM_SIZE_L2_LOG2 + LOG2STRICT(BUS_DATA_BYTES / PTE_SIZE))
       then
         -- Current address is now in the mapping of interest.
         v.in_mapping           := '1';
@@ -1254,8 +1254,8 @@ begin
       my_bus_wreq.addr       <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(v.addr_pt, v.addr, 2)));
       my_bus_wreq.len        <= slv(to_unsigned(1, my_bus_wreq.len'length));
 
-      if  shift_right(v.addr,    VM_SIZE_L2_LOG2 + log2ceil(BUS_DATA_BYTES / PTE_SIZE))
-        = shift_right(v.addr_vm, VM_SIZE_L2_LOG2 + log2ceil(BUS_DATA_BYTES / PTE_SIZE))
+      if  shift_right(v.addr,    VM_SIZE_L2_LOG2 + LOG2STRICT(BUS_DATA_BYTES / PTE_SIZE))
+        = shift_right(v.addr_vm, VM_SIZE_L2_LOG2 + LOG2STRICT(BUS_DATA_BYTES / PTE_SIZE))
       then
         -- Current address is in the mapping of interest.
         v.in_mapping         := '1';
@@ -1539,13 +1539,11 @@ begin
       -- Copy the byte that has to be written back.
       v.byte_buffer      := EXTRACT(
                               unsigned(my_bus_rdat.data),
-                              int(mul(
-                                div_floor(PT_BITMAP_IDX(v.addr_pt), BYTE_SIZE),
-                                BYTE_SIZE)),
+                              int(align_beq(PT_BITMAP_IDX(v.addr_pt), LOG2STRICT(BYTE_SIZE))),
                               BYTE_SIZE
                             );
       -- Mark PT as unused in bitmap's byte.
-      v.byte_buffer(int(resize(PT_BITMAP_IDX(v.addr_pt), log2ceil(BYTE_SIZE)))) := '0';
+      v.byte_buffer(int(MODULO(PT_BITMAP_IDX(v.addr_pt), BYTE_SIZE))) := '0';
 
       if handshake = '1' then
         -- TODO: make this work for bitmaps > BUS_DATA_WIDTH
@@ -1680,13 +1678,11 @@ begin
           -- Save the byte that needs to be written
           v.byte_buffer      := EXTRACT(
                                   unsigned(my_bus_rdat.data),
-                                  int(mul(
-                                    div_floor(u(gap_pt_a_offset), BYTE_SIZE),
-                                    BYTE_SIZE)),
+                                  int(align_beq(u(gap_pt_a_offset), LOG2STRICT(BYTE_SIZE))),
                                   BYTE_SIZE
                                 );
           -- Mark PT as used in bitmap's byte.
-          v.byte_buffer(int(resize(u(gap_pt_a_offset), log2ceil(BYTE_SIZE)))) := '0';
+          v.byte_buffer(int(MODULO(u(gap_pt_a_offset), BYTE_SIZE))) := '0';
         end if;
       end if;
 

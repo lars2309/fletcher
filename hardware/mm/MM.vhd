@@ -53,6 +53,13 @@ package MM is
                     length : natural)
     return std_logic_vector;
 
+  function MODULO (dividend : unsigned;
+                   divisor  : natural)
+    return unsigned;
+
+  function LOG2STRICT (i : natural)
+    return natural;
+
   component MMFrames is
     generic (
       PAGE_SIZE_LOG2              : natural;
@@ -501,4 +508,33 @@ package body MM is
   begin
     return vec(offset + length - 1 downto offset);
   end EXTRACT;
+
+  function MODULO (dividend : unsigned;
+                   divisor  : natural)
+    return unsigned is
+    variable mask    : unsigned(dividend'length-1 downto 0);
+    variable modulus : unsigned(dividend'length-1 downto 0);
+  begin
+    mask    := (others => '1');
+    mask    := shift_left(mask, LOG2STRICT(divisor));
+    modulus := dividend and not mask;
+    return modulus;
+  end MODULO;
+
+  function LOG2STRICT (i : natural)
+    return natural is
+    variable x, y : natural;
+  begin
+    x := i;
+    y := 0;
+    while x > 1 loop
+      assert x mod 2 = 0
+      report "LOG2STRICT: not a power of 2"
+      severity ERROR;
+      x := x / 2;
+      y := y + 1;
+    end loop;
+    return y;
+  end LOG2STRICT;
+
 end MM;
