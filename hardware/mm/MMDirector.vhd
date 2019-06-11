@@ -1673,8 +1673,8 @@ begin
           v.addr             := OVERLAY(
                                     shift_left(
                                         resize(
-                                          u(gap_pt_a_offset) + PT_FIRST_NR,
-                                          PAGE_SIZE_LOG2),
+                                          u(gap_pt_a_offset),
+                                          PAGE_SIZE_LOG2) + PT_FIRST_NR,
                                         PT_SIZE_LOG2),
                                     PAGE_BASE(v.addr));
           -- Save the byte that needs to be written
