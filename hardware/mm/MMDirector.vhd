@@ -1538,11 +1538,14 @@ begin
       my_bus_wreq.len   <= slv(to_unsigned(1, my_bus_wreq.len'length));
       -- Copy the byte that has to be written back.
       v.byte_buffer      := EXTRACT(
-          u(my_bus_rdat.data),
-          int(align_beq(PT_BITMAP_IDX(v.addr_pt), BYTE_SIZE) mod BUS_DATA_WIDTH),
-          BYTE_SIZE);
+                              unsigned(my_bus_rdat.data),
+                              int(mul(
+                                div_floor(PT_BITMAP_IDX(v.addr_pt), BYTE_SIZE),
+                                BYTE_SIZE)),
+                              BYTE_SIZE
+                            );
       -- Mark PT as unused in bitmap's byte.
-      v.byte_buffer(int(PT_BITMAP_IDX(v.addr_pt) mod BYTE_SIZE)) := '0';
+      v.byte_buffer(int(resize(PT_BITMAP_IDX(v.addr_pt), log2ceil(BYTE_SIZE)))) := '0';
 
       if handshake = '1' then
         -- TODO: make this work for bitmaps > BUS_DATA_WIDTH
@@ -1584,7 +1587,7 @@ begin
       -- Get page table number referenced by addr and figure out which byte of the bitmap it is in.
       my_bus_wdat.strobe(int(
         div_floor(
-          PT_BITMAP_IDX(v.addr_pt) mod BUS_DATA_WIDTH,
+          PT_BITMAP_IDX(v.addr_pt),
           BYTE_SIZE)
         ))                   <= '1';
       my_bus_wdat.last       <= '1';
@@ -1682,7 +1685,8 @@ begin
                                     BYTE_SIZE)),
                                   BYTE_SIZE
                                 );
-          v.byte_buffer(int(u(gap_pt_a_offset) mod BYTE_SIZE)) := '1';
+          -- Mark PT as used in bitmap's byte.
+          v.byte_buffer(int(resize(u(gap_pt_a_offset), log2ceil(BYTE_SIZE)))) := '0';
         end if;
       end if;
 
