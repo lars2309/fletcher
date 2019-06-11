@@ -405,7 +405,13 @@ begin
       VM_BASE                     => VM_BASE,
       PT_ADDR                     => PT_ADDR,
       PT_ENTRIES_LOG2             => PT_ENTRIES_LOG2,
-      PTE_BITS                    => PTE_BITS
+      PTE_BITS                    => PTE_BITS,
+      BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
+      BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
+      BUS_DATA_WIDTH              => BUS_DATA_WIDTH,
+      BUS_STROBE_WIDTH            => BUS_STROBE_WIDTH,
+      BUS_BURST_STEP_LEN          => BUS_BURST_STEP_LEN,
+      BUS_BURST_MAX_LEN           => BUS_BURST_MAX_LEN
     )
     port map (
       clk                         => bcd_clk,
