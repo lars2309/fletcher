@@ -1682,7 +1682,7 @@ begin
                                   BYTE_SIZE
                                 );
           -- Mark PT as used in bitmap's byte.
-          v.byte_buffer(int(MODULO(u(gap_pt_a_offset), BYTE_SIZE))) := '0';
+          v.byte_buffer(int(MODULO(u(gap_pt_a_offset), BYTE_SIZE))) := '1';
         end if;
       end if;
 
