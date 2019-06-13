@@ -152,6 +152,7 @@ begin
       req_ready, resp_valid, resp_virt, resp_phys, resp_mask, cache) is
     variable lcache    : cache_type;
     variable in_cache  : boolean;
+    variable cidx_m    : natural;
     variable handshake : std_logic;
   begin
     lcache   := cache;
@@ -161,7 +162,6 @@ begin
     cache_result_in.valid    <= int_slv_req.valid;
     int_slv_req.ready        <= cache_result_in.ready;
     cache_result_in.d        <= int_slv_req.d;
-    req_addr                 <= int_slv_req.d.addr;
     if (int_slv_req.d.addr and VM_MASK) = slv(resize(VM_BASE, VM_MASK'length)) then
       -- Address is in virtual space, request translation.
 
@@ -171,13 +171,15 @@ begin
           and (int_slv_req.d.addr and cache(cidx).mask) = cache(cidx).virt
         then
           in_cache := true;
-          cache_result_in.d.addr <= cache(cidx).phys or (int_slv_req.d.addr and not cache(cidx).mask);
+          cidx_m   := cidx;
+          exit;
         end if;
       end loop;
 
       if in_cache then
         -- Mark new address as a physical address.
         cache_result_in.d.virt   <= '0';
+        cache_result_in.d.addr <= cache(cidx_m).phys or (int_slv_req.d.addr and not cache(cidx_m).mask);
       else
         -- Not found in cache, forward request for page table walk.
         cache_result_in.d.virt   <= '1';
@@ -204,14 +206,14 @@ begin
         -- Cache the response.
         if handshake = '1' then
           -- Shift all cached responses to make room.
-          for cidx in 1 to CACHE_SIZE-1 loop
+          for cidx in CACHE_SIZE-1 downto 1 loop
             lcache(cidx)     := lcache(cidx-1);
           end loop;
           if CACHE_SIZE /= 0 then
             -- Save response at position 0.
             lcache(0).valid    := '1';
             lcache(0).virt     := resp_virt and resp_mask;
-            lcache(0).phys     := resp_phys;
+            lcache(0).phys     := resp_phys and resp_mask;
             lcache(0).mask     := resp_mask;
           end if;
         end if;
@@ -247,6 +249,7 @@ begin
   cache_result_in.concat     <= REQUEST_SER(cache_result_in);
   cache_result_out.d         <= REQUEST_DESER(cache_result_out);
   req_queue_in.d             <= cache_result_out.d;
+  req_addr                   <= cache_result_out.d.addr;
 
   sync_fifo_req : StreamSync
     generic map (
