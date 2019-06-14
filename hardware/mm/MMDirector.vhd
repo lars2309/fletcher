@@ -1547,7 +1547,7 @@ begin
 
       if handshake = '1' then
         -- TODO: make this work for bitmaps > BUS_DATA_WIDTH
-        if BIT_COUNT(my_bus_rdat.data(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH)-1 downto 0)) = 1 then
+        if ONE_HIGH(my_bus_rdat.data(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH)-1 downto 0)) then
           -- This was the last page table in the frame, delete it.
           v.state_stack(0) := PT_DEL_ROLODEX;
         else
@@ -2002,6 +2002,7 @@ begin
       MASK_WIDTH                  => BUS_DATA_WIDTH / PTE_WIDTH,
       SIZE_WIDTH                  => log2ceil(BUS_DATA_WIDTH / PTE_WIDTH + 1),
       OFFSET_WIDTH                => log2ceil(BUS_DATA_WIDTH / PTE_WIDTH + 1),
+      MASK_WIDTH_INTERNAL         => 4,
       SLV_SLICE                   => true,
       MST_SLICE                   => true
     )

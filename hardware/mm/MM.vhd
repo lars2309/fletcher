@@ -31,6 +31,9 @@ package MM is
   function BIT_COUNT(arg : in std_logic_vector)
                      return unsigned;
 
+  function ONE_HIGH(arg : in std_logic_vector)
+    return boolean;
+
   function DIV_CEIL (numerator   : natural;
                      denominator : natural)
     return natural;
@@ -43,6 +46,7 @@ package MM is
   function OVERLAY (over  : unsigned;
                     under : unsigned)
     return unsigned;
+
   function EXTRACT (vec    : unsigned;
                     offset : natural;
                     length : natural)
@@ -467,6 +471,49 @@ package body MM is
     return ret;
   end BIT_COUNT;
 
+  -- Assuming dual 5-input LUTs
+  function ONE_HIGH(arg : in std_logic_vector)
+                    return boolean is
+    variable sections_nonzero  : std_logic_vector((arg'length+4)/5-1 downto 0);
+    variable sections_overflow : std_logic_vector((arg'length+4)/5-1 downto 0);
+  begin
+    for I in 0 to sections_nonzero'high loop
+      if I*5 > arg'length then
+        sections_nonzero(I)  := '0';
+        sections_overflow(I) := '0';
+      else
+        sections_nonzero(I)  := l(u(arg(work.Utils.min((I+1)*5, arg'length)-1 downto I*5)) /= 0);
+        case resize(u(arg(work.Utils.min((I+1)*5, arg'length)-1 downto I*5)), 5) is
+          when "00000" => sections_overflow(I) := '0';
+          when "00001" => sections_overflow(I) := '0';
+          when "00010" => sections_overflow(I) := '0';
+          when "00100" => sections_overflow(I) := '0';
+          when "01000" => sections_overflow(I) := '0';
+          when "10000" => sections_overflow(I) := '0';
+          when others => sections_overflow(I) := '1';
+        end case;
+      end if;
+
+      if u(sections_overflow) /= 0 then
+        return false;
+      else
+        if sections_nonzero'length <= 5 then
+          case resize(u(sections_nonzero), 5) is
+            when "00001" => return true;
+            when "00010" => return true;
+            when "00100" => return true;
+            when "01000" => return true;
+            when "10000" => return true;
+            when others => return false;
+          end case;
+        else
+          return ONE_HIGH(sections_nonzero);
+        end if;
+      end if;
+    end loop;
+
+  end ONE_HIGH;
+
   function DIV_CEIL (numerator   : natural;
                      denominator : natural)
     return natural is
@@ -529,8 +576,8 @@ package body MM is
     y := 0;
     while x > 1 loop
       assert x mod 2 = 0
-      report "LOG2STRICT: not a power of 2"
-      severity ERROR;
+        report "LOG2STRICT: not a power of 2"
+        severity ERROR;
       x := x / 2;
       y := y + 1;
     end loop;
