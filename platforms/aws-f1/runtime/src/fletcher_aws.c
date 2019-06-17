@@ -393,20 +393,26 @@ fstatus_t platformDeviceFree(da_t device_address) {
 
   // Wait for completion
   uint32_t regval = 0;
+  int tries = 0;
   do {
     usleep(2000);
     platformReadMMIO(FLETCHER_REG_MM_HDA_STATUS, &regval);
-  } while ((regval & FLETCHER_REG_MM_STATUS_DONE) == 0);
+    tries++;
+  } while ((regval & FLETCHER_REG_MM_STATUS_DONE) == 0 && tries < 2000);
 
   // Check status
-  if ((regval & FLETCHER_REG_MM_STATUS_OK) == 0) {
+  if ((regval & FLETCHER_REG_MM_STATUS_DONE) == 0) {
     success = false;
   } else {
-    success = true;
-  }
+    // Acknowledge that response was read
+    platformWriteMMIO(FLETCHER_REG_MM_HDA_STATUS, FLETCHER_REG_MM_HDA_STATUS_ACK);
 
-  // Acknowledge that response was read
-  platformWriteMMIO(FLETCHER_REG_MM_HDA_STATUS, FLETCHER_REG_MM_HDA_STATUS_ACK);
+    if ((regval & FLETCHER_REG_MM_STATUS_OK) == 0) {
+      success = false;
+    } else {
+      success = true;
+    }
+  }
 
   if (success) {
     return FLETCHER_STATUS_OK;

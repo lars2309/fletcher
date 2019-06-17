@@ -430,6 +430,9 @@ int main(int argc, char ** argv) {
       if (bench_dealloc) {
         if (!platform->DeviceFree(alloc_addr).ok()) {
           std::cerr << "ERROR while freeing " << alloc_size << " bytes." << std::endl << std::flush;
+          uint32_t regval = 0;
+          platform->ReadMMIO(26+12*2+1, &regval);
+          std::cerr << "State: " << regval << std::endl;
           status = EXIT_FAILURE;
           break;
         }
