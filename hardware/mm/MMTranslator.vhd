@@ -271,7 +271,7 @@ begin
 
   resp_queue : StreamBuffer
     generic map (
-      MIN_DEPTH                   => MAX_OUTSTANDING,
+      MIN_DEPTH                   => MAX_OUTSTANDING - 1,
       DATA_WIDTH                  => ABI(ABI'high)
     )
     port map (
