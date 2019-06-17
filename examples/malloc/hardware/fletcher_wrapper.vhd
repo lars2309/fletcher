@@ -124,6 +124,7 @@ architecture Implementation of fletcher_wrapper is
   constant MM_REG_OFFSET_BENCH_RS      : natural := 26;
   constant MM_REG_OFFSET_BENCH_RR      : natural := MM_REG_OFFSET_BENCH_RS + MM_BENCH_REGS;
   constant MM_REG_CMD_DELAY            : natural := MM_REG_OFFSET_BENCH_RR + MM_BENCH_REGS;
+  constant MM_REG_DEBUG                : natural := MM_REG_CMD_DELAY + 1;
 
   type bus_req_t is record
     valid             : std_logic;
@@ -459,8 +460,10 @@ begin
       
       bus_resp_valid              => dir_w.resp_valid,
       bus_resp_ready              => dir_w.resp_ready,
-      bus_resp_ok                 => dir_w.resp_ok
+      bus_resp_ok                 => dir_w.resp_ok,
+      debug_state                 => regs_out((MM_REG_DEBUG+1)*REG_WIDTH-1 downto MM_REG_DEBUG*REG_WIDTH);
     );
+  regs_out_en(MM_REG_DEBUG) <= '1';
 
   mm_hif_delay_cntr_inst : ReactDelayCounter
     generic map (
