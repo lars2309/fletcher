@@ -461,7 +461,7 @@ begin
       bus_resp_valid              => dir_w.resp_valid,
       bus_resp_ready              => dir_w.resp_ready,
       bus_resp_ok                 => dir_w.resp_ok,
-      debug_state                 => regs_out((MM_REG_DEBUG+1)*REG_WIDTH-1 downto MM_REG_DEBUG*REG_WIDTH);
+      debug_state                 => regs_out((MM_REG_DEBUG+1)*REG_WIDTH-1 downto MM_REG_DEBUG*REG_WIDTH)
     );
   regs_out_en(MM_REG_DEBUG) <= '1';
 
