@@ -116,7 +116,9 @@ entity MMDirector is
     bus_rdat_data               : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
     bus_rdat_last               : in  std_logic;
     bus_rdat_valid              : in  std_logic;
-    bus_rdat_ready              : out std_logic
+    bus_rdat_ready              : out std_logic;
+
+    debug_state                 : out std_logic_vector(31 downto 0)
   );
 end MMDirector;
 
@@ -643,114 +645,170 @@ begin
     case v.state_stack(0) is
       when RESET_ST =>
         report "state: RESET_ST" severity note;
+        debug_state <= slv(to_unsigned(1, 32));
       when IDLE =>
         report "state: IDLE" severity note;
+        debug_state <= slv(to_unsigned(2, 32));
       when FAIL =>
         report "state: FAIL" severity note;
+        debug_state <= slv(to_unsigned(3, 32));
       when CLEAR_FRAMES =>
         report "state: CLEAR_FRAMES" severity note;
+        debug_state <= slv(to_unsigned(4, 32));
       when CLEAR_FRAMES_CHECK =>
         report "state: CLEAR_FRAMES_CHECK" severity note;
+        debug_state <= slv(to_unsigned(5, 32));
       when RESERVE_PT =>
         report "state: RESERVE_PT" severity note;
+        debug_state <= slv(to_unsigned(6, 32));
       when RESERVE_PT_CHECK =>
         report "state: RESERVE_PT_CHECK" severity note;
+        debug_state <= slv(to_unsigned(7, 32));
       when PT0_INIT =>
         report "state: PT0_INIT" severity note;
+        debug_state <= slv(to_unsigned(8, 32));
       when VMALLOC =>
         report "state: VMALLOC" severity note;
+        debug_state <= slv(to_unsigned(9, 32));
       when VMALLOC_CHECK_PT0 =>
         report "state: VMALLOC_CHECK_PT0" severity note;
+        debug_state <= slv(to_unsigned(10, 32));
       when VMALLOC_CHECK_PT0_DATA =>
+        debug_state <= slv(to_unsigned(0, 32));
         report "state: VMALLOC_CHECK_PT0_DATA" severity note;
+        debug_state <= slv(to_unsigned(11, 32));
       when VMALLOC_RESERVE_FRAME =>
         report "state: VMALLOC_RESERVE_FRAME" severity note;
+        debug_state <= slv(to_unsigned(12, 32));
       when VMALLOC_FINISH =>
         report "state: VMALLOC_FINISH" severity note;
+        debug_state <= slv(to_unsigned(13, 32));
       when VREALLOC =>
         report "state: VREALLOC" severity note;
+        debug_state <= slv(to_unsigned(14, 32));
       when VREALLOC_MOVE =>
         report "state: VREALLOC_MOVE" severity note;
+        debug_state <= slv(to_unsigned(15, 32));
       when VREALLOC_FREE =>
         report "state: VREALLOC_FREE" severity note;
+        debug_state <= slv(to_unsigned(16, 32));
       when VREALLOC_RESPONSE =>
         report "state: VREALLOC_RESPONSE" severity note;
+        debug_state <= slv(to_unsigned(17, 32));
       when VFREE =>
         report "state: VFREE" severity note;
+        debug_state <= slv(to_unsigned(18, 32));
       when VFREE_FINISH =>
         report "state: VFREE_FINISH" severity note;
+        debug_state <= slv(to_unsigned(19, 32));
       when FIND_GAP =>
         report "state: FIND_GAP" severity note;
+        debug_state <= slv(to_unsigned(20, 32));
       when FIND_GAP_PT0 =>
         report "state: FIND_GAP_PT0" severity note;
+        debug_state <= slv(to_unsigned(21, 32));
       when FIND_GAP_PT0_DATA =>
         report "state: FIND_GAP_PT0_DATA" severity note;
+        debug_state <= slv(to_unsigned(22, 32));
       when SET_PTE_RANGE =>
         report "state: SET_PTE_RANGE" severity note;
+        debug_state <= slv(to_unsigned(23, 32));
       when SET_PTE_RANGE_L1_ADDR =>
         report "state: SET_PTE_RANGE_L1_ADDR" severity note;
+        debug_state <= slv(to_unsigned(24, 32));
       when SET_PTE_RANGE_L1_CHECK =>
         report "state: SET_PTE_RANGE_L1_CHECK" severity note;
+        debug_state <= slv(to_unsigned(25, 32));
       when SET_PTE_RANGE_L1_UPDATE_ADDR =>
         report "state: SET_PTE_RANGE_L1_UPDATE_ADDR" severity note;
+        debug_state <= slv(to_unsigned(26, 32));
       when SET_PTE_RANGE_L1_UPDATE_DAT =>
         report "state: SET_PTE_RANGE_L1_UPDATE_DAT" severity note;
+        debug_state <= slv(to_unsigned(27, 32));
       when SET_PTE_RANGE_SRC_L1_ADDR =>
         report "state: SET_PTE_RANGE_SRC_L1_ADDR" severity note;
+        debug_state <= slv(to_unsigned(28, 32));
       when SET_PTE_RANGE_SRC_L2_REQ =>
         report "state: SET_PTE_RANGE_SRC_L2_REQ" severity note;
+        debug_state <= slv(to_unsigned(29, 32));
       when SET_PTE_RANGE_FRAME =>
         report "state: SET_PTE_RANGE_FRAME" severity note;
+        debug_state <= slv(to_unsigned(30, 32));
       when SET_PTE_RANGE_L2_REQ_PT =>
         report "state: SET_PTE_RANGE_L2_REQ_PT" severity note;
+        debug_state <= slv(to_unsigned(31, 32));
       when SET_PTE_RANGE_L2_DEALLOC_FRAME_C =>
         report "state: SET_PTE_RANGE_L2_DEALLOC_FRAME_C" severity note;
+        debug_state <= slv(to_unsigned(32, 32));
       when SET_PTE_RANGE_L2_DEALLOC_FRAME_R =>
         report "state: SET_PTE_RANGE_L2_DEALLOC_FRAME_R" severity note;
+        debug_state <= slv(to_unsigned(33, 32));
       when SET_PTE_RANGE_L2_UPDATE_ADDR =>
         report "state: SET_PTE_RANGE_L2_UPDATE_ADDR" severity note;
+        debug_state <= slv(to_unsigned(34, 32));
       when SET_PTE_RANGE_L2_UPDATE_DAT =>
         report "state: SET_PTE_RANGE_L2_UPDATE_DAT" severity note;
+        debug_state <= slv(to_unsigned(35, 32));
       when SET_PTE_RANGE_FINISH =>
         report "state: SET_PTE_RANGE_FINISH" severity note;
+        debug_state <= slv(to_unsigned(36, 32));
       when PT_DEL =>
         report "state: PT_DEL" severity note;
+        debug_state <= slv(to_unsigned(37, 32));
       when PT_DEL_MARK_BM_ADDR =>
         report "state: PT_DEL_MARK_BM_ADDR" severity note;
+        debug_state <= slv(to_unsigned(38, 32));
       when PT_DEL_MARK_BM_DATA =>
         report "state: PT_DEL_MARK_BM_DATA" severity note;
+        debug_state <= slv(to_unsigned(39, 32));
       when PT_DEL_ROLODEX =>
         report "state: PT_DEL_ROLODEX" severity note;
+        debug_state <= slv(to_unsigned(40, 32));
       when PT_DEL_FRAME =>
         report "state: PT_DEL_FRAME" severity note;
+        debug_state <= slv(to_unsigned(41, 32));
       when PT_DEL_FRAME_CHECK =>
         report "state: PT_DEL_FRAME_CHECK" severity note;
+        debug_state <= slv(to_unsigned(42, 32));
       when PT_NEW =>
         report "state: PT_NEW" severity note;
+        debug_state <= slv(to_unsigned(43, 32));
       when PT_NEW_REQ_BM =>
         report "state: PT_NEW_REQ_BM" severity note;
+        debug_state <= slv(to_unsigned(44, 32));
       when PT_NEW_CHECK_BM_TX =>
         report "state: PT_NEW_CHECK_BM_TX" severity note;
+        debug_state <= slv(to_unsigned(45, 32));
       when PT_NEW_MARK_BM_ADDR =>
         report "state: PT_NEW_MARK_BM_ADDR" severity note;
+        debug_state <= slv(to_unsigned(46, 32));
       when PT_NEW_FRAME =>
         report "state: PT_NEW_FRAME" severity note;
+        debug_state <= slv(to_unsigned(47, 32));
       when PT_NEW_FRAME_CHECK =>
         report "state: PT_NEW_FRAME_CHECK" severity note;
+        debug_state <= slv(to_unsigned(48, 32));
       when PT_NEW_MARK_BM_DATA =>
         report "state: PT_NEW_MARK_BM_DATA" severity note;
+        debug_state <= slv(to_unsigned(49, 32));
       when PT_NEW_CLEAR_ADDR =>
         report "state: PT_NEW_CLEAR_ADDR" severity note;
+        debug_state <= slv(to_unsigned(50, 32));
       when PT_NEW_CLEAR_DATA =>
         report "state: PT_NEW_CLEAR_DATA" severity note;
+        debug_state <= slv(to_unsigned(51, 32));
       when PT_FRAME_INIT_ADDR =>
         report "state: PT_FRAME_INIT_ADDR" severity note;
+        debug_state <= slv(to_unsigned(52, 32));
       when PT_FRAME_INIT_DATA =>
         report "state: PT_FRAME_INIT_DATA" severity note;
+        debug_state <= slv(to_unsigned(53, 32));
       when PT_FRAME_INIT_ROLODEX =>
         report "state: PT_FRAME_INIT_ROLODEX" severity note;
+        debug_state <= slv(to_unsigned(54, 32));
       when others =>
         report "state: unknown" severity note;
+        debug_state <= not slv(to_unsigned(0, 32));
     end case;
     end if;
 

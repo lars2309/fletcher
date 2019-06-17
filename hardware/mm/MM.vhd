@@ -183,7 +183,8 @@ package MM is
       bus_rdat_data               : in  std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
       bus_rdat_last               : in  std_logic;
       bus_rdat_valid              : in  std_logic;
-      bus_rdat_ready              : out std_logic
+      bus_rdat_ready              : out std_logic;
+      debug_state                 : out std_logic_vector(31 downto 0)
     );
   end component;
 
