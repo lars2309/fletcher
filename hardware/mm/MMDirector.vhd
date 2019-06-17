@@ -1325,7 +1325,7 @@ begin
           end if;
         end if;
 
-        if v.pt_arg.unmap = '1' then
+        if v.pt_arg.unmap = '1' and handshake = '1' then
           if v.in_mapping = '0' and
             pt_reader.data(PTE_WIDTH * i + PTE_MAPPED) = '1'
           then
