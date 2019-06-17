@@ -176,7 +176,7 @@ int main(int argc, char ** argv) {
 
   int n_mallocs = malloc_sizes.size();
 
-  int benchmark_buffer = 4;
+  int benchmark_buffer = 3;
 
   // Initialize FPGA
   std::shared_ptr<fletcher::Platform> platform;
