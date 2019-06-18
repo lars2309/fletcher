@@ -514,6 +514,7 @@ begin
       PT_ADDR                     => PT_ADDR,
       PT_ENTRIES_LOG2             => PT_ENTRIES_LOG2,
       PTE_BITS                    => PTE_BITS,
+      MAX_OUTSTANDING_BUS         => 64,
       ---------------------------------------------------------------------------
       -- Bus metrics and configuration
       ---------------------------------------------------------------------------
