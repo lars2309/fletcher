@@ -494,24 +494,24 @@ package body MM is
           when others => sections_overflow(I) := '1';
         end case;
       end if;
-
-      if u(sections_overflow) /= 0 then
-        return false;
-      else
-        if sections_nonzero'length <= 5 then
-          case resize(u(sections_nonzero), 5) is
-            when "00001" => return true;
-            when "00010" => return true;
-            when "00100" => return true;
-            when "01000" => return true;
-            when "10000" => return true;
-            when others => return false;
-          end case;
-        else
-          return ONE_HIGH(sections_nonzero);
-        end if;
-      end if;
     end loop;
+
+    if u(sections_overflow) /= 0 then
+      return false;
+    else
+      if sections_nonzero'length <= 5 then
+        case resize(u(sections_nonzero), 5) is
+          when "00001" => return true;
+          when "00010" => return true;
+          when "00100" => return true;
+          when "01000" => return true;
+          when "10000" => return true;
+          when others => return false;
+        end case;
+      else
+        return ONE_HIGH(sections_nonzero);
+      end if;
+    end if;
 
   end ONE_HIGH;
 
