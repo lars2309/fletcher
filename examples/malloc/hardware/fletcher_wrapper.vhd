@@ -266,6 +266,7 @@ begin
     VM_BASE                     => VM_BASE,
     PT_ENTRIES_LOG2             => PT_ENTRIES_LOG2,
     PAGE_SIZE_LOG2              => PAGE_SIZE_LOG2,
+    MAX_OUTSTANDING             => 1,
     CACHE_SIZE                  => 1,
     SLV_SLICES                  => 2,
     MST_SLICES                  => 2
@@ -365,6 +366,7 @@ begin
     VM_BASE                     => VM_BASE,
     PT_ENTRIES_LOG2             => PT_ENTRIES_LOG2,
     PAGE_SIZE_LOG2              => PAGE_SIZE_LOG2,
+    MAX_OUTSTANDING             => 1,
     CACHE_SIZE                  => 1,
     SLV_SLICES                  => 2,
     MST_SLICES                  => 2
