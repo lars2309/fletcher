@@ -470,6 +470,7 @@ int main(int argc, char ** argv) {
     platform->ReadMMIO(50, &cycles);
     std::cout << "-Alloc of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
 
+    alloc_size = 1024*1024;
     while(alloc_size <= alloc_max) {
 
       {
