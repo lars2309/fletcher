@@ -144,6 +144,8 @@ architecture Behavioral of MMFrames is
   signal w_en                   : std_logic;
   signal region, region_next    : unsigned(log2ceil(MEM_REGIONS)-1 downto 0);
   signal frame, frame_next      : unsigned(TOTAL_FRAMES_LOG2-1 downto 0);
+  type rover_t is array (0 to MEM_REGIONS-1) of unsigned(TOTAL_FRAMES_LOG2-1 downto 0);
+  signal roving_ptr, roving_ptr_next : rover_t;
 
   type state_type is (IDLE, CLEAR, ALLOC_CHECK, ALLOC_APPLY,
                       FREE, FIND, FIND_LOOP, FIND_DONE, SUCCESS, FAIL);
@@ -156,19 +158,24 @@ begin
         state  <= IDLE;
         region <= (others => '0');
         frame  <= (others => '0');
+        for I in 0 to MEM_REGIONS-1 loop
+          roving_ptr(I) <= REGION_TO_FRAME(I);
+        end loop;
       else
         state  <= state_next;
         region <= region_next;
         frame  <= frame_next;
+        roving_ptr <= roving_ptr_next;
       end if;
     end if;
   end process;
 
-  process (state, r_data, region, frame, cmd_addr, cmd_region, cmd_valid,
-           cmd_action, resp_ready) begin
+  process (state, region, frame, roving_ptr, r_data,
+           cmd_addr, cmd_region, cmd_valid, cmd_action, resp_ready) begin
     state_next   <= state;
     frame_next   <= frame;
     region_next  <= region;
+    roving_ptr_next <= roving_ptr;
     resp_addr    <= (others => '0');
     resp_success <= '0';
     resp_valid   <= '0';
@@ -201,7 +208,7 @@ begin
         when MM_FRAMES_FIND =>
           state_next  <= FIND;
           region_next <= unsigned(cmd_region);
-          frame_next  <= REGION_TO_FRAME(to_integer(unsigned(cmd_region)));
+          frame_next  <= roving_ptr(to_integer(unsigned(cmd_region)));
 
         when others =>
         end case;
@@ -236,14 +243,23 @@ begin
 
     when FIND =>
       state_next <= FIND_LOOP;
-      frame_next <= frame + 1;
+      if frame + 1 = REGION_TO_FRAME(to_integer(region)+1) then
+        frame_next <= REGION_TO_FRAME(to_integer(region));
+      else
+        frame_next <= frame + 1;
+      end if;
 
     when FIND_LOOP =>
-      frame_next <= frame + 1;
+      if frame + 1 = REGION_TO_FRAME(to_integer(region)+1) then
+        frame_next <= REGION_TO_FRAME(to_integer(region));
+      else
+        frame_next <= frame + 1;
+      end if;
       if r_data = "0" then
         state_next <= FIND_DONE;
         frame_next <= frame - 1;
-      elsif frame = REGION_TO_FRAME(to_integer(region) + 1)-1 then
+        roving_ptr_next(to_integer(region)) <= frame;
+      elsif frame = roving_ptr(to_integer(region)) then
         state_next <= FAIL;
       end if;
 
