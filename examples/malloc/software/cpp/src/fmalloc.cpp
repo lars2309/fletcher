@@ -154,7 +154,9 @@ int main(int argc, char ** argv) {
 
   // Maximum for page size 2^18 and 2^13 page table entries. (16TiB)
   //const int64_t alloc_max = 1024L*1024*1024* 16384;
-  const int64_t alloc_max = 1024L*1024*1024* 32;
+  // 1/3rd of maximum size, for realloc to be possible.
+  const int64_t alloc_max = 1024L*1024*1024* 5461;
+  //const int64_t alloc_max = 1024L*1024*1024* 32;
   const int max_data_size = 1024L*1024*1024; // Max 1GB for data copies.
 
   std::vector<uint64_t> malloc_sizes;
