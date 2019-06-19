@@ -514,7 +514,7 @@ begin
       PT_ADDR                     => PT_ADDR,
       PT_ENTRIES_LOG2             => PT_ENTRIES_LOG2,
       PTE_BITS                    => PTE_BITS,
-      MAX_OUTSTANDING_BUS         => 64,
+      MAX_OUTSTANDING_BUS         => 1,
       ---------------------------------------------------------------------------
       -- Bus metrics and configuration
       ---------------------------------------------------------------------------
@@ -568,7 +568,7 @@ begin
     BUS_DATA_WIDTH              => BUS_ADDR_WIDTH * 3,
     NUM_SLAVE_PORTS             => 3,
     ARB_METHOD                  => "ROUND-ROBIN",
-    MAX_OUTSTANDING             => 2,
+    MAX_OUTSTANDING             => 1,
     SLV_REQ_SLICES              => true,
     MST_REQ_SLICE               => true,
     MST_DAT_SLICE               => true,
