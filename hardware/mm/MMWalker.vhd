@@ -151,65 +151,82 @@ architecture Behavioral of MMWalker is
 
   signal queue_l1_in     : request_type;
   signal queue_l1_out    : request_type;
+  signal queue_l1_resp_in  : request_type;
+  signal queue_l1_resp_out : request_type;
   signal queue_l2_in     : request_type;
   signal queue_l2_out    : request_type;
+  signal queue_l2_resp_in  : request_type;
+  signal queue_l2_resp_out : request_type;
   signal queue_dir_in    : request_type;
   signal queue_dir_out   : request_type;
+
+  signal token_in_ready  : std_logic;
+  signal token_in_valid  : std_logic;
+  signal token_out_ready : std_logic;
+  signal token_out_valid : std_logic;
 
   signal bus_l1          : bus_r_type;
   signal bus_l2          : bus_r_type;
 begin
 
+
   process (bus_l1, bus_l2, req_addr)
   begin
-    -- Step 1: Request L1 page table entry.
+    -- Request L1 page table entry.
     bus_l1.req_len           <= slv(to_unsigned(1, BUS_LEN_WIDTH));
     bus_l1.req_addr          <= slv(ADDR_BUS_ALIGN(VA_TO_PTE(PT_ADDR, u(req_addr), 1)));
     queue_l1_in.virt         <= req_addr;
   end process;
 
-  process (queue_l1_out, bus_l1) is
-    variable addr_pt : unsigned(BUS_ADDR_WIDTH-1 downto 0);
-  begin
-    -- Step 2: Request L2 page table entry based on L1 entry.
-    queue_l2_in.virt         <= queue_l1_out.virt;
 
+  process (queue_l1_out, bus_l1) is
+  begin
+    -- Get address of L2 page table from response.
+    queue_l1_resp_in.virt    <= queue_l1_out.virt;
     -- Check on valid is not necessary, but avoids some simulator warnings about metavalues.
     if queue_l1_out.valid = '1' then
-    -- Select the right PTE from the data bus
-    -- and use the resulting address to request the L2 entry.
-      addr_pt := align_beq(
-          EXTRACT(
-            unsigned(bus_l1.dat_data),
-            BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, u(queue_l1_out.virt), 1))),
-            BYTE_SIZE * PTE_SIZE
-          ),
-          PT_SIZE_LOG2
-        );
-      bus_l2.req_addr        <= slv(
+      -- Use physical address to store page table pointer.
+      -- Select the right PTE from the data bus.
+      queue_l1_resp_in.phys    <= slv(align_beq(
+            EXTRACT(
+              unsigned(bus_l1.dat_data),
+              BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, u(queue_l1_out.virt), 1))),
+              BYTE_SIZE * PTE_SIZE
+            ),
+            PT_SIZE_LOG2
+          ));
+    else
+      queue_l1_resp_in.phys  <= (others => 'U');
+    end if;
+  end process;
+
+
+  process (queue_l1_resp_out) is
+  begin
+    -- Request L2 page table entry.
+    queue_l2_in.virt         <= queue_l1_resp_out.virt;
+    bus_l2.req_addr          <= slv(
                                ADDR_BUS_ALIGN(
                                  VA_TO_PTE(
-                                   addr_pt,
-                                   u(queue_l1_out.virt),
+                                   u(queue_l1_resp_out.phys),
+                                   u(queue_l1_resp_out.virt),
                                    2)));
-    else
-      bus_l2.req_addr        <= (others => 'U');
-    end if;
-
     bus_l2.req_len           <= slv(to_unsigned(1, BUS_LEN_WIDTH));
+    -- TODO: report failure on non-existent L2 page table.
   end process;
+
 
   process (queue_l2_out, bus_l2)
   begin
-    -- Step 3: Resolve address or pass on to MMDirector.
-    queue_dir_in.virt        <= queue_l2_out.virt;
-    dir_req_addr             <= queue_l2_out.virt;
+    -- Resolve address from L2 page table entries.
+    queue_l2_resp_in.virt    <= queue_l2_out.virt;
 
     -- Check on valid is not necessary, but avoids some simulator warnings about metavalues.
     if queue_l2_out.valid = '1' then
-    -- Use PT_ADDR instead of the real `addr_pt'. This is allowable, 
+    -- Use PT_ADDR instead of the real `addr_pt'. This is allowable,
     -- because the address offset into the data bus will be the same for these.
-      queue_dir_in.phys      <= slv(align_beq(
+    -- TODO: maybe create separate function for this usage.
+      queue_l2_resp_in.phys  <= slv(align_beq(
           EXTRACT(
             unsigned(bus_l2.dat_data),
             BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, u(queue_l2_out.virt), 2))),
@@ -229,20 +246,31 @@ begin
           )) = "1"
       then
         -- Page is mapped and present. Physical address is now known.
-        queue_dir_in.use_dir <= '0';
+        queue_l2_resp_in.use_dir <= '0';
       else
         -- Page is not mapped or not present, let MMDirector figure this one out.
-        queue_dir_in.use_dir <= '1';
+        queue_l2_resp_in.use_dir <= '1';
       end if;
     else
-      queue_dir_in.phys      <= (others => 'U');
-      queue_dir_in.use_dir   <= 'U';
+      queue_l2_resp_in.phys     <= (others => 'U');
+      queue_l2_resp_in.use_dir  <= 'U';
     end if;
   end process;
 
+
+  process (queue_l2_resp_out)
+  begin
+    -- Optionally pass resolve request on to MMDirector.
+    queue_dir_in.virt        <= queue_l2_resp_out.virt;
+    queue_dir_in.phys        <= queue_l2_resp_out.phys;
+    queue_dir_in.use_dir     <= queue_l2_resp_out.use_dir;
+    dir_req_addr             <= queue_l2_resp_out.virt;
+  end process;
+
+
   process (queue_dir_out, dir_resp_addr)
   begin
-    -- Step 4: Optionally wait for MMDirector response.
+    -- Optionally wait for MMDirector response.
     resp_virt                <= queue_dir_out.virt;
     if queue_dir_out.use_dir = '1' then
       resp_phys              <= dir_resp_addr;
@@ -253,13 +281,28 @@ begin
     resp_mask                <= slv(shift_left(
                                   u(std_logic_vector(to_signed(-1, BUS_ADDR_WIDTH))),
                                   PAGE_SIZE_LOG2));
-
   end process;
+
+
+  tokens_inst : StreamBuffer
+    generic map (
+      MIN_DEPTH                   => MAX_OUTSTANDING_BUS - 1,
+      DATA_WIDTH                  => 0
+    )
+    port map (
+      clk                         => clk,
+      reset                       => reset,
+      in_valid                    => token_in_valid,
+      in_ready                    => token_in_ready,
+      in_data                     => "",
+      out_valid                   => token_out_valid,
+      out_ready                   => token_out_ready
+    );
 
   sync_l1_inst : StreamSync
     generic map (
       NUM_INPUTS                  => 1,
-      NUM_OUTPUTS                 => 2
+      NUM_OUTPUTS                 => 3
     )
     port map (
       clk                         => clk,
@@ -268,13 +311,15 @@ begin
       in_ready(0)                 => req_ready,
       out_valid(0)                => queue_l1_in.valid,
       out_valid(1)                => bus_l1.req_valid,
+      out_valid(2)                => token_in_valid,
       out_ready(0)                => queue_l1_in.ready,
-      out_ready(1)                => bus_l1.req_ready
+      out_ready(1)                => bus_l1.req_ready,
+      out_ready(2)                => token_in_ready
     );
 
   queue_l1_inst : StreamBuffer
     generic map (
-      MIN_DEPTH                   => MAX_OUTSTANDING_BUS,
+      MIN_DEPTH                   => MAX_OUTSTANDING_BUS - 1,
       DATA_WIDTH                  => BUS_ADDR_WIDTH
     )
     port map (
@@ -288,10 +333,10 @@ begin
       out_data                    => queue_l1_out.virt
     );
 
-  sync_l2_inst : StreamSync
+  sync_l1_resp_inst : StreamSync
     generic map (
       NUM_INPUTS                  => 2,
-      NUM_OUTPUTS                 => 2
+      NUM_OUTPUTS                 => 1
     )
     port map (
       clk                         => clk,
@@ -300,6 +345,43 @@ begin
       in_valid(1)                 => bus_l1.dat_valid,
       in_ready(0)                 => queue_l1_out.ready,
       in_ready(1)                 => bus_l1.dat_ready,
+      out_valid(0)                => queue_l1_resp_in.valid,
+      out_ready(0)                => queue_l1_resp_in.ready 
+    );
+
+  queue_l1_resp_inst : StreamBuffer
+    generic map (
+      MIN_DEPTH                   => MAX_OUTSTANDING_BUS - 1,
+      DATA_WIDTH                  => BUS_ADDR_WIDTH * 2 + 1
+    )
+    port map (
+      clk                         => clk,
+      reset                       => reset,
+      in_valid                    => queue_l1_resp_in.valid,
+      in_ready                    => queue_l1_resp_in.ready,
+      in_data                     => queue_l1_resp_in.concat,
+      out_valid                   => queue_l1_resp_out.valid,
+      out_ready                   => queue_l1_resp_out.ready,
+      out_data                    => queue_l1_resp_out.concat
+    );
+  queue_l1_resp_in.concat(BUS_ADDR_WIDTH-1 downto 0)                <= queue_l1_resp_in.virt;
+  queue_l1_resp_in.concat(BUS_ADDR_WIDTH*2-1 downto BUS_ADDR_WIDTH) <= queue_l1_resp_in.phys;
+  queue_l1_resp_in.concat(BUS_ADDR_WIDTH*2)                         <= queue_l1_resp_in.use_dir;
+  queue_l1_resp_out.virt    <= queue_l1_resp_out.concat(BUS_ADDR_WIDTH-1 downto 0);
+  queue_l1_resp_out.phys    <= queue_l1_resp_out.concat(BUS_ADDR_WIDTH*2-1 downto BUS_ADDR_WIDTH);
+  queue_l1_resp_out.use_dir <= queue_l1_resp_out.concat(BUS_ADDR_WIDTH*2);
+
+
+  sync_l2_inst : StreamSync
+    generic map (
+      NUM_INPUTS                  => 1,
+      NUM_OUTPUTS                 => 2
+    )
+    port map (
+      clk                         => clk,
+      reset                       => reset,
+      in_valid(0)                 => queue_l1_resp_out.valid,
+      in_ready(0)                 => queue_l1_resp_out.ready,
       out_valid(0)                => queue_l2_in.valid,
       out_valid(1)                => bus_l2.req_valid,
       out_ready(0)                => queue_l2_in.ready,
@@ -308,7 +390,7 @@ begin
 
   queue_l2_inst : StreamBuffer
     generic map (
-      MIN_DEPTH                   => MAX_OUTSTANDING_BUS,
+      MIN_DEPTH                   => MAX_OUTSTANDING_BUS - 1,
       DATA_WIDTH                  => BUS_ADDR_WIDTH
     )
     port map (
@@ -322,10 +404,10 @@ begin
       out_data                    => queue_l2_out.virt
     );
 
-  sync_dir_inst : StreamSync
+  sync_l2_resp_inst : StreamSync
     generic map (
       NUM_INPUTS                  => 2,
-      NUM_OUTPUTS                 => 2
+      NUM_OUTPUTS                 => 1
     )
     port map (
       clk                         => clk,
@@ -334,6 +416,45 @@ begin
       in_valid(1)                 => bus_l2.dat_valid,
       in_ready(0)                 => queue_l2_out.ready,
       in_ready(1)                 => bus_l2.dat_ready,
+      out_valid(0)                => queue_l2_resp_in.valid,
+      out_ready(0)                => queue_l2_resp_in.ready
+    );
+
+  queue_l2_resp_inst : StreamBuffer
+    generic map (
+      MIN_DEPTH                   => MAX_OUTSTANDING_BUS - 1,
+      DATA_WIDTH                  => BUS_ADDR_WIDTH * 2 + 1
+    )
+    port map (
+      clk                         => clk,
+      reset                       => reset,
+      in_valid                    => queue_l2_resp_in.valid,
+      in_ready                    => queue_l2_resp_in.ready,
+      in_data                     => queue_l2_resp_in.concat,
+      out_valid                   => queue_l2_resp_out.valid,
+      out_ready                   => queue_l2_resp_out.ready,
+      out_data                    => queue_l2_resp_out.concat
+    );
+  queue_l2_resp_in.concat(BUS_ADDR_WIDTH-1 downto 0)                <= queue_l2_resp_in.virt;
+  queue_l2_resp_in.concat(BUS_ADDR_WIDTH*2-1 downto BUS_ADDR_WIDTH) <= queue_l2_resp_in.phys;
+  queue_l2_resp_in.concat(BUS_ADDR_WIDTH*2)                         <= queue_l2_resp_in.use_dir;
+  queue_l2_resp_out.virt    <= queue_l2_resp_out.concat(BUS_ADDR_WIDTH-1 downto 0);
+  queue_l2_resp_out.phys    <= queue_l2_resp_out.concat(BUS_ADDR_WIDTH*2-1 downto BUS_ADDR_WIDTH);
+  queue_l2_resp_out.use_dir <= queue_l2_resp_out.concat(BUS_ADDR_WIDTH*2);
+
+
+  sync_dir_inst : StreamSync
+    generic map (
+      NUM_INPUTS                  => 2,
+      NUM_OUTPUTS                 => 2
+    )
+    port map (
+      clk                         => clk,
+      reset                       => reset,
+      in_valid(0)                 => queue_l2_resp_out.valid,
+      in_valid(1)                 => token_out_valid,
+      in_ready(0)                 => queue_l2_resp_out.ready,
+      in_ready(1)                 => token_out_ready,
       out_valid(0)                => queue_dir_in.valid,
       out_valid(1)                => dir_req_valid,
       out_ready(0)                => queue_dir_in.ready,
@@ -344,7 +465,7 @@ begin
 
   queue_dir_inst : StreamBuffer
     generic map (
-      MIN_DEPTH                   => MAX_OUTSTANDING_DIR,
+      MIN_DEPTH                   => MAX_OUTSTANDING_DIR - 1,
       DATA_WIDTH                  => BUS_ADDR_WIDTH * 2 + 1
     )
     port map (
