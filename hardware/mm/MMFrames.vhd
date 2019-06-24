@@ -233,7 +233,7 @@ begin
         w_en       <= '1';
       else
         state_next <= FIND;
-        frame_next <= REGION_TO_FRAME(to_integer(unsigned(region)));
+        frame_next <= roving_ptr(to_integer(unsigned(region)));
       end if;
 
     when FREE =>
