@@ -25,6 +25,7 @@
 #define FLETCHER_STATUS_OK 0
 #define FLETCHER_STATUS_ERROR 1
 #define FLETCHER_STATUS_NO_PLATFORM 2
+#define FLETCHER_STATUS_DEVICE_OUT_OF_MEMORY 3
 
 /// Status for function return values
 typedef uint64_t fstatus_t;
@@ -55,6 +56,14 @@ typedef union {
 
 /// Offset for schema derived registers
 #define FLETCHER_REG_SCHEMA         4
+
+#define FLETCHER_REG_CONTROL_START  0x0u
+#define FLETCHER_REG_CONTROL_STOP   0x1u
+#define FLETCHER_REG_CONTROL_RESET  0x2u
+
+#define FLETCHER_REG_STATUS_IDLE    0x0u
+#define FLETCHER_REG_STATUS_BUSY    0x1u
+#define FLETCHER_REG_STATUS_DONE    0x2u
 
 // Memory management interface (H2D, request and answer)
 #define FLETCHER_REG_MM_HDR_ADDR_LO  6

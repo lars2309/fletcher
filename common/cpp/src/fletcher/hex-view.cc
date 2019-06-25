@@ -22,7 +22,7 @@ namespace fletcher {
 HexView::HexView(uint64_t start, std::string str, uint64_t row, uint64_t col, uint64_t width)
     : str(std::move(str)), row(row), col(col), width(width), start(start) {}
 
-std::string HexView::toString(bool header) {
+std::string HexView::ToString(bool header) {
   char buf[6] = {0};
   std::string ret;
   if (header) {
@@ -43,47 +43,51 @@ unsigned char convertToReadable(unsigned char c) {
   return c;
 }
 
-void HexView::addData(const uint8_t *ptr, size_t size) {
+void HexView::AddData(const uint8_t *ptr, size_t size) {
   char buf[64] = {0};
   std::string left;
   std::string right;
 
   unsigned int i = 0;
 
-  while (i < size) {
-    if (col % width == 0) {
-      str.append(left);
-      str.append(" ");
-      str.append(right);
-      str.append("\n");
-      left = "";
-      right = "";
-      snprintf(buf, sizeof(buf), "%016lX: ", start + row * width);
+  if (size == 0) {
+    str.append("\n(zero-length block)\n");
+  } else {
+    while (i < size) {
+      if (col % width == 0) {
+        str.append(left);
+        str.append(" ");
+        str.append(right);
+        str.append("\n");
+        left = "";
+        right = "";
+        snprintf(buf, sizeof(buf), "%016lX: ", start + row * width);
+        left.append(buf);
+        row++;
+      }
+
+      snprintf(buf, sizeof(buf), "%02X", (unsigned char) ptr[i]);
       left.append(buf);
-      row++;
+
+      snprintf(buf, sizeof(buf), "%c", convertToReadable((unsigned char) ptr[i]));
+      right.append(buf);
+
+      if (i == size - 1) {
+        left.append("|");
+      } else {
+        left.append(" ");
+      }
+      col++;
+      i++;
     }
 
-    snprintf(buf, sizeof(buf), "%02X", (unsigned char) ptr[i]);
-    left.append(buf);
+    left.append(std::string(18 + 3 * width - left.length(), ' '));
 
-    snprintf(buf, sizeof(buf), "%c", convertToReadable((unsigned char) ptr[i]));
-    right.append(buf);
-
-    if (i == size - 1) {
-      left.append("|");
-    } else {
-      left.append(" ");
-    }
-    col++;
-    i++;
+    str.append(left);
+    str.append(" ");
+    str.append(right);
+    str.append("\n");
   }
-
-  left.append(std::string(18 + 3 * width - left.length(), ' '));
-
-  str.append(left);
-  str.append(" ");
-  str.append(right);
-  str.append("\n");
 }
 
 }  // namespace fletcher

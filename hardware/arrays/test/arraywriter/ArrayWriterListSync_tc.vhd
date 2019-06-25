@@ -18,9 +18,10 @@ use ieee.numeric_std.all;
 use ieee.math_real.all;
 
 library work;
-use work.Streams.all;
-use work.Arrays.all;
-use work.SimUtils.all;
+use work.Stream_pkg.all;
+use work.Array_pkg.all;
+use work.UtilInt_pkg.all;
+use work.UtilStr_pkg.all;
 
 --pragma simulation timeout 10 us
 
@@ -45,8 +46,6 @@ architecture Behavioral of ArrayWriterListSync_tc is
   constant LENGTH_WIDTH         : positive := 16;
   constant LCOUNT_MAX           : positive := 4;
   constant LCOUNT_WIDTH         : positive := 3;
-
-  constant ELEM_LAST_FROM_LENGTH: boolean  := false;
 
   constant NUM_LISTS            : natural  := 100;
 
@@ -145,7 +144,7 @@ begin
       uniform(lseed1, lseed2, lrand);
       random_count := 1 + natural(lrand * real(LCOUNT_MAX-1));
 
-      dumpStdOut("Length stream item: " &  integer'image(handshake));
+      println("Length stream item: " &  integer'image(handshake));
       count := 0;
 
       -- Randomize list lengths
@@ -153,7 +152,7 @@ begin
         uniform(seed1, seed2, rand);
         len := natural(rand * MAX_LEN);
 
-        dumpStdOut("  List : " & integer'image(list) & ", length: " & integer'image(I) & ": " & integer'image(len));
+        println("  List : " & integer'image(list) & ", length: " & integer'image(I) & ": " & integer'image(len));
 
         -- Set the length vector
         inl_length((I+1)*LENGTH_WIDTH-1 downto I*LENGTH_WIDTH) <= std_logic_vector(to_unsigned(len, LENGTH_WIDTH));
@@ -180,7 +179,7 @@ begin
 
       inl_count <= std_logic_vector(to_unsigned(count, LCOUNT_WIDTH));
 
-      dumpStdOut("  Count: " & integer'image(count));
+      println("  Count: " & integer'image(count));
 
       -- Validate length
       inl_valid <= '1';
@@ -203,7 +202,7 @@ begin
     len_done <= true;
 
     wait until clock_stop;
-    dumpStdOut("Expected Elements specified by Length Stream: " & integer'image(expect_elements));
+    println("Expected Elements specified by Length Stream: " & integer'image(expect_elements));
     wait;
   end process;
 
@@ -253,7 +252,7 @@ begin
       uniform(lseed1, lseed2, lrand);
       len := natural(lrand * MAX_LEN);
 
-      dumpStdOut("Element stream: list " & integer'image(list) & " length is " & integer'image(len));
+      println("Element stream: list " & integer'image(list) & " length is " & integer'image(len));
 
       if len = 0 then
         empty := true;
@@ -265,9 +264,9 @@ begin
       loop
         -- Randomize count
         uniform(seed1, seed2, rand);
-        count := 1 + work.Utils.min(3, natural(2.0*rand * real(COUNT_MAX)));
+        count := 1 + imin(3, natural(2.0*rand * real(COUNT_MAX)));
 
-        --dumpStdOut("element stream: count is " & integer'image(count));
+        --println("element stream: count is " & integer'image(count));
 
         -- Resize count if necessary
         if len - count < 0 then
@@ -416,7 +415,7 @@ begin
       -- Check if data is valid
       if oute_dvalid = '1' then
         count := to_integer(unsigned(resize_count(oute_count, COUNT_WIDTH+1)));
-        --dumpStdOut("Out elem " & integer'image(handshake) & " count: " & integer'image(count));
+        --println("Out elem " & integer'image(handshake) & " count: " & integer'image(count));
 
         -- Check data
         for e in 0 to count-1 loop
@@ -429,7 +428,7 @@ begin
 
         end loop;
       else
-        --dumpStdOut("Out elem " & integer'image(handshake) & " dvalid=0");
+        --println("Out elem " & integer'image(handshake) & " dvalid=0");
       end if;
 
       handshake := handshake + 1;
@@ -438,7 +437,7 @@ begin
         last := last + 1;
       end if;
 
-      exit when ELEM_LAST_FROM_LENGTH and last > 0;
+      exit when last > 0;
       exit when last = NUM_LISTS;
 
     end loop;
@@ -449,7 +448,7 @@ begin
     wait for 100 ns;
 
     clock_stop <= true;
-    dumpStdOut("Received total of " & integer'image(element) & " elements.");
+    println("Received total of " & integer'image(element) & " elements.");
     wait;
   end process;
 
