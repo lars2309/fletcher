@@ -157,7 +157,7 @@ int main(int argc, char ** argv) {
   // 1/3rd of maximum size, for realloc to be possible.
   const int64_t alloc_max = 1024L*1024*1024* 5461;
   //const int64_t alloc_max = 1024L*1024*1024* 32;
-  const int max_data_size = 1024L*1024*1024; // Max 1GB for data copies.
+  const int max_data_size = 1024L*1024*1024*4; // Max 4GB for data copies.
 
   std::vector<uint64_t> malloc_sizes;
   malloc_sizes.push_back(1024L*1024 *1);         //  1 MB, sub-page
