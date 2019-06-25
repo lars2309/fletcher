@@ -163,7 +163,7 @@ int main(int argc, char ** argv) {
   malloc_sizes.push_back(1024L*1024 *1);         //  1 MB, sub-page
   malloc_sizes.push_back(1024L*1024 *4);         //  4 MB, page
   malloc_sizes.push_back(1024L*1024 *64);        // 64 MB
-  malloc_sizes.push_back(1024L*1024*1024);       //  1 GB
+  malloc_sizes.push_back(1024L*1024*1024*2);       //  2 GB
 //  malloc_sizes.push_back(1024L*1024*1024);       //  1 GB
 //  malloc_sizes.push_back(1024L*1024*1024);       //  1 GB
 //  malloc_sizes.push_back(1024L*1024*1024);       //  1 GB
