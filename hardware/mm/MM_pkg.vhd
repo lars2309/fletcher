@@ -460,6 +460,7 @@ package body MM_pkg is
                     return boolean is
     variable sections_nonzero  : std_logic_vector((arg'length+4)/5-1 downto 0);
     variable sections_overflow : std_logic_vector((arg'length+4)/5-1 downto 0);
+    variable subunit           : unsigned(4 downto 0);
   begin
     for I in 0 to sections_nonzero'high loop
       if I*5 > arg'length then
@@ -467,7 +468,8 @@ package body MM_pkg is
         sections_overflow(I) := '0';
       else
         sections_nonzero(I)  := l(u(arg(imin((I+1)*5, arg'length)-1 downto I*5)) /= 0);
-        case resize(u(arg(imin((I+1)*5, arg'length)-1 downto I*5)), 5) is
+        subunit := resize(u(arg(imin((I+1)*5, arg'length)-1 downto I*5)), 5);
+        case subunit is
           when "00000" => sections_overflow(I) := '0';
           when "00001" => sections_overflow(I) := '0';
           when "00010" => sections_overflow(I) := '0';
@@ -483,7 +485,8 @@ package body MM_pkg is
       return false;
     else
       if sections_nonzero'length <= 5 then
-        case resize(u(sections_nonzero), 5) is
+        subunit := resize(u(sections_nonzero), 5);
+        case subunit is
           when "00001" => return true;
           when "00010" => return true;
           when "00100" => return true;
