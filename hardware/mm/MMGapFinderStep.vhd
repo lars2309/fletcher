@@ -17,8 +17,11 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.Utils.all;
-use work.Streams.all;
+use work.UtilInt_pkg.all;
+use work.UtilConv_pkg.all;
+use work.UtilMisc_pkg.all;
+use work.Stream_pkg.all;
+use work.MM_pkg.all;
 
 entity MMGapFinderStep is
   generic (
@@ -119,9 +122,9 @@ begin
           v.offset           := to_unsigned(N + 1, v.offset'length);
           if OFFSET_WIDTH > log2ceil(MASK_WIDTH) then
             -- Add the previous inputs to the offset as well.
-            v.offset         := v.offset + mul(
+            v.offset         := v.offset + shift(
                                    resize(v.step, v.offset'length),
-                                   MASK_WIDTH
+                                   log2strict(MASK_WIDTH)
                                  );
           end if;
         end if;

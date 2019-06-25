@@ -17,12 +17,13 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.Utils.all;
-use work.SimUtils.all;
-use work.Interconnect.all;
-use work.MM.all;
+use work.UtilInt_pkg.all;
+use work.UtilConv_pkg.all;
+use work.UtilStr_pkg.all;
+use work.Interconnect_pkg.all;
+use work.MM_pkg.all;
 use work.MM_tc_params.all;
-use work.AXI.all;
+use work.Axi_pkg.all;
 
 entity mm_axi_top_tc is
 end mm_axi_top_tc;
@@ -208,7 +209,7 @@ begin
       exit when slv_rdat_valid = '1';
     end loop;
     addr(63 downto 32) := slv_rdat_data;
-    report "malloc of size 3GB at " & sim_hex_no0x(addr);
+    report "malloc of size 3GB at " & slvToBinNo0x(addr);
     wait for 0 ns;
     slv_rdat_ready <= '0';
 
@@ -278,7 +279,7 @@ begin
       exit when slv_rdat_valid = '1';
     end loop;
     addr(63 downto 32) := slv_rdat_data;
-    report "malloc of size 34GB at " & sim_hex_no0x(addr);
+    report "malloc of size 34GB at " & slvToBinNo0x(addr);
     wait for 0 ns;
     slv_rdat_ready <= '0';
 
@@ -298,21 +299,18 @@ begin
 
   end process;
 
-  top_inst : axi_top
+  top_inst : AxiTop
     generic map (
       BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
       BUS_DATA_WIDTH              => BUS_DATA_WIDTH,
-      BUS_STROBE_WIDTH            => BUS_STROBE_WIDTH,
-      BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
-      BUS_BURST_MAX_LEN           => BUS_BURST_MAX_LEN,
-      BUS_BURST_STEP_LEN          => BUS_BURST_STEP_LEN,
-      NUM_REGS                    => 9
+      SLV_BUS_ADDR_WIDTH          => SLV_BUS_ADDR_WIDTH,
+      SLV_BUS_DATA_WIDTH          => SLV_BUS_ADDR_WIDTH
     )
     port map (
-      acc_clk                     => acc_clk,
-      acc_reset                   => acc_reset,
-      bus_clk                     => bus_clk,
-      bus_reset_n                 => bus_reset_n,
+      kcd_clk                     => acc_clk,
+      kcd_reset                   => acc_reset,
+      bcd_clk                     => bus_clk,
+      bcd_reset_n                 => bus_reset_n,
 
       -- Read address channel
       m_axi_araddr                => bus_rreq_addr,

@@ -17,8 +17,8 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.Utils.all;
-use work.Interconnect.all;
+use work.UtilInt_pkg.all;
+use work.Interconnect_pkg.all;
 use work.MM_tc_params.all;
 
 

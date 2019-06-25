@@ -17,10 +17,12 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.Utils.all;
-use work.Interconnect.all;
-use work.Streams.all;
-use work.MM.all;
+use work.UtilInt_pkg.all;
+use work.UtilConv_pkg.all;
+use work.UtilMisc_pkg.all;
+use work.Interconnect_pkg.all;
+use work.Stream_pkg.all;
+use work.MM_pkg.all;
 
 entity MMWalker is
   generic (
@@ -92,8 +94,8 @@ end MMWalker;
 
 architecture Behavioral of MMWalker is
   constant BUS_DATA_BYTES       : natural := BUS_DATA_WIDTH / BYTE_SIZE;
-  constant PT_SIZE_LOG2         : natural := PT_ENTRIES_LOG2 + log2ceil(DIV_CEIL(PTE_BITS, BYTE_SIZE));
-  constant PTE_SIZE             : natural := 2**log2ceil(DIV_CEIL(PTE_BITS, BYTE_SIZE));
+  constant PT_SIZE_LOG2         : natural := PT_ENTRIES_LOG2 + log2ceil(divCeil(PTE_BITS, BYTE_SIZE));
+  constant PTE_SIZE             : natural := 2**log2ceil(divCeil(PTE_BITS, BYTE_SIZE));
   constant PTE_WIDTH            : natural := PTE_SIZE * BYTE_SIZE;
 
   function VA_TO_PTE (pt_base : unsigned(BUS_ADDR_WIDTH-1 downto 0);
@@ -187,7 +189,7 @@ begin
     if queue_l1_out.valid = '1' then
       -- Use physical address to store page table pointer.
       -- Select the right PTE from the data bus.
-      queue_l1_resp_in.phys    <= slv(align_beq(
+      queue_l1_resp_in.phys    <= slv(alignDown(
             EXTRACT(
               unsigned(bus_l1.dat_data),
               BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, u(queue_l1_out.virt), 1))),
@@ -226,7 +228,7 @@ begin
     -- Use PT_ADDR instead of the real `addr_pt'. This is allowable,
     -- because the address offset into the data bus will be the same for these.
     -- TODO: maybe create separate function for this usage.
-      queue_l2_resp_in.phys  <= slv(align_beq(
+      queue_l2_resp_in.phys  <= slv(alignDown(
           EXTRACT(
             unsigned(bus_l2.dat_data),
             BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, u(queue_l2_out.virt), 2))),

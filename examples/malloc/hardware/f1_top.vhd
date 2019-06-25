@@ -18,9 +18,9 @@ use ieee.numeric_std.all;
 use ieee.std_logic_misc.all;
 
 library work;
-use work.Utils.all;
-use work.MM.all;
-use work.Interconnect.all;
+use work.UtilInt_pkg.all;
+use work.Interconnect_pkg.all;
+use work.MM_pkg.all;
 
 -- AXI4 compatible top level for Fletcher generated accelerators.
 entity f1_top is

@@ -18,12 +18,10 @@ use ieee.numeric_std.all;
 use ieee.math_real.all;
 
 library work;
-use work.Memory.all;
-use work.Utils.all;
-use work.Streams.all;
-use work.StreamSim.all;
-use work.Interconnect.all;
-use work.SimUtils.all;
+use work.Stream_pkg.all;
+use work.Interconnect_pkg.all;
+use work.UtilMem64_pkg.all;
+use work.UtilStr_pkg.all;
 
 -- This simulation-only unit is a mockup of a bus slave that can either write 
 -- to an S-record file, or simply accept and print the written data on stdout.
@@ -57,7 +55,6 @@ entity BusReadWriteSlaveMock is
     -- S-record file to dump writes. If not specified, the unit dumps the 
     -- writes on stdout
     SREC_FILE                   : string := ""
-
   );
   port (
 
@@ -92,77 +89,24 @@ end BusReadWriteSlaveMock;
 
 architecture Behavioral of BusReadWriteSlaveMock is
 
-  signal wreq_cons_valid        : std_logic;
-  signal wreq_cons_ready        : std_logic;
-
   signal wreq_int_valid         : std_logic;
   signal wreq_int_ready         : std_logic;
-
-  signal wdat_prod_valid        : std_logic;
-  signal wdat_prod_ready        : std_logic;
 
   signal wdat_int_valid         : std_logic;
   signal wdat_int_ready         : std_logic;
   
-
-  signal rreq_cons_valid        : std_logic;
-  signal rreq_cons_ready        : std_logic;
-
   signal rreq_int_valid         : std_logic;
   signal rreq_int_ready         : std_logic;
 
-  signal rdat_prod_valid        : std_logic;
-  signal rdat_prod_ready        : std_logic;
-
   signal rdat_int_valid         : std_logic;
   signal rdat_int_ready         : std_logic;
-
-  signal rdat_out_valid         : std_logic;
 
   signal accept_req             : std_logic;
 
 begin
 
-  random_request_timing_gen: if RANDOM_REQUEST_TIMING generate
-  begin
-
-    -- Request consumer and synchronizer. These two units randomize the rate at
-    -- which requests are consumed.
-    consumer_sync: StreamSync
-      generic map (
-        NUM_INPUTS                => 1,
-        NUM_OUTPUTS               => 2
-      )
-      port map (
-        clk                       => clk,
-        reset                     => reset,
-        in_valid(0)               => rreq_valid,
-        in_ready(0)               => rreq_ready,
-        out_valid(1)              => rreq_cons_valid,
-        out_valid(0)              => rreq_int_valid,
-        out_ready(1)              => rreq_cons_ready,
-        out_ready(0)              => rreq_int_ready
-      );
-
-    consumer_inst: StreamTbCons
-      generic map (
-        SEED                      => SEED
-      )
-      port map (
-        clk                       => clk,
-        reset                     => reset,
-        in_valid                  => rreq_cons_valid,
-        in_ready                  => rreq_cons_ready,
-        in_data                   => (others => '0')
-      );
-
-  end generate;
-
-  fast_request_timing_gen: if not RANDOM_REQUEST_TIMING generate
-  begin
-    rreq_int_valid <= rreq_valid;
-    rreq_ready <= rreq_int_ready;
-  end generate;
+  rreq_int_valid <= rreq_valid;
+  rreq_ready <= rreq_int_ready;
 
   process (accept_req, wreq_valid) is
   begin
@@ -232,15 +176,15 @@ begin
           -- Print or dump the data to an SREC file
           mem_read(mem, std_logic_vector(addr), data);
           wdata := (others => '-');
-          for i in 0 to wdat_strobe'length-1 loop
-            if wdat_strobe(i) = '1' then
-              data(8*(i+1)-1  downto 8*i) := wdat_data(8*(i+1)-1  downto 8*i);
-              wdata(8*(i+1)-1  downto 8*i) := wdat_data(8*(i+1)-1  downto 8*i);
+          for si in 0 to wdat_strobe'length-1 loop
+            if wdat_strobe(si) = '1' then
+              data(8*(si+1)-1  downto 8*si) := wdat_data(8*(si+1)-1  downto 8*si);
+              wdata(8*(si+1)-1  downto 8*si) := wdat_data(8*(si+1)-1  downto 8*si);
             end if;
           end loop;
           mem_write(mem, std_logic_vector(addr), data);
           if (SREC_FILE = "") then
-            dumpStdOut("Write > " & sim_hex_no0x(std_logic_vector(addr)) & " > " & sim_hex_no0x(wdata));
+            println("Write > " & unsToHexNo0x(addr) & " > " & slvToHexNo0x(wdata));
           else
             mem_dumpSRec(mem, SREC_FILE);
           end if;
@@ -279,10 +223,6 @@ begin
 
           -- Assert response.
           rdat_int_valid <= '1';
-          -- Wait for internal handshake
-          if rdat_out_valid /= '1' then
-            wait until rdat_out_valid = '1';
-          end if;
           rdat_data <= data;
           if i = len-1 then
             rdat_last <= '1';
@@ -308,47 +248,8 @@ begin
     end loop;
   end process;
 
-  random_response_timing_gen: if RANDOM_RESPONSE_TIMING generate
-  begin
-
-    -- Response producer and synchronizer. These two units randomize the rate at
-    -- which burst beats are generated.
-    producer_inst: StreamTbProd
-      generic map (
-        SEED                      => SEED + 31415
-      )
-      port map (
-        clk                       => clk,
-        reset                     => reset,
-        out_valid                 => rdat_prod_valid,
-        out_ready                 => rdat_prod_ready
-      );
-
-    producer_sync: StreamSync
-      generic map (
-        NUM_INPUTS                => 2,
-        NUM_OUTPUTS               => 1
-      )
-      port map (
-        clk                       => clk,
-        reset                     => reset,
-        in_valid(1)               => rdat_prod_valid,
-        in_valid(0)               => rdat_int_valid,
-        in_ready(1)               => rdat_prod_ready,
-        in_ready(0)               => rdat_int_ready,
-        out_valid(0)              => rdat_out_valid,
-        out_ready(0)              => rdat_ready
-      );
-
-  end generate;
-
-  fast_response_timing_gen: if not RANDOM_RESPONSE_TIMING generate
-  begin
-    rdat_out_valid <= rdat_int_valid;
-    rdat_int_ready <= rdat_ready;
-  end generate;
-
-  rdat_valid <= rdat_out_valid;
+  rdat_valid <= rdat_int_valid;
+  rdat_int_ready <= rdat_ready;
 
 end Behavioral;
 

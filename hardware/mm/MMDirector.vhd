@@ -17,10 +17,12 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.Utils.all;
-use work.Buffers.all;
-use work.Interconnect.all;
-use work.MM.all;
+use work.UtilInt_pkg.all;
+use work.UtilConv_pkg.all;
+use work.UtilMisc_pkg.all;
+use work.Buffer_pkg.all;
+use work.Interconnect_pkg.all;
+use work.MM_pkg.all;
 
 entity MMDirector is
   generic (
@@ -125,13 +127,13 @@ end MMDirector;
 
 architecture Behavioral of MMDirector is
   constant BUS_DATA_BYTES       : natural := BUS_DATA_WIDTH / BYTE_SIZE;
-  constant PT_SIZE_LOG2         : natural := PT_ENTRIES_LOG2 + log2ceil(DIV_CEIL(PTE_BITS, BYTE_SIZE));
+  constant PT_SIZE_LOG2         : natural := PT_ENTRIES_LOG2 + log2ceil(divCeil(PTE_BITS, BYTE_SIZE));
   constant PT_SIZE              : natural := 2**PT_SIZE_LOG2;
   -- Offset of the first usable PT into the frame (first space is taken by bitmap)
   constant PT_FIRST_NR          : natural := 1;
   constant PT_MAX_AMOUNT        : natural := 2**PT_ENTRIES_LOG2 + 1;
-  constant PT_PER_FRAME         : natural := 2**(PAGE_SIZE_LOG2 - PT_ENTRIES_LOG2 - log2ceil( DIV_CEIL(PTE_BITS, BYTE_SIZE) )) - PT_FIRST_NR;
-  constant PTE_SIZE             : natural := 2**log2ceil(DIV_CEIL(PTE_BITS, BYTE_SIZE));
+  constant PT_PER_FRAME         : natural := 2**(PAGE_SIZE_LOG2 - PT_ENTRIES_LOG2 - log2ceil( divCeil(PTE_BITS, BYTE_SIZE) )) - PT_FIRST_NR;
+  constant PTE_SIZE             : natural := 2**log2ceil(divCeil(PTE_BITS, BYTE_SIZE));
   constant PTE_WIDTH            : natural := PTE_SIZE * BYTE_SIZE;
 
   constant PTE_MAPPED           : natural := 0;
@@ -195,7 +197,7 @@ architecture Behavioral of MMDirector is
   function PAGE_BASE (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
     return unsigned is
   begin
-    return align_beq(addr, PAGE_SIZE_LOG2);
+    return alignDown(addr, PAGE_SIZE_LOG2);
   end PAGE_BASE;
 
   -- Convert a size to a number of pages, rounding up.
@@ -203,16 +205,16 @@ architecture Behavioral of MMDirector is
     return unsigned is
     variable ret : unsigned(VM_SIZE_L0_LOG2 - PAGE_SIZE_LOG2 - 1 downto 0);
   begin
-    ret := resize(shift_right_round_up(size, PAGE_SIZE_LOG2), ret'length);
+    ret := resize(shift(size, -PAGE_SIZE_LOG2, true), ret'length);
     return ret(VM_SIZE_L0_LOG2 - PAGE_SIZE_LOG2 - 1 downto 0);
   end PAGE_COUNT;
 
   function PT_BITMAP_IDX (addr : unsigned(BUS_ADDR_WIDTH-1 downto 0))
     return unsigned is
   begin
-    return shift_right_cut(
+    return shift(
           resize(addr, PAGE_SIZE_LOG2),
-          PT_SIZE_LOG2
+          -PT_SIZE_LOG2
         ) - PT_FIRST_NR;
   end PT_BITMAP_IDX;
 
@@ -409,10 +411,10 @@ architecture Behavioral of MMDirector is
 
   signal gap_pt_q_valid         : std_logic;
   signal gap_pt_q_ready         : std_logic;
-  signal gap_pt_q_holes         : std_logic_vector(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH)-1 downto 0);
+  signal gap_pt_q_holes         : std_logic_vector(imin(PT_PER_FRAME, BUS_DATA_WIDTH)-1 downto 0);
   signal gap_pt_a_valid         : std_logic;
   signal gap_pt_a_ready         : std_logic;
-  signal gap_pt_a_offset        : std_logic_vector(log2ceil(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH))-1 downto 0);
+  signal gap_pt_a_offset        : std_logic_vector(log2ceil(imin(PT_PER_FRAME, BUS_DATA_WIDTH))-1 downto 0);
   signal gap_pt_a_size          : std_logic_vector(0 downto 0);
 
   signal rolodex_entry_valid    : std_logic;
@@ -505,7 +507,7 @@ architecture Behavioral of MMDirector is
     pt_empty                    : std_logic;
     in_mapping                  : std_logic;
     pt_reader_outstanding       : std_logic;
-    bus_pte_idx                 : unsigned(log2ceil(DIV_CEIL(BUS_DATA_BYTES, PTE_SIZE))-1 downto 0);
+    bus_pte_idx                 : unsigned(log2ceil(divCeil(BUS_DATA_BYTES, PTE_SIZE))-1 downto 0);
     byte_buffer                 : unsigned(BYTE_SIZE-1 downto 0);
     beat                        : unsigned(log2ceil(BUS_BURST_MAX_LEN+1)-1 downto 0);
   end record;
@@ -524,11 +526,11 @@ architecture Behavioral of MMDirector is
   signal d_mmu                  : reg_mmu_type;
 
 begin
-  assert PAGE_SIZE_LOG2 >= PT_ENTRIES_LOG2 + log2ceil( DIV_CEIL(PTE_BITS, BYTE_SIZE))
+  assert PAGE_SIZE_LOG2 >= PT_ENTRIES_LOG2 + log2ceil( divCeil(PTE_BITS, BYTE_SIZE))
     report "page table does not fit in a single page"
     severity failure;
 
-  assert PAGE_SIZE_LOG2 /= PT_ENTRIES_LOG2 + log2ceil( DIV_CEIL(PTE_BITS, BYTE_SIZE))
+  assert PAGE_SIZE_LOG2 /= PT_ENTRIES_LOG2 + log2ceil( divCeil(PTE_BITS, BYTE_SIZE))
     report "page table size equal to page size is not implemented (requires omission of bitmap)"
     severity failure;
 
@@ -536,11 +538,11 @@ begin
     report "page table bitmap extends into frame's first page table"
     severity failure;
 
-  assert PT_SIZE / BUS_DATA_BYTES = DIV_CEIL(PT_SIZE, BUS_DATA_BYTES)
+  assert PT_SIZE / BUS_DATA_BYTES = divCeil(PT_SIZE, BUS_DATA_BYTES)
     report "page table size is not a multiple of the bus width"
     severity failure;
 
-  assert BUS_DATA_BYTES / PTE_SIZE = DIV_CEIL(BUS_DATA_BYTES, PTE_SIZE)
+  assert BUS_DATA_BYTES / PTE_SIZE = divCeil(BUS_DATA_BYTES, PTE_SIZE)
     report "bus width is not a multiple of page table entry size"
     severity failure;
 
@@ -1000,9 +1002,10 @@ begin
       -- and bits for unsupported sizes.
       v.size           := resize(
                             shift_left(
-                              shift_right_round_up(
+                              shift(
                                 resize(unsigned(cmd_size), VM_SIZE_L0_LOG2),
-                                VM_SIZE_L1_LOG2
+                                -VM_SIZE_L1_LOG2,
+                                true
                               ),
                               VM_SIZE_L1_LOG2),
                             v.size'length);
@@ -1037,9 +1040,10 @@ begin
           -- and bits for unsupported sizes.
           v.size := resize(
               shift_left(
-                shift_right_round_up(
+                shift(
                   resize(unsigned(cmd_size), VM_SIZE_L0_LOG2),
-                  VM_SIZE_L1_LOG2
+                  -VM_SIZE_L1_LOG2,
+                  true
                 ) - u(gap_a_size),
                 VM_SIZE_L1_LOG2),
               v.size'length);
@@ -1086,7 +1090,7 @@ begin
         v.pages        := not to_unsigned(0, v.pages'length);
         -- Start at beginning of L2 page table,
         -- to check whether it is in use by another allocation.
-        v.addr         := align_beq(v.addr_vm, VM_SIZE_L1_LOG2);
+        v.addr         := alignDown(v.addr_vm, VM_SIZE_L1_LOG2);
       end if;
       v.state_stack(0) := SET_PTE_RANGE_L1_ADDR;
 
@@ -1110,7 +1114,7 @@ begin
         -- Ignore (overwrite) any present entries in the L2 table for simplicity of implementation.
 
         -- Get PT address from the read data.
-        v.addr_pt := align_beq(
+        v.addr_pt := alignDown(
             EXTRACT(
               unsigned(my_bus_rdat.data),
               BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, v.addr, 1))),
@@ -1225,12 +1229,12 @@ begin
       my_bus_rdat.ready      <= pt_reader_cmd_ready;
       -- First argument to VA_TO_PTE doesn't matter here, since we only use the offset within the PT.
       pt_reader_cmd_firstIdx <= slv(resize(
-            div_floor(
+            shift(
               VA_TO_PTE(PT_ADDR, v.addr_vm_src, 2),
-              BUS_DATA_BYTES / PTE_SIZE),
+              -log2strict(BUS_DATA_BYTES / PTE_SIZE)),
             pt_reader_cmd_firstIdx'length));
       pt_reader_cmd_lastIdx  <= slv(to_unsigned(PT_SIZE / BUS_DATA_BYTES, pt_reader_cmd_lastIdx'length));
-      pt_reader_cmd_baseAddr <= slv(align_beq(
+      pt_reader_cmd_baseAddr <= slv(alignDown(
             EXTRACT(
               unsigned(my_bus_rdat.data),
               BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, v.addr_vm_src, 1))),
@@ -1576,7 +1580,9 @@ begin
     -- the PT pool if the frame contains no more page tables.
 
     when PT_DEL =>
-      my_bus_rreq.addr  <= slv(PAGE_BASE(v.addr_pt) + div_floor(PT_BITMAP_IDX(v.addr_pt), BUS_DATA_WIDTH));
+      my_bus_rreq.addr  <= slv(PAGE_BASE(v.addr_pt) + shift(
+                              PT_BITMAP_IDX(v.addr_pt),
+                              -log2strict(BUS_DATA_WIDTH)));
       my_bus_rreq.len   <= slv(to_unsigned(1, my_bus_rreq.len'length));
       -- Make sure any earlier bitmap edit has been written out.
       my_bus_rreq.valid <= not my_bus_wreq.dirty;
@@ -1592,12 +1598,14 @@ begin
       my_bus_rdat.ready <= my_bus_wreq.ready;
       handshake         := my_bus_rdat.valid and my_bus_wreq.ready;
 
-      my_bus_wreq.addr  <= slv(PAGE_BASE(v.addr_pt) + div_floor(PT_BITMAP_IDX(v.addr_pt), BUS_DATA_WIDTH));
+      my_bus_wreq.addr  <= slv(PAGE_BASE(v.addr_pt) + shift(
+                              PT_BITMAP_IDX(v.addr_pt),
+                              -log2strict(BUS_DATA_WIDTH)));
       my_bus_wreq.len   <= slv(to_unsigned(1, my_bus_wreq.len'length));
       -- Copy the byte that has to be written back.
       v.byte_buffer      := EXTRACT(
                               unsigned(my_bus_rdat.data),
-                              int(align_beq(PT_BITMAP_IDX(v.addr_pt), LOG2STRICT(BYTE_SIZE))),
+                              int(alignDown(PT_BITMAP_IDX(v.addr_pt), LOG2STRICT(BYTE_SIZE))),
                               BYTE_SIZE
                             );
       -- Mark PT as unused in bitmap's byte.
@@ -1605,7 +1613,7 @@ begin
 
       if handshake = '1' then
         -- TODO: make this work for bitmaps > BUS_DATA_WIDTH
-        if ONE_HIGH(my_bus_rdat.data(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH)-1 downto 0)) then
+        if ONE_HIGH(my_bus_rdat.data(imin(PT_PER_FRAME, BUS_DATA_WIDTH)-1 downto 0)) then
           -- This was the last page table in the frame, delete it.
           v.state_stack(0) := PT_DEL_ROLODEX;
         else
@@ -1642,9 +1650,9 @@ begin
       my_bus_wdat.strobe     <= (others => '0');
       -- Get page table number referenced by addr and figure out which byte of the bitmap it is in.
       my_bus_wdat.strobe(int(
-        div_floor(
+        shift(
           PT_BITMAP_IDX(v.addr_pt),
-          BYTE_SIZE)
+          -log2strict(BYTE_SIZE))
         ))                   <= '1';
       my_bus_wdat.last       <= '1';
       if my_bus_wdat.ready = '1' then
@@ -1708,7 +1716,7 @@ begin
       end if;
 
     when PT_NEW_CHECK_BM_TX =>
-      gap_pt_q_holes         <= my_bus_rdat.data(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH)-1 downto 0);
+      gap_pt_q_holes         <= my_bus_rdat.data(imin(PT_PER_FRAME, BUS_DATA_WIDTH)-1 downto 0);
       gap_pt_q_valid         <= my_bus_rdat.valid;
       handshake              := gap_pt_q_ready and my_bus_rdat.valid;
       if handshake = '1' then
@@ -1736,7 +1744,7 @@ begin
           -- Save the byte that needs to be written
           v.byte_buffer      := EXTRACT(
                                   unsigned(my_bus_rdat.data),
-                                  int(align_beq(u(gap_pt_a_offset), LOG2STRICT(BYTE_SIZE))),
+                                  int(alignDown(u(gap_pt_a_offset), LOG2STRICT(BYTE_SIZE))),
                                   BYTE_SIZE
                                 );
           -- Mark PT as used in bitmap's byte.
@@ -1762,9 +1770,9 @@ begin
       my_bus_wdat.strobe <= (others => '0');
       -- Get page table number referenced by addr and figure out which byte of the bitmap it is in.
       my_bus_wdat.strobe(int(
-        div_floor(
+        shift(
           PT_BITMAP_IDX(v.addr),
-          BYTE_SIZE)
+          -log2strict(BYTE_SIZE))
         )) <= '1';
       my_bus_wdat.last <= '1';
       if my_bus_wdat.ready = '1' then
@@ -1776,11 +1784,11 @@ begin
       my_bus_wreq.addr  <= slv(v.addr);
       -- The number of beats in the burst
       v.beat         := to_unsigned(
-                        work.Utils.min(
+                        imin(
                           BUS_BURST_MAX_LEN,
-                          int(div_ceil(
-                            to_unsigned(PT_SIZE, log2ceil(PT_SIZE+1)) - PT_OFFSET(v.addr),
-                            BUS_DATA_BYTES))
+                          divCeil(
+                            PT_SIZE - int(PT_OFFSET(v.addr)),
+                            BUS_DATA_BYTES)
                         ),
                         v.beat'length);
       my_bus_wreq.len   <= slv(resize(v.beat, my_bus_wreq.len'length));
@@ -1900,7 +1908,7 @@ begin
           v.state            := FAIL;
         else
           -- Get address of L2 page table from the read data.
-          v.addr_pt          := align_beq(
+          v.addr_pt          := alignDown(
               EXTRACT(
                 unsigned(mmu_bus_rdat.data),
                 BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(PT_ADDR, v.addr_vm, 1))),
@@ -1939,7 +1947,7 @@ begin
         then
           -- Given address is already present, return the mapping.
           mmu_resp_valid     <= '1';
-          mmu_resp_addr      <= slv(align_beq(
+          mmu_resp_addr      <= slv(alignDown(
               EXTRACT(
                 unsigned(mmu_bus_rdat.data),
                 BYTE_SIZE * int(ADDR_BUS_OFFSET(VA_TO_PTE(v.addr_pt, v.addr_vm, 2))),
@@ -2033,7 +2041,7 @@ begin
 
   pt_frames : MMRolodex
     generic map (
-      MAX_ENTRIES                 => DIV_CEIL(PT_MAX_AMOUNT, PT_PER_FRAME),
+      MAX_ENTRIES                 => divCeil(PT_MAX_AMOUNT, PT_PER_FRAME),
       ENTRY_WIDTH                 => FRAME_IDX_WIDTH
     )
     port map (
@@ -2081,9 +2089,9 @@ begin
 
   gapfinder_pt : MMGapFinder
     generic map (
-      MASK_WIDTH                  => work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH),
+      MASK_WIDTH                  => imin(PT_PER_FRAME, BUS_DATA_WIDTH),
       SIZE_WIDTH                  => 1,
-      OFFSET_WIDTH                => log2ceil(work.Utils.min(PT_PER_FRAME, BUS_DATA_WIDTH)),
+      OFFSET_WIDTH                => log2ceil(imin(PT_PER_FRAME, BUS_DATA_WIDTH)),
       MASK_WIDTH_INTERNAL         => 4,
       SLV_SLICE                   => true,
       MST_SLICE                   => true
@@ -2261,14 +2269,14 @@ begin
       BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
       BUS_DATA_WIDTH              => BUS_DATA_WIDTH,
       -- Do not burst more than one page table, even if the bus supports it.
-      BUS_BURST_STEP_LEN          => work.Utils.min(BUS_BURST_STEP_LEN, (PT_SIZE / BUS_DATA_BYTES)),
-      BUS_BURST_MAX_LEN           => work.Utils.min(BUS_BURST_MAX_LEN, (PT_SIZE / BUS_DATA_BYTES)),
+      BUS_BURST_STEP_LEN          => imin(BUS_BURST_STEP_LEN, (PT_SIZE / BUS_DATA_BYTES)),
+      BUS_BURST_MAX_LEN           => imin(BUS_BURST_MAX_LEN, (PT_SIZE / BUS_DATA_BYTES)),
 
       -- Bus response and internal command stream FIFO depth. The maximum number
       -- of outstanding requests is approximately this number divided by the
       -- burst length. If set to 2, a register slice is inserted instead of a
       -- FIFO. If set to 0, the buffers are omitted.
-      BUS_FIFO_DEPTH              => work.Utils.min(BUS_BURST_MAX_LEN*4, (PT_SIZE / BUS_DATA_BYTES)),
+      BUS_FIFO_DEPTH              => imin(BUS_BURST_MAX_LEN*4, (PT_SIZE / BUS_DATA_BYTES)),
       -- Element FIFO size in number of elements.
       ELEMENT_FIFO_SIZE           => 0,
 

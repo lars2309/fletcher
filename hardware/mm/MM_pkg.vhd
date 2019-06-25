@@ -3,9 +3,10 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.Utils.all;
+use work.UtilInt_pkg.all;
+use work.UtilConv_pkg.all;
 
-package MM is
+package MM_pkg is
   constant ADDR_WIDTH_LIMIT : natural := 64;
   constant BYTE_SIZE        : natural := 8;
 
@@ -28,15 +29,8 @@ package MM is
   function XOR_REDUCT(arg : in std_logic_vector)
                       return std_logic;
 
-  function BIT_COUNT(arg : in std_logic_vector)
-                     return unsigned;
-
   function ONE_HIGH(arg : in std_logic_vector)
     return boolean;
-
-  function DIV_CEIL (numerator   : natural;
-                     denominator : natural)
-    return natural;
 
   function OVERLAY (over  : unsigned;
                     under : unsigned;
@@ -442,7 +436,7 @@ package MM is
 
 end package;
 
-package body MM is
+package body MM_pkg is
   function LOG2_TO_UNSIGNED (v : natural)
                              return unsigned is
     variable r : unsigned(v downto 0) := (others => '0');
@@ -461,17 +455,6 @@ package body MM is
     return ret;
   end XOR_REDUCT;
 
-  function BIT_COUNT(arg : in std_logic_vector)
-                     return unsigned is
-    -- XXX: lenght of `ret' should depend on input vector, but Vivado doesn't do this properly.
-    variable ret : unsigned(log2ceil(512+1)-1 downto 0) := (others => '0');
-  begin
-    for i in arg'range loop
-      ret := ret + u(arg(i));
-    end loop;
-    return ret;
-  end BIT_COUNT;
-
   -- Assuming dual 5-input LUTs
   function ONE_HIGH(arg : in std_logic_vector)
                     return boolean is
@@ -483,8 +466,8 @@ package body MM is
         sections_nonzero(I)  := '0';
         sections_overflow(I) := '0';
       else
-        sections_nonzero(I)  := l(u(arg(work.Utils.min((I+1)*5, arg'length)-1 downto I*5)) /= 0);
-        case resize(u(arg(work.Utils.min((I+1)*5, arg'length)-1 downto I*5)), 5) is
+        sections_nonzero(I)  := l(u(arg(imin((I+1)*5, arg'length)-1 downto I*5)) /= 0);
+        case resize(u(arg(imin((I+1)*5, arg'length)-1 downto I*5)), 5) is
           when "00000" => sections_overflow(I) := '0';
           when "00001" => sections_overflow(I) := '0';
           when "00010" => sections_overflow(I) := '0';
@@ -514,13 +497,6 @@ package body MM is
     end if;
 
   end ONE_HIGH;
-
-  function DIV_CEIL (numerator   : natural;
-                     denominator : natural)
-    return natural is
-  begin
-    return (numerator + denominator - 1) / denominator;
-  end DIV_CEIL;
 
   function OVERLAY (over  : unsigned;
                     under : unsigned;
@@ -585,4 +561,4 @@ package body MM is
     return y;
   end LOG2STRICT;
 
-end MM;
+end MM_pkg;

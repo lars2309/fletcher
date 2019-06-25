@@ -18,9 +18,10 @@ use ieee.std_logic_misc.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.Utils.all;
-use work.Interconnect.all;
-use work.Streams.all;
+use work.UtilInt_pkg.all;
+use work.UtilConv_pkg.all;
+use work.Interconnect_pkg.all;
+use work.Stream_pkg.all;
 
 -- This unit benchmarks a memory interface in terms of latency and throughput
 -- by reporting the total number of cycles of requesting a workload.
@@ -122,7 +123,7 @@ begin
 
   -- Pseudo random number generator instance, if pattern is set to random
   random_prng : if PATTERN = "RANDOM" generate
-    prng_inst : StreamPseudoRandomGenerator
+    prng_inst : StreamPRNG
       generic map (
         DATA_WIDTH  => BUS_ADDR_WIDTH
       )

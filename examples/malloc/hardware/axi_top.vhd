@@ -18,9 +18,9 @@ use ieee.numeric_std.all;
 use ieee.std_logic_misc.all;
 
 library work;
-use work.Utils.all;
-use work.MM.all;
-use work.axi.all;
+use work.UtilInt_pkg.all;
+use work.MM_pkg.all;
+use work.axi_pkg.all;
 
 -- AXI4 compatible top level for Fletcher generated accelerators.
 entity axi_top is
@@ -323,7 +323,7 @@ begin
   -----------------------------------------------------------------------------
   -- AXI read converter
   -----------------------------------------------------------------------------
-  axi_read_conv_inst: axi_read_converter
+  axi_read_conv_inst: AxiReadConverter
     generic map (
       ADDR_WIDTH                => BUS_ADDR_WIDTH,
       MASTER_DATA_WIDTH         => BUS_DATA_WIDTH,
@@ -363,7 +363,7 @@ begin
   -----------------------------------------------------------------------------
   -- AXI write converter
   -----------------------------------------------------------------------------
-  axi_write_conv_inst: axi_write_converter
+  axi_write_conv_inst: AxiWriteConverter
     generic map (
       ADDR_WIDTH                => BUS_ADDR_WIDTH,
       MASTER_DATA_WIDTH         => BUS_DATA_WIDTH,
@@ -413,7 +413,7 @@ begin
   -----------------------------------------------------------------------------
   -- AXI MMIO
   -----------------------------------------------------------------------------
-  axi_mmio_inst : axi_mmio
+  axi_mmio_inst : AxiMmio
     generic map (
       BUS_ADDR_WIDTH            => SLV_BUS_ADDR_WIDTH,
       BUS_DATA_WIDTH            => SLV_BUS_DATA_WIDTH,

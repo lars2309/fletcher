@@ -17,9 +17,10 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.Utils.all;
-use work.Interconnect.all;
-use work.MM.all;
+use work.UtilInt_pkg.all;
+use work.UtilConv_pkg.all;
+use work.Interconnect_pkg.all;
+use work.MM_pkg.all;
 use work.MM_tc_params.all;
 
 entity MMSystem_tc is
@@ -430,8 +431,8 @@ read_arb_inst : BusReadArbiter
     NUM_SLAVE_PORTS           => 3
   )
   port map (
-    bus_clk                   => bus_clk,
-    bus_reset                 => bus_reset,
+    bcd_clk                   => bus_clk,
+    bcd_reset                 => bus_reset,
 
     mst_rreq_valid            => bus_r.req_valid,
     mst_rreq_ready            => bus_r.req_ready,

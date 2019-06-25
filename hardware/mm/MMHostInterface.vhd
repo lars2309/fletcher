@@ -17,8 +17,9 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.Utils.all;
-use work.Streams.all;
+use work.UtilInt_pkg.all;
+use work.UtilConv_pkg.all;
+use work.Stream_pkg.all;
 
 entity MMHostInterface is
   generic (

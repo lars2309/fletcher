@@ -18,10 +18,10 @@ use ieee.std_logic_misc.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.Interconnect.all;
-use work.Wrapper.all;
-use work.Utils.all;
-use work.MM.all;
+use work.UtilInt_pkg.all;
+use work.Interconnect_pkg.all;
+use work.Wrapper_pkg.all;
+use work.MM_pkg.all;
 
 entity fletcher_wrapper is
   generic(

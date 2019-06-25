@@ -1,32 +1,41 @@
+
+# Utilities
+
+${FLETCHER_HARDWARE_DIR}/vhlib/util/UtilConv_pkg.vhd
+${FLETCHER_HARDWARE_DIR}/vhlib/util/UtilInt_pkg.vhd
+${FLETCHER_HARDWARE_DIR}/vhlib/util/UtilStr_pkg.vhd
+${FLETCHER_HARDWARE_DIR}/vhlib/util/UtilMisc_pkg.vhd
+
+${FLETCHER_HARDWARE_DIR}/vhlib/util/UtilMem64_pkg.vhd
+${FLETCHER_HARDWARE_DIR}/vhlib/util/UtilRam1R1W.vhd
+${FLETCHER_HARDWARE_DIR}/vhlib/util/UtilRam_pkg.vhd
+
+# Fletcher packages
+
+${FLETCHER_HARDWARE_DIR}/arrays/ArrayConfigParse_pkg.vhd
+${FLETCHER_HARDWARE_DIR}/arrays/ArrayConfig_pkg.vhd
+${FLETCHER_HARDWARE_DIR}/arrays/Array_pkg.vhd
+${FLETCHER_HARDWARE_DIR}/arrow/Arrow_pkg.vhd
+${FLETCHER_HARDWARE_DIR}/axi/Axi_pkg.vhd
+${FLETCHER_HARDWARE_DIR}/buffers/Buffer_pkg.vhd
+${FLETCHER_HARDWARE_DIR}/interconnect/Interconnect_pkg.vhd
+${FLETCHER_HARDWARE_DIR}/vhlib/stream/Stream_pkg.vhd
+${FLETCHER_HARDWARE_DIR}/wrapper/Wrapper_pkg.vhd
+
 # Fletcher files
 
-${FLETCHER_HARDWARE_DIR}/utils/Utils.vhd
-${FLETCHER_HARDWARE_DIR}/utils/SimUtils.vhd
-${FLETCHER_HARDWARE_DIR}/utils/Ram1R1W.vhd
-
-${FLETCHER_HARDWARE_DIR}/buffers/Buffers.vhd
-${FLETCHER_HARDWARE_DIR}/interconnect/Interconnect.vhd
-
-${FLETCHER_HARDWARE_DIR}/streams/Streams.vhd
-${FLETCHER_HARDWARE_DIR}/streams/StreamArb.vhd
-${FLETCHER_HARDWARE_DIR}/streams/StreamBuffer.vhd
-${FLETCHER_HARDWARE_DIR}/streams/StreamFIFOCounter.vhd
-${FLETCHER_HARDWARE_DIR}/streams/StreamFIFO.vhd
-${FLETCHER_HARDWARE_DIR}/streams/StreamGearbox.vhd
-${FLETCHER_HARDWARE_DIR}/streams/StreamNormalizer.vhd
-${FLETCHER_HARDWARE_DIR}/streams/StreamParallelizer.vhd
-${FLETCHER_HARDWARE_DIR}/streams/StreamSerializer.vhd
-${FLETCHER_HARDWARE_DIR}/streams/StreamSlice.vhd
-${FLETCHER_HARDWARE_DIR}/streams/StreamSync.vhd
-${FLETCHER_HARDWARE_DIR}/streams/StreamElementCounter.vhd
-${FLETCHER_HARDWARE_DIR}/streams/StreamPseudoRandomGenerator.vhd
-${FLETCHER_HARDWARE_DIR}/streams/StreamAccumulator.vhd
-
-${FLETCHER_HARDWARE_DIR}/arrays/ArrayConfigParse.vhd
-${FLETCHER_HARDWARE_DIR}/arrays/ArrayConfig.vhd
-${FLETCHER_HARDWARE_DIR}/arrays/Arrays.vhd
-
-${FLETCHER_HARDWARE_DIR}/arrow/Arrow.vhd
+${FLETCHER_HARDWARE_DIR}/vhlib/stream/StreamArb.vhd
+${FLETCHER_HARDWARE_DIR}/vhlib/stream/StreamBuffer.vhd
+${FLETCHER_HARDWARE_DIR}/vhlib/stream/StreamElementCounter.vhd
+${FLETCHER_HARDWARE_DIR}/vhlib/stream/StreamFIFOCounter.vhd
+${FLETCHER_HARDWARE_DIR}/vhlib/stream/StreamFIFO.vhd
+${FLETCHER_HARDWARE_DIR}/vhlib/stream/StreamGearbox.vhd
+${FLETCHER_HARDWARE_DIR}/vhlib/stream/StreamGearboxParallelizer.vhd
+${FLETCHER_HARDWARE_DIR}/vhlib/stream/StreamGearboxSerializer.vhd
+${FLETCHER_HARDWARE_DIR}/vhlib/stream/StreamNormalizer.vhd
+${FLETCHER_HARDWARE_DIR}/vhlib/stream/StreamPRNG.vhd
+${FLETCHER_HARDWARE_DIR}/vhlib/stream/StreamSlice.vhd
+${FLETCHER_HARDWARE_DIR}/vhlib/stream/StreamSync.vhd
 
 ${FLETCHER_HARDWARE_DIR}/buffers/BufferReaderCmdGenBusReq.vhd
 ${FLETCHER_HARDWARE_DIR}/buffers/BufferReaderCmd.vhd
@@ -64,15 +73,11 @@ ${FLETCHER_HARDWARE_DIR}/arrays/ArrayWriterListPrim.vhd
 ${FLETCHER_HARDWARE_DIR}/arrays/ArrayWriterListSync.vhd
 ${FLETCHER_HARDWARE_DIR}/arrays/ArrayWriter.vhd
 
-${FLETCHER_HARDWARE_DIR}/wrapper/Wrapper.vhd
-${FLETCHER_HARDWARE_DIR}/wrapper/UserCoreController.vhd
+${FLETCHER_HARDWARE_DIR}/axi/AxiMmio.vhd
+${FLETCHER_HARDWARE_DIR}/axi/AxiReadConverter.vhd
+${FLETCHER_HARDWARE_DIR}/axi/AxiWriteConverter.vhd
 
-${FLETCHER_HARDWARE_DIR}/axi/axi.vhd
-${FLETCHER_HARDWARE_DIR}/axi/axi_mmio.vhd
-${FLETCHER_HARDWARE_DIR}/axi/axi_read_converter.vhd
-${FLETCHER_HARDWARE_DIR}/axi/axi_write_converter.vhd
-
-${FLETCHER_HARDWARE_DIR}/mm/MM.vhd
+${FLETCHER_HARDWARE_DIR}/mm/MM_pkg.vhd
 ${FLETCHER_HARDWARE_DIR}/mm/MMBarrier.vhd
 ${FLETCHER_HARDWARE_DIR}/mm/MMDirector.vhd
 ${FLETCHER_HARDWARE_DIR}/mm/MMFrames.vhd

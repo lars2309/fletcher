@@ -17,8 +17,10 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.Utils.all;
-use work.MM.all;
+use work.UtilInt_pkg.all;
+use work.UtilConv_pkg.all;
+use work.UtilRam_pkg.all;
+use work.MM_pkg.all;
 
 entity MMFrames is
   generic (
@@ -290,7 +292,7 @@ begin
     end case;
   end process;
 
-  frame_mem : Ram1R1W
+  frame_mem : UtilRam1R1W
     generic map (
       -- Width of a data word.
       WIDTH                     => 1,

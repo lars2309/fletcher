@@ -17,9 +17,10 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.Utils.all;
-use work.MM.all;
-use work.Streams.all;
+use work.UtilInt_pkg.all;
+use work.UtilConv_pkg.all;
+use work.MM_pkg.all;
+use work.Stream_pkg.all;
 
 entity MMTranslator is
   generic (

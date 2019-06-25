@@ -17,9 +17,9 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.Utils.all;
-use work.Streams.all;
-use work.MM.all;
+use work.UtilInt_pkg.all;
+use work.Stream_pkg.all;
+use work.MM_pkg.all;
 
 entity MMGapFinder is
   generic (
@@ -50,7 +50,7 @@ end MMGapFinder;
 
 architecture Behavioral of MMGapFinder is
   -- Mask width that will be evaluated sequentially by the subcomponent.
-  constant MASK_WIDTH_SUB : natural := work.Utils.min(MASK_WIDTH, MASK_WIDTH_INTERNAL);
+  constant MASK_WIDTH_SUB : natural := imin(MASK_WIDTH, MASK_WIDTH_INTERNAL);
   -- Find multiple of MASK_WIDTH_SUB to cover the original mask.
   constant MASK_WIDTH_MUL : natural := ((MASK_WIDTH+MASK_WIDTH_SUB-1)/MASK_WIDTH_SUB)*MASK_WIDTH_SUB;
 
@@ -104,10 +104,10 @@ begin
       signal in_data  : std_logic_vector(MASK_WIDTH_MUL + SIZE_WIDTH - 1 downto 0);
       signal out_data : std_logic_vector(MASK_WIDTH_SUB + SIZE_WIDTH - 1 downto 0);
     begin
-    serializer_inst: StreamSerializer
+    serializer_inst: StreamGearboxSerializer
       generic map (
         -- Width of the serialized part of the output stream data vector.
-        DATA_WIDTH                  => MASK_WIDTH_SUB,
+        ELEMENT_WIDTH               => MASK_WIDTH_SUB,
         CTRL_WIDTH                  => SIZE_WIDTH,
         IN_COUNT_MAX                => MASK_WIDTH_MUL/MASK_WIDTH_SUB,
         IN_COUNT_WIDTH              => log2ceil(MASK_WIDTH/MASK_WIDTH_SUB),
