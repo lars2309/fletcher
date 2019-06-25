@@ -88,13 +88,6 @@ entity BusReadWriteSlaveMock is
 end BusReadWriteSlaveMock;
 
 architecture Behavioral of BusReadWriteSlaveMock is
-
-  signal wreq_int_valid         : std_logic;
-  signal wreq_int_ready         : std_logic;
-
-  signal wdat_int_valid         : std_logic;
-  signal wdat_int_ready         : std_logic;
-  
   signal rreq_int_valid         : std_logic;
   signal rreq_int_ready         : std_logic;
 
@@ -102,7 +95,6 @@ architecture Behavioral of BusReadWriteSlaveMock is
   signal rdat_int_ready         : std_logic;
 
   signal accept_req             : std_logic;
-
 begin
 
   rreq_int_valid <= rreq_valid;

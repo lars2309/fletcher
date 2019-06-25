@@ -126,7 +126,7 @@ proc add_interconnect_tb {{source_dir ""}} {
 proc add_mm {{source_dir ""}} {
   echo "- Memory Management infrastructure."
   set source_dir [source_dir_or_default $source_dir]
-  add_source $source_dir/mm/MM.vhd
+  add_source $source_dir/mm/MM_pkg.vhd
   add_source $source_dir/mm/MMBarrier.vhd
   add_source $source_dir/mm/MMDirector.vhd
   add_source $source_dir/mm/MMFrames.vhd

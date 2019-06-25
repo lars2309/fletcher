@@ -27,7 +27,7 @@ use work.UtilStr_pkg.all;
 -- to an S-record file, or simply accept and print the written data on stdout.
 -- The handshake signals can be randomized.
 
-entity BusReadWriteSlaveMock is
+entity AxiReadWriteSlaveMock is
   generic (
 
     -- Bus address width.
@@ -85,39 +85,16 @@ entity BusReadWriteSlaveMock is
     rdat_last                   : out std_logic
 
   );
-end BusReadWriteSlaveMock;
+end AxiReadWriteSlaveMock;
 
-architecture Behavioral of BusReadWriteSlaveMock is
-
-  signal wreq_cons_valid        : std_logic;
-  signal wreq_cons_ready        : std_logic;
-
-  signal wreq_int_valid         : std_logic;
-  signal wreq_int_ready         : std_logic;
-
-  signal wdat_prod_valid        : std_logic;
-  signal wdat_prod_ready        : std_logic;
-
-  signal wdat_int_valid         : std_logic;
-  signal wdat_int_ready         : std_logic;
-  
-
-  signal rreq_cons_valid        : std_logic;
-  signal rreq_cons_ready        : std_logic;
-
+architecture Behavioral of AxiReadWriteSlaveMock is
   signal rreq_int_valid         : std_logic;
   signal rreq_int_ready         : std_logic;
-
-  signal rdat_prod_valid        : std_logic;
-  signal rdat_prod_ready        : std_logic;
 
   signal rdat_int_valid         : std_logic;
   signal rdat_int_ready         : std_logic;
 
-  signal rdat_out_valid         : std_logic;
-
   signal accept_req             : std_logic;
-
 begin
 
   rreq_int_valid <= rreq_valid;
@@ -191,10 +168,10 @@ begin
           -- Print or dump the data to an SREC file
           mem_read(mem, std_logic_vector(addr), data);
           wdata := (others => '-');
-          for i in 0 to wdat_strobe'length-1 loop
-            if wdat_strobe(i) = '1' then
-              data(8*(i+1)-1  downto 8*i) := wdat_data(8*(i+1)-1  downto 8*i);
-              wdata(8*(i+1)-1  downto 8*i) := wdat_data(8*(i+1)-1  downto 8*i);
+          for si in 0 to wdat_strobe'length-1 loop
+            if wdat_strobe(si) = '1' then
+              data(8*(si+1)-1  downto 8*si) := wdat_data(8*(si+1)-1  downto 8*si);
+              wdata(8*(si+1)-1  downto 8*si) := wdat_data(8*(si+1)-1  downto 8*si);
             end if;
           end loop;
           mem_write(mem, std_logic_vector(addr), data);
@@ -238,10 +215,6 @@ begin
 
           -- Assert response.
           rdat_int_valid <= '1';
-          -- Wait for internal handshake
-          if rdat_out_valid /= '1' then
-            wait until rdat_out_valid = '1';
-          end if;
           rdat_data <= data;
           if i = len-1 then
             rdat_last <= '1';
