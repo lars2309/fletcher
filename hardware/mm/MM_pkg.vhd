@@ -463,22 +463,17 @@ package body MM_pkg is
     variable subunit           : unsigned(4 downto 0);
   begin
     for I in 0 to sections_nonzero'high loop
-      if I*5 > arg'length then
-        sections_nonzero(I)  := '0';
-        sections_overflow(I) := '0';
-      else
-        sections_nonzero(I)  := l(u(arg(imin((I+1)*5, arg'length)-1 downto I*5)) /= 0);
-        subunit := resize(u(arg(imin((I+1)*5, arg'length)-1 downto I*5)), 5);
-        case subunit is
-          when "00000" => sections_overflow(I) := '0';
-          when "00001" => sections_overflow(I) := '0';
-          when "00010" => sections_overflow(I) := '0';
-          when "00100" => sections_overflow(I) := '0';
-          when "01000" => sections_overflow(I) := '0';
-          when "10000" => sections_overflow(I) := '0';
-          when others => sections_overflow(I) := '1';
-        end case;
-      end if;
+      sections_nonzero(I)  := l(u(arg(imin((I+1)*5, arg'length)-1 downto I*5)) /= 0);
+      subunit := resize(u(arg(imin((I+1)*5, arg'length)-1 downto I*5)), 5);
+      case subunit is
+        when "00000" => sections_overflow(I) := '0';
+        when "00001" => sections_overflow(I) := '0';
+        when "00010" => sections_overflow(I) := '0';
+        when "00100" => sections_overflow(I) := '0';
+        when "01000" => sections_overflow(I) := '0';
+        when "10000" => sections_overflow(I) := '0';
+        when others => sections_overflow(I) := '1';
+      end case;
     end loop;
 
     if u(sections_overflow) /= 0 then
