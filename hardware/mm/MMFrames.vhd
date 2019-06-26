@@ -194,20 +194,20 @@ begin
 
       if cmd_valid = '1' then
         case cmd_action is
-        when MM_FRAMES_ALLOC =>
+        when "01" => -- MM_FRAMES_ALLOC
           state_next  <= ALLOC_CHECK;
           region_next <= to_unsigned(PAGE_TO_REGION(cmd_addr), region'length);
           frame_next  <= PAGE_TO_FRAME(cmd_addr);
 
-        when MM_FRAMES_FREE =>
+        when "00" => -- MM_FRAMES_FREE
           state_next  <= FREE;
           frame_next  <= PAGE_TO_FRAME(cmd_addr);
 
-        when MM_FRAMES_CLEAR =>
+        when "11" => -- MM_FRAMES_CLEAR
           state_next  <= CLEAR;
           frame_next  <= (others => '0');
 
-        when MM_FRAMES_FIND =>
+        when "10" => -- MM_FRAMES_FIND
           state_next  <= FIND;
           region_next <= unsigned(cmd_region);
           frame_next  <= roving_ptr(to_integer(unsigned(cmd_region)));
