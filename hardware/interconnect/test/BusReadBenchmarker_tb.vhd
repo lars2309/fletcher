@@ -18,10 +18,10 @@ use ieee.std_logic_misc.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.Utils.all;
-use work.SimUtils.all;
-use work.Interconnect.all;
-use work.Streams.all;
+use work.UtilConv_pkg.all;
+use work.UtilStr_pkg.all;
+use work.Interconnect_pkg.all;
+use work.Stream_pkg.all;
 
 entity BusReadBenchmarker_tb is
   generic (
@@ -103,9 +103,9 @@ begin
     
     simulation_done <= true;
     
-    dumpStdOut("Transfers               : " & integer'image(int(reg_max_bursts)));
-    dumpStdOut("Cycles                  : " & integer'image(int(reg_cycles)));
-    dumpStdOut("Throughput (bits/cycle) : " & integer'image((int(reg_max_bursts)  * BUS_DATA_WIDTH * int(reg_burst_length)) / int(reg_cycles)));
+    println("Transfers               : " & integer'image(int(reg_max_bursts)));
+    println("Cycles                  : " & integer'image(int(reg_cycles)));
+    println("Throughput (bits/cycle) : " & integer'image((int(reg_max_bursts)  * BUS_DATA_WIDTH * int(reg_burst_length)) / int(reg_cycles)));
     
     wait;
     
@@ -143,8 +143,8 @@ begin
       PATTERN                   => PATTERN
     )
     port map (
-      bus_clk                   => bus_clk,
-      bus_reset                 => bus_reset,
+      bcd_clk                   => bus_clk,
+      bcd_reset                 => bus_reset,
       bus_rreq_valid            => bus_rreq_valid,
       bus_rreq_ready            => bus_rreq_ready,
       bus_rreq_addr             => bus_rreq_addr,
