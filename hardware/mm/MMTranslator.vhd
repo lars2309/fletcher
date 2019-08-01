@@ -158,6 +158,7 @@ begin
   begin
     lcache   := cache;
     in_cache := false;
+    cidx_m   := 0;
 
     -- Make request if necessary.
     cache_result_in.valid    <= int_slv_req.valid;
