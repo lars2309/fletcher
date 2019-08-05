@@ -301,7 +301,7 @@ int main(int argc, char ** argv) {
       da_t dev_raw = 1024L*1024L*1024L; // 1 GiB offset into device memory
       int test_size = 1024*1024*512; // 512 MiB
 
-      int bench_reg_offset = 26;
+      int bench_reg_offset = 26+2*12;
 
       std::cerr << "Performing latency measurement" << std::endl;
 
@@ -424,7 +424,7 @@ int main(int argc, char ** argv) {
         status = EXIT_FAILURE;
         break;
       }
-      platform->ReadMMIO(50, &cycles);
+      platform->ReadMMIO(26+12*4, &cycles);
       if (bench_alloc) {
         std::cout << "Alloc of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
       }
@@ -433,12 +433,12 @@ int main(int argc, char ** argv) {
         if (!platform->DeviceFree(alloc_addr).ok()) {
           std::cerr << "ERROR while freeing " << alloc_size << " bytes." << std::endl << std::flush;
           uint32_t regval = 0;
-          platform->ReadMMIO(26+12*2+1, &regval);
+          platform->ReadMMIO(26+12*4+1, &regval);
           std::cerr << "State: " << regval << std::endl;
           status = EXIT_FAILURE;
           break;
         }
-        platform->ReadMMIO(50, &cycles);
+        platform->ReadMMIO(26+12*4, &cycles);
         std::cout << "Free of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
       }
 
@@ -467,7 +467,7 @@ int main(int argc, char ** argv) {
       std::cerr << "ERROR while allocating " << alloc_size << " bytes." << std::endl << std::flush;
       status = EXIT_FAILURE;
     }
-    platform->ReadMMIO(50, &cycles);
+    platform->ReadMMIO(26+12*4, &cycles);
     std::cout << "-Alloc of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
 
     alloc_size = 1024*1024;
@@ -516,7 +516,7 @@ int main(int argc, char ** argv) {
         status = EXIT_FAILURE;
         break;
       }
-      platform->ReadMMIO(50, &cycles);
+      platform->ReadMMIO(26+12*4, &cycles);
       std::cout << "Realloc to " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
 
       std::cerr << "Device malloc at " << std::setw(12) << std::hex << alloc_addr << std::dec << "." << std::endl << std::flush;
@@ -538,7 +538,7 @@ int main(int argc, char ** argv) {
       std::cerr << "ERROR while freeing " << alloc_size << " bytes." << std::endl;
       status = EXIT_FAILURE;
     }
-    platform->ReadMMIO(50, &cycles);
+    platform->ReadMMIO(26+12*4, &cycles);
     std::cout << "-Free of " << alloc_size << " bytes took " << cycles << " cycles." << std::endl << std::flush;
   }
 

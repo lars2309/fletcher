@@ -241,6 +241,57 @@ package Interconnect_pkg is
     );
   end component;
 
+  component BusWriteBenchmarker is
+    generic (
+      BUS_ADDR_WIDTH              : natural := 64;
+      BUS_DATA_WIDTH              : natural := 512;
+      BUS_LEN_WIDTH               : natural := 9;
+      BUS_MAX_BURST_LENGTH        : natural := 64;
+      BUS_BURST_BOUNDARY          : natural := 4096;
+      PATTERN                     : string := "RANDOM"
+    );
+    port (
+      bcd_clk                     : in  std_logic;
+      bcd_reset                   : in  std_logic;
+
+      bus_wreq_valid              : out std_logic;
+      bus_wreq_ready              : in  std_logic;
+      bus_wreq_addr               : out std_logic_vector(BUS_ADDR_WIDTH-1 downto 0);
+      bus_wreq_len                : out std_logic_vector(BUS_LEN_WIDTH-1 downto 0);
+      bus_wdat_valid              : out std_logic;
+      bus_wdat_ready              : in  std_logic;
+      bus_wdat_data               : out std_logic_vector(BUS_DATA_WIDTH-1 downto 0);
+      bus_wdat_last               : out std_logic;
+      
+      -- Control / status registers
+      reg_control                 : in  std_logic_vector(31 downto 0);
+      reg_status                  : out std_logic_vector(31 downto 0);
+
+      -- Configuration registers
+      
+      -- Burst length
+      reg_burst_length            : in  std_logic_vector(31 downto 0);
+      
+      -- Maximum number of bursts
+      reg_max_bursts              : in  std_logic_vector(31 downto 0);
+      
+      -- Base addresse
+      reg_base_addr_lo            : in  std_logic_vector(31 downto 0);
+      reg_base_addr_hi            : in  std_logic_vector(31 downto 0);
+      
+      -- Address mask
+      reg_addr_mask_lo            : in  std_logic_vector(31 downto 0);
+      reg_addr_mask_hi            : in  std_logic_vector(31 downto 0);
+      
+      -- Number of cycles to absorb a word, set 0 to always accept immediately
+      reg_cycles_per_word         : in  std_logic_vector(31 downto 0);
+
+      -- Result registers
+      reg_cycles                  : out std_logic_vector(31 downto 0);
+      reg_checksum                : out std_logic_vector(31 downto 0)
+    );
+  end component;
+
   component BusReadArbiter is
     generic (
       BUS_ADDR_WIDTH            : natural := 32;
