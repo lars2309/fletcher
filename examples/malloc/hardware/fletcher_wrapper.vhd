@@ -123,7 +123,9 @@ architecture Implementation of fletcher_wrapper is
   constant MM_BENCH_REGS               : natural := 12;
   constant MM_REG_OFFSET_BENCH_RS      : natural := 26;
   constant MM_REG_OFFSET_BENCH_RR      : natural := MM_REG_OFFSET_BENCH_RS + MM_BENCH_REGS;
-  constant MM_REG_CMD_DELAY            : natural := MM_REG_OFFSET_BENCH_RR + MM_BENCH_REGS;
+  constant MM_REG_OFFSET_BENCH_WS      : natural := MM_REG_OFFSET_BENCH_RR + MM_BENCH_REGS;
+  constant MM_REG_OFFSET_BENCH_WR      : natural := MM_REG_OFFSET_BENCH_WS + MM_BENCH_REGS;
+  constant MM_REG_CMD_DELAY            : natural := MM_REG_OFFSET_BENCH_WR + MM_BENCH_REGS;
   constant MM_REG_DEBUG                : natural := MM_REG_CMD_DELAY + 1;
 
   type bus_req_t is record
@@ -195,6 +197,10 @@ architecture Implementation of fletcher_wrapper is
   signal tr_bench_rs  : translate_t;
   signal bench_rr     : bus_r_t;
   signal tr_bench_rr  : translate_t;
+  signal bench_ws     : bus_w_t;
+  signal tr_bench_ws  : translate_t;
+  signal bench_wr     : bus_w_t;
+  signal tr_bench_wr  : translate_t;
 
 begin
 
@@ -398,6 +404,206 @@ begin
     resp_mask                   => tr_bench_rr.resp_mask
   );
 
+  regs_out_en(MM_REG_OFFSET_BENCH_WS + MM_BENCH_REGS - 1 downto MM_REG_OFFSET_BENCH_WS) <= "011000000010";
+  bench_ws_inst : BusWriteBenchmarker
+    generic map (
+      BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
+      BUS_DATA_WIDTH              => BUS_DATA_WIDTH,
+      BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
+      BUS_MAX_BURST_LENGTH        => BUS_BURST_MAX_LEN,
+      PATTERN                     => "SEQUENTIAL"
+    )
+    port map (
+      bcd_clk                     => bcd_clk,
+      bcd_reset                   => bcd_reset,
+
+      bus_wreq_valid              => bench_ws.virt.valid,
+      bus_wreq_ready              => bench_ws.virt.ready,
+      bus_wreq_addr               => bench_ws.virt.addr,
+      bus_wreq_len                => bench_ws.virt.len,
+      bus_wdat_valid              => bench_ws.dat_valid,
+      bus_wdat_ready              => bench_ws.dat_ready,
+      bus_wdat_data               => bench_ws.dat_data,
+      bus_wdat_last               => bench_ws.dat_last,
+      
+      -- Control / status registers
+      reg_control                 => regs_in (
+          (MM_REG_OFFSET_BENCH_WS+1)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WS+0)*REG_WIDTH),
+      reg_status                  => regs_out (
+          (MM_REG_OFFSET_BENCH_WS+2)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WS+1)*REG_WIDTH),
+
+      -- Configuration registers
+      
+      -- Burst length
+      reg_burst_length            => regs_in (
+          (MM_REG_OFFSET_BENCH_WS+3)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WS+2)*REG_WIDTH),
+      
+      -- Maximum number of bursts
+      reg_max_bursts              => regs_in (
+          (MM_REG_OFFSET_BENCH_WS+4)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WS+3)*REG_WIDTH),
+      
+      -- Base addresse
+      reg_base_addr_lo            => regs_in (
+          (MM_REG_OFFSET_BENCH_WS+5)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WS+4)*REG_WIDTH),
+      reg_base_addr_hi            => regs_in (
+          (MM_REG_OFFSET_BENCH_WS+6)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WS+5)*REG_WIDTH),
+      
+      -- Address mask
+      reg_addr_mask_lo            => regs_in (
+          (MM_REG_OFFSET_BENCH_WS+7)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WS+6)*REG_WIDTH),
+      reg_addr_mask_hi            => regs_in (
+          (MM_REG_OFFSET_BENCH_WS+8)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WS+7)*REG_WIDTH),
+      
+      -- Number of cycles to absorb a word, set 0 to always accept immediately
+      reg_cycles_per_word         => regs_in (
+          (MM_REG_OFFSET_BENCH_WS+9)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WS+8)*REG_WIDTH),
+
+      -- Result registers
+      reg_cycles                  => regs_out (
+          (MM_REG_OFFSET_BENCH_WS+10)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WS+9)*REG_WIDTH),
+      reg_checksum                => regs_out (
+          (MM_REG_OFFSET_BENCH_WS+11)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WS+10)*REG_WIDTH)
+    );
+
+  bench_ws_translator : MMTranslator
+  generic map (
+    BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
+    BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
+    VM_BASE                     => VM_BASE,
+    PT_ENTRIES_LOG2             => PT_ENTRIES_LOG2,
+    PAGE_SIZE_LOG2              => PAGE_SIZE_LOG2,
+    MAX_OUTSTANDING             => 1,
+    CACHE_SIZE                  => 1,
+    SLV_SLICES                  => 2,
+    MST_SLICES                  => 2
+  )
+  port map (
+    clk                         => bcd_clk,
+    reset                       => bcd_reset,
+
+    -- Slave request channel
+    slv_req_valid               => bench_ws.virt.valid,
+    slv_req_ready               => bench_ws.virt.ready,
+    slv_req_addr                => bench_ws.virt.addr,
+    slv_req_len                 => bench_ws.virt.len,
+    -- Master request channel
+    mst_req_valid               => bench_ws.phys.valid,
+    mst_req_ready               => bench_ws.phys.ready,
+    mst_req_addr                => bench_ws.phys.addr,
+    mst_req_len                 => bench_ws.phys.len,
+
+    -- Translate request channel
+    req_valid                   => tr_bench_ws.req.valid,
+    req_ready                   => tr_bench_ws.req.ready,
+    req_addr                    => tr_bench_ws.req.addr,
+    -- Translate response channel
+    resp_valid                  => tr_bench_ws.resp_valid,
+    resp_ready                  => tr_bench_ws.resp_ready,
+    resp_virt                   => tr_bench_ws.resp_virt,
+    resp_phys                   => tr_bench_ws.resp_phys,
+    resp_mask                   => tr_bench_ws.resp_mask
+  );
+
+  regs_out_en(MM_REG_OFFSET_BENCH_WR + MM_BENCH_REGS - 1 downto MM_REG_OFFSET_BENCH_WR) <= "011000000010";
+  bench_wr_inst : BusWriteBenchmarker
+    generic map (
+      BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
+      BUS_DATA_WIDTH              => BUS_DATA_WIDTH,
+      BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
+      BUS_MAX_BURST_LENGTH        => BUS_BURST_MAX_LEN,
+      PATTERN                     => "RANDOM"
+    )
+    port map (
+      bcd_clk                     => bcd_clk,
+      bcd_reset                   => bcd_reset,
+
+      bus_wreq_valid              => bench_wr.virt.valid,
+      bus_wreq_ready              => bench_wr.virt.ready,
+      bus_wreq_addr               => bench_wr.virt.addr,
+      bus_wreq_len                => bench_wr.virt.len,
+      bus_wdat_valid              => bench_wr.dat_valid,
+      bus_wdat_ready              => bench_wr.dat_ready,
+      bus_wdat_data               => bench_wr.dat_data,
+      bus_wdat_last               => bench_wr.dat_last,
+      
+      -- Control / status registers
+      reg_control                 => regs_in (
+          (MM_REG_OFFSET_BENCH_WR+1)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WR+0)*REG_WIDTH),
+      reg_status                  => regs_out (
+          (MM_REG_OFFSET_BENCH_WR+2)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WR+1)*REG_WIDTH),
+
+      -- Configuration registers
+      
+      -- Burst length
+      reg_burst_length            => regs_in (
+          (MM_REG_OFFSET_BENCH_WR+3)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WR+2)*REG_WIDTH),
+      
+      -- Maximum number of bursts
+      reg_max_bursts              => regs_in (
+          (MM_REG_OFFSET_BENCH_WR+4)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WR+3)*REG_WIDTH),
+      
+      -- Base addresse
+      reg_base_addr_lo            => regs_in (
+          (MM_REG_OFFSET_BENCH_WR+5)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WR+4)*REG_WIDTH),
+      reg_base_addr_hi            => regs_in (
+          (MM_REG_OFFSET_BENCH_WR+6)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WR+5)*REG_WIDTH),
+      
+      -- Address mask
+      reg_addr_mask_lo            => regs_in (
+          (MM_REG_OFFSET_BENCH_WR+7)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WR+6)*REG_WIDTH),
+      reg_addr_mask_hi            => regs_in (
+          (MM_REG_OFFSET_BENCH_WR+8)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WR+7)*REG_WIDTH),
+      
+      -- Number of cycles to absorb a word, set 0 to always accept immediately
+      reg_cycles_per_word         => regs_in (
+          (MM_REG_OFFSET_BENCH_WR+9)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WR+8)*REG_WIDTH),
+
+      -- Result registers
+      reg_cycles                  => regs_out (
+          (MM_REG_OFFSET_BENCH_WR+10)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WR+9)*REG_WIDTH),
+      reg_checksum                => regs_out (
+          (MM_REG_OFFSET_BENCH_WR+11)*REG_WIDTH-1 downto (MM_REG_OFFSET_BENCH_WR+10)*REG_WIDTH)
+    );
+
+  bench_wr_translator : MMTranslator
+  generic map (
+    BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
+    BUS_LEN_WIDTH               => BUS_LEN_WIDTH,
+    VM_BASE                     => VM_BASE,
+    PT_ENTRIES_LOG2             => PT_ENTRIES_LOG2,
+    PAGE_SIZE_LOG2              => PAGE_SIZE_LOG2,
+    MAX_OUTSTANDING             => 1,
+    CACHE_SIZE                  => 1,
+    SLV_SLICES                  => 2,
+    MST_SLICES                  => 2
+  )
+  port map (
+    clk                         => bcd_clk,
+    reset                       => bcd_reset,
+
+    -- Slave request channel
+    slv_req_valid               => bench_wr.virt.valid,
+    slv_req_ready               => bench_wr.virt.ready,
+    slv_req_addr                => bench_wr.virt.addr,
+    slv_req_len                 => bench_wr.virt.len,
+    -- Master request channel
+    mst_req_valid               => bench_wr.phys.valid,
+    mst_req_ready               => bench_wr.phys.ready,
+    mst_req_addr                => bench_wr.phys.addr,
+    mst_req_len                 => bench_wr.phys.len,
+
+    -- Translate request channel
+    req_valid                   => tr_bench_wr.req.valid,
+    req_ready                   => tr_bench_wr.req.ready,
+    req_addr                    => tr_bench_wr.req.addr,
+    -- Translate response channel
+    resp_valid                  => tr_bench_wr.resp_valid,
+    resp_ready                  => tr_bench_wr.resp_ready,
+    resp_virt                   => tr_bench_wr.resp_virt,
+    resp_phys                   => tr_bench_wr.resp_phys,
+    resp_mask                   => tr_bench_wr.resp_mask
+  );
+
   mm_dir_inst : MMDirector
     generic map (
       PAGE_SIZE_LOG2              => PAGE_SIZE_LOG2,
@@ -567,7 +773,7 @@ begin
     BUS_ADDR_WIDTH              => BUS_ADDR_WIDTH,
     BUS_LEN_WIDTH               => 1,
     BUS_DATA_WIDTH              => BUS_ADDR_WIDTH * 3,
-    NUM_SLAVE_PORTS             => 3,
+    NUM_SLAVE_PORTS             => 5,
     ARB_METHOD                  => "ROUND-ROBIN",
     MAX_OUTSTANDING             => 1,
     SLV_REQ_SLICES              => true,
@@ -609,7 +815,23 @@ begin
     bs02_rreq_len               => "1",
     bs02_rdat_valid             => tr_bench_rr.resp_valid,
     bs02_rdat_ready             => tr_bench_rr.resp_ready,
-    bs02_rdat_data              => tr_bench_rr.resp_data
+    bs02_rdat_data              => tr_bench_rr.resp_data,
+
+    bs03_rreq_valid             => tr_bench_ws.req.valid,
+    bs03_rreq_ready             => tr_bench_ws.req.ready,
+    bs03_rreq_addr              => tr_bench_ws.req.addr,
+    bs03_rreq_len               => "1",
+    bs03_rdat_valid             => tr_bench_ws.resp_valid,
+    bs03_rdat_ready             => tr_bench_ws.resp_ready,
+    bs03_rdat_data              => tr_bench_ws.resp_data,
+
+    bs04_rreq_valid             => tr_bench_wr.req.valid,
+    bs04_rreq_ready             => tr_bench_wr.req.ready,
+    bs04_rreq_addr              => tr_bench_wr.req.addr,
+    bs04_rreq_len               => "1",
+    bs04_rdat_valid             => tr_bench_wr.resp_valid,
+    bs04_rdat_ready             => tr_bench_wr.resp_ready,
+    bs04_rdat_data              => tr_bench_wr.resp_data
   );
 
   translate.resp_data   <= translate.resp_virt & translate.resp_phys & translate.resp_mask;
@@ -625,6 +847,14 @@ begin
   tr_bench_rr.resp_virt <= EXTRACT(tr_bench_rr.resp_data, BUS_ADDR_WIDTH*2, BUS_ADDR_WIDTH);
   tr_bench_rr.resp_phys <= EXTRACT(tr_bench_rr.resp_data, BUS_ADDR_WIDTH*1, BUS_ADDR_WIDTH);
   tr_bench_rr.resp_mask <= EXTRACT(tr_bench_rr.resp_data, BUS_ADDR_WIDTH*0, BUS_ADDR_WIDTH);
+
+  tr_bench_ws.resp_virt <= EXTRACT(tr_bench_ws.resp_data, BUS_ADDR_WIDTH*2, BUS_ADDR_WIDTH);
+  tr_bench_ws.resp_phys <= EXTRACT(tr_bench_ws.resp_data, BUS_ADDR_WIDTH*1, BUS_ADDR_WIDTH);
+  tr_bench_ws.resp_mask <= EXTRACT(tr_bench_ws.resp_data, BUS_ADDR_WIDTH*0, BUS_ADDR_WIDTH);
+
+  tr_bench_wr.resp_virt <= EXTRACT(tr_bench_wr.resp_data, BUS_ADDR_WIDTH*2, BUS_ADDR_WIDTH);
+  tr_bench_wr.resp_phys <= EXTRACT(tr_bench_wr.resp_data, BUS_ADDR_WIDTH*1, BUS_ADDR_WIDTH);
+  tr_bench_wr.resp_mask <= EXTRACT(tr_bench_wr.resp_data, BUS_ADDR_WIDTH*0, BUS_ADDR_WIDTH);
 
 
   bus_read_arb_inst : BusReadArbiter
@@ -698,7 +928,7 @@ begin
       BUS_STROBE_WIDTH          => BUS_STROBE_WIDTH,
       NUM_SLAVE_PORTS           => 1,
       ARB_METHOD                => "FIXED",
-      MAX_DATA_LAG              => 2,
+      MAX_DATA_LAG              => 4,
       MAX_OUTSTANDING           => 32,
       SLV_REQ_SLICES            => true,
       MST_REQ_SLICE             => true,
@@ -735,7 +965,27 @@ begin
       bs00_wdat_last            => dir_w.dat_last,
       bs00_resp_valid           => dir_w.resp_valid,
       bs00_resp_ready           => dir_w.resp_ready,
-      bs00_resp_ok              => dir_w.resp_ok
+      bs00_resp_ok              => dir_w.resp_ok,
+
+      bs01_wreq_valid           => bench_ws.phys.valid,
+      bs01_wreq_ready           => bench_ws.phys.ready,
+      bs01_wreq_addr            => bench_ws.phys.addr,
+      bs01_wreq_len             => bench_ws.phys.len,
+      bs01_wdat_valid           => bench_ws.dat_valid,
+      bs01_wdat_ready           => bench_ws.dat_ready,
+      bs01_wdat_data            => bench_ws.dat_data,
+      bs01_wdat_strobe          => bench_ws.dat_strobe,
+      bs01_wdat_last            => bench_ws.dat_last,
+
+      bs02_wreq_valid           => bench_wr.phys.valid,
+      bs02_wreq_ready           => bench_wr.phys.ready,
+      bs02_wreq_addr            => bench_wr.phys.addr,
+      bs02_wreq_len             => bench_wr.phys.len,
+      bs02_wdat_valid           => bench_wr.dat_valid,
+      bs02_wdat_ready           => bench_wr.dat_ready,
+      bs02_wdat_data            => bench_wr.dat_data,
+      bs02_wdat_strobe          => bench_wr.dat_strobe,
+      bs02_wdat_last            => bench_wr.dat_last
     );
 
 end architecture;
