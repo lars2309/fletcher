@@ -193,6 +193,7 @@ begin
           v.beat          := (others => '0');
           v.max_bursts    := unsigned(reg_max_bursts);
           v.num_requests  := unsigned(reg_max_bursts);
+          v.num_responses := unsigned(reg_max_bursts);
           v.burst_length  := unsigned(reg_burst_length);
           v.base_addr     := reg_base_addr_hi & reg_base_addr_lo;
           v.addr_mask     := reg_addr_mask_hi & reg_addr_mask_lo;

@@ -55,6 +55,7 @@ ${FLETCHER_HARDWARE_DIR}/interconnect/BusReadBuffer.vhd
 ${FLETCHER_HARDWARE_DIR}/interconnect/BusReadBenchmarker.vhd
 ${FLETCHER_HARDWARE_DIR}/interconnect/BusWriteArbiter.vhd
 ${FLETCHER_HARDWARE_DIR}/interconnect/BusWriteArbiterVec.vhd
+${FLETCHER_HARDWARE_DIR}/interconnect/BusWriteBenchmarker.vhd
 ${FLETCHER_HARDWARE_DIR}/interconnect/BusWriteBuffer.vhd
 
 ${FLETCHER_HARDWARE_DIR}/arrays/ArrayReaderArb.vhd
