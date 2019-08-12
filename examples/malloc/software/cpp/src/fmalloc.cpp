@@ -303,13 +303,13 @@ int main(int argc, char ** argv) {
 
       int bench_reg_offset = 26+2*12;
 
-      std::cerr << "Performing latency measurement" << std::endl;
+//      std::cerr << "Performing latency measurement" << std::endl;
 
       uint32_t burst_len = 1;
       uint32_t bursts = 1;
       uint64_t addr_mask = get_addr_mask(malloc_sizes.at(benchmark_buffer), burst_len);
-      device_bench(platform, bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
-      device_bench(platform, bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
+//      device_bench(platform, bench_reg_offset, burst_len, bursts, dev_raw, addr_mask);
+//      device_bench(platform, bench_reg_offset, burst_len, bursts, maddr.at(benchmark_buffer), addr_mask);
 
       std::cerr << "Performing sequential reads with decrementing burst sizes." << std::endl;
 
